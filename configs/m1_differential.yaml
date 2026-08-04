@@ -1,0 +1,114 @@
+# M1 — the analytic differential: ExecutionEnv vs the closed forms.
+#
+# Committed input to `tests/test_differential.py`, `tests/test_env_identities.py`
+# and `tests/test_variational_certificate.py`. Those tests read *this file*, not
+# literals: constitution invariant 3 fixes thresholds before the work, and a
+# threshold that lives in a test body is a threshold that drifts to fit the run.
+# Every number here is pre-stated in docs/briefs/M1-env-and-analytic-differential.md
+# and may only be loosened by amending that brief first.
+#
+# Cases are named by the vendored golden `case_id`, so the market parameters,
+# order sizes and lambdas come from FrontierView's export rather than from here —
+# there is no second place for a parameter set to live and drift.
+
+brief: docs/briefs/M1-env-and-analytic-differential.md
+
+# --- randomness -------------------------------------------------------------
+# One root seed regenerates every number below (invariant 1). Streams are
+# addressed, not drawn: stream_index = stream_base + case_ordinal * n_schedules
+# + schedule_ordinal, over the `cases` and `schedules` lists in their committed
+# order. The tiers use disjoint stream ranges, so the fast tier's 180 000
+# episodes and the deep tier's 2.7 million share no shocks and the fast tier is
+# a genuine (if weaker) independent check rather than a prefix of the deep one.
+seeding:
+  root_seed: 20260804
+  pool: m1/differential        # never `train` or `eval` — invariant 5
+  identity_stream: 900         # the per-episode identity tests
+
+# --- schedules under test ---------------------------------------------------
+# Baseline keys from temper.agents.baselines.BASELINES. Order fixes the stream
+# addressing above, so it is part of the committed contract.
+schedules: [twap, ac, optimal]
+
+# --- the Monte-Carlo tiers --------------------------------------------------
+# Bands are on the standardised cost z = (C - E) / sqrt(V). Under Phase-1
+# dynamics a deterministic schedule's shortfall is exactly Gaussian, so both null
+# distributions are known and the 4-sigma bounds are exact, not asymptotic:
+#   |mean(z)|      <= mean_z_sigmas / sqrt(N)
+#   |var(z) - 1|   <= var_z_sigmas * sqrt(2 / N)
+tiers:
+  fast:
+    # In `make test`. One case per symbol at the middle lambda.
+    n_sim: 20000
+    mean_z_sigmas: 4.0
+    var_z_sigmas: 4.0
+    stream_base: 0
+    runtime_budget_seconds: 90
+    cases:
+      - core:AAPL:X100000:T6.5:lam1e-05
+      - core:MSFT:X250000:T6.5:lam1e-05
+      - core:JPM:X500000:T6.5:lam1e-05
+  deep:
+    # `make differential`, marker `deep`. The acceptance gate: the full 3 x 3
+    # golden grid, resolving mean shifts of ~0.9% of sigma_C and variance
+    # mis-scalings of ~1.3%.
+    n_sim: 100000
+    mean_z_sigmas: 4.0
+    var_z_sigmas: 4.0
+    stream_base: 100
+    runtime_budget_seconds: 1800
+    cases:
+      - core:AAPL:X100000:T6.5:lam1e-07
+      - core:AAPL:X100000:T6.5:lam1e-05
+      - core:AAPL:X100000:T6.5:lam0.001
+      - core:MSFT:X250000:T6.5:lam1e-07
+      - core:MSFT:X250000:T6.5:lam1e-05
+      - core:MSFT:X250000:T6.5:lam0.001
+      - core:JPM:X500000:T6.5:lam1e-07
+      - core:JPM:X500000:T6.5:lam1e-05
+      - core:JPM:X500000:T6.5:lam0.001
+
+# --- exact (non-statistical) identities, per episode ------------------------
+identities:
+  # Per-step shortfalls summed vs the shortfall rebuilt from the realised price
+  # path; summed reward vs -(realised IS + lambda V).
+  telescope_rtol: 1.0e-10
+  # Summed inventory penalty vs lambda * V[cost]. This one is mechanical rather
+  # than statistical — it is how invariant 7 is pinned — so it gets the tighter
+  # bound.
+  penalty_rtol: 1.0e-12
+  # Episodes per identity case. Small: these are exact identities, not estimates.
+  episodes: 64
+  # The under-trading policy of task 5(d): it executes this fraction of each
+  # bin's TWAP trade, so the env's terminal force-liquidation has to charge a
+  # remainder of roughly (1 - fraction) * X.
+  undertrade_fraction: 0.5
+
+# --- the variational optimality certificate (task 0) ------------------------
+# Checks `optimal_trajectory` really is the minimiser of the frozen objective,
+# with no kappa formula anywhere in the check.
+variational:
+  solve_rtol: 1.0e-12          # generic linear solve vs optimal_trajectory, relative to X
+  directions: 200              # random interior perturbation directions per scale
+  scales: [1.0e-3, 1.0e-6]     # perturbation norms, as a fraction of X
+  tolerance_rel: 1.0e-9        # require U(x* + d) - U(x*) >= -tolerance_rel * |U(x*)|
+  seed: 20260804               # the perturbation directions; a plain generator, not a pool
+  cases:                       # the 3 x 3 golden grid
+    - core:AAPL:X100000:T6.5:lam1e-07
+    - core:AAPL:X100000:T6.5:lam1e-05
+    - core:AAPL:X100000:T6.5:lam0.001
+    - core:MSFT:X250000:T6.5:lam1e-07
+    - core:MSFT:X250000:T6.5:lam1e-05
+    - core:MSFT:X250000:T6.5:lam0.001
+    - core:JPM:X500000:T6.5:lam1e-07
+    - core:JPM:X500000:T6.5:lam1e-05
+    - core:JPM:X500000:T6.5:lam0.001
+
+# --- the invariant-7 resolution (task 1) ------------------------------------
+# Evaluated on every golden case: if the power-law and linear moment paths agreed
+# to `reduction_rtol` they would be one encoding and `cost_moments` could be
+# canonical. They do not (0.6-power law), so `cost_moments` is quarantined to
+# temper.eval.metrics.CONTEXT and the test asserts the gap is real everywhere.
+objective_encoding:
+  reduction_rtol: 1.0e-12
+  expect_reduction: false

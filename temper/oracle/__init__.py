@@ -20,6 +20,7 @@ from .cost import (
     linear_cost_moments,
     participation,
     permanent_cost_bps,
+    schedule_moments,
     shortfall_variance_bps2,
     trades,
 )
@@ -89,6 +90,7 @@ __all__ = [
     "participation",
     "permanent_cost_bps",
     "permanent_drift_bps_per_hour",
+    "schedule_moments",
     "shortfall_variance_bps2",
     "sinh_trajectory",
     "temporary_impact_bps",

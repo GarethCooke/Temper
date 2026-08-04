@@ -26,7 +26,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .impact import temporary_impact_bps
+from .impact import linearised_eta, temporary_impact_bps
 from .model import BPS, Market
 
 
@@ -158,3 +158,27 @@ def linear_cost_moments(
         spread=float(market.params.half_spread * weights.sum()),
         variance=shortfall_variance_bps2(trajectory, market),
     )
+
+
+def schedule_moments(
+    trajectory, market: Market, *, order_size: float | None = None
+) -> CostMoments:
+    """Phase-1 moments of an **arbitrary** deterministic schedule.
+
+    The named schedules (TWAP, ``ac_*``, ``optimal_*``) have their moments pinned
+    by the M0 goldens. This is the same computation for a schedule nobody wrote
+    down in advance — a realised trajectory out of :class:`ExecutionEnv
+    <temper.env.ExecutionEnv>`, say, possibly one whose tail was force-liquidated
+    — which is what M1's Monte-Carlo differential standardises against.
+
+    Phase 1 is the linearised world end-to-end (``ARCHITECTURE.md`` §9,
+    2026-08-04), so this is :func:`linear_cost_moments` at the tangent slope
+    :func:`~temper.oracle.impact.linearised_eta`. The tangent is taken at the
+    *parent* order's TWAP participation, not the realised schedule's, because
+    ``eta_tilde`` is a property of the order the env was configured with and is
+    frozen for the episode; pass `order_size` explicitly when the trajectory does
+    not start at the parent size.
+    """
+    x = np.asarray(trajectory, dtype=float)
+    reference = float(x[0]) if order_size is None else order_size
+    return linear_cost_moments(x, market, linearised_eta(market, reference))

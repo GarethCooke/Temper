@@ -30,7 +30,17 @@ from numpy.random import Generator, SeedSequence, default_rng
 
 #: The seed pools. Order fixes the spawn keys, so it is part of the contract:
 #: reordering this tuple would silently change every previously reported number.
-POOLS: tuple[str, ...] = ("train", "eval")
+#: Appending is safe — a new pool cannot move the spawn keys of the old ones.
+#:
+#: ``m1/differential`` is M1's diagnostic pool: the Monte-Carlo differential draws
+#: tens of millions of shocks, and doing that from ``train`` or ``eval`` would
+#: burn streams that committed M2 results are addressed by. Diagnostics get their
+#: own pool for the same reason train and eval have separate ones (invariant 5).
+POOLS: tuple[str, ...] = ("train", "eval", "m1/differential")
+
+#: The pool M1's Monte-Carlo differential draws from. Named here rather than
+#: spelled as a literal at the call sites so the quarantine is greppable.
+DIFFERENTIAL_POOL = "m1/differential"
 
 _POOL_INDEX = {name: index for index, name in enumerate(POOLS)}
 

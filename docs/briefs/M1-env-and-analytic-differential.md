@@ -100,17 +100,34 @@ detects mean shifts ≳ 2.8% of σ_C and variance mis-scalings ≳ 4%; deep tier
 1.3%. The κ-class bug (~18% on the objective) and off-by-one-in-`Σx_k²` class (~2–5%)
 both die in the deep tier, which is the acceptance gate.
 
+**Correction, at implementation (2026-08-04).** The deep-tier resolution figures are the
+ones for N_sim = 200,000; at the N_sim = 100,000 the table pre-states they are ≳ 1.3% of
+σ_C on the mean and ≳ 1.8% on the variance. The N_sim in the table is authoritative and
+was implemented as written — this is a correction to a derived claim, not a loosened band.
+The conclusion is unchanged: both named bug classes are still far outside the deep tier's
+bands (the `Σx_k²` off-by-one is 26% on V for TWAP at N = 13).
+
 ## Definition of done
 
-- [ ] Clean clone → `make test` green (mingw32-make / `python -m pytest` per README),
-      suite ≤ 3 min on the reference box.
-- [ ] `make differential` green, ≤ 30 min, run at least once at acceptance.
-- [ ] Task-0 certificate green: PD + solve-match + perturbation + monotonicity assert.
-- [ ] Invariant-7 outcome recorded in §9; registry test enforcing the quarantine (or the
-      equality pin) green.
-- [ ] All five identity tests green; diagnostic seed pool used; train/eval pools untouched.
-- [ ] No new dependencies beyond M0's pins; repo-invariants extension green.
-- [ ] `ROADMAP.md` M1 row flipped; anything structural discovered → §9, not code comments.
+- [x] Clean clone → `make test` green (mingw32-make / `python -m pytest` per README),
+      suite ≤ 3 min on the reference box. **502 tests, 12 s**, of which the fast
+      differential tier is ~10 s across its 9 cells.
+- [x] `make differential` green, ≤ 30 min, run at least once at acceptance.
+      **27 cells, 149 s** (~4.7 µs per `step`; 35.1 M steps through the real loop).
+      No cell used more than 62% of its band; worst mean-band use 61% (fast, MSFT `ac`),
+      worst variance-band use 47% (deep, JPM λ=1e-3 TWAP).
+- [x] Task-0 certificate green: PD + solve-match + perturbation + monotonicity assert.
+      `tests/test_variational_certificate.py`, 9 cases × 5 checks; the generic solve
+      matches `optimal_trajectory` and the quadratic is pinned to the oracle's own
+      objective so the certificate cannot certify an invention of its own.
+- [x] Invariant-7 outcome recorded in §9; registry test enforcing the quarantine green.
+      `tests/test_objective_registry.py` — refusal, behavioural and static checks.
+- [x] All five identity tests green; diagnostic seed pool used; train/eval pools untouched.
+      Worst observed: telescope 1.6e-13, penalty ≡ λV **5.8e-16** (band 1e-12), the exact
+      expectation identity 1.1e-12, reward 8.8e-12 (bands 1e-10).
+- [x] No new dependencies beyond M0's pins; repo-invariants extension green.
+      `requirements.txt` unchanged — gymnasium and pyyaml were already pinned there.
+- [x] `ROADMAP.md` M1 row flipped; anything structural discovered → §9, not code comments.
 
 ## Out of scope (resist)
 
@@ -131,3 +148,61 @@ resolution); Phase-2 market models; `client/`; oracle API changes beyond
 - If any moment mismatch survives the deep tier, stop and report — do not tune the env
   toward the bands. A differential failure is the milestone's product, same as M0's κ
   finding.
+
+### Closed 2026-08-04
+
+No moment mismatch. The env matched the closed forms on the first run, before any of the
+identity tests were written, which is the outcome the milestone was shaped to make
+falsifiable rather than the one it was shaped to produce.
+
+**1. Task 1 resolved to the quarantine branch, and the M0 handover was wrong.**
+The two encodings differ by 12%–54% of expected cost on the Phase-1 golden sets — a power
+law against its own tangent agrees only where they touch, and at TWAP participation the
+tangent charges exactly β = 0.6 of the power law. So M0's instruction to source the env
+reward from `linear_cost_moments` and the eval metric from `cost_moments` would have
+trained the agent on one functional and graded it on another, differing by up to half the
+number being reported: invariant 7 violated in the one way it was written to prevent.
+Phase 1 is now the linearised world end-to-end, `cost_moments` is quarantined to
+`temper.eval.metrics.CONTEXT`, and the resolution is in `ARCHITECTURE.md` §9. M0's brief
+carries a supersession note so the wrong instruction cannot be followed twice.
+
+**2. An exact per-episode expectation identity, beyond the brief's five.**
+The env publishes the cumulative price shock each bin executed against, so a test can
+subtract the noise off a *single* episode and compare what remains against the oracle's
+`E[cost]` — no averaging, no CI. It holds to ~1e-12 for every schedule including the
+force-liquidated one. This is a strictly stronger statement than the Monte-Carlo tiers can
+make about the mean, and it is what makes task 5(d) a per-episode identity rather than
+another statistical test. The tiers still earn their place: they are the only check on the
+*distribution*, and they are what a variance bug dies to.
+
+**3. Two identities cancel, so their tolerance is relative to the terms, not the total.**
+`Σ r_k = −(IS + λV)` sums per-bin quantities of ~1e2 bps into a total that is occasionally
+~1e-2 bps, when an episode's price path happens to offset its impact charges. Round-off is
+~1e-14 absolute either way, so a tolerance relative to the surviving total makes the
+verdict depend on which Gaussian draws came up. The comparison is against the magnitude of
+the summed terms; the pre-stated 1e-10 is unchanged and what it is relative to is now
+stated. Worst observed use of that budget: 8.8e-12.
+
+**4. `.gitignore` was excluding the entire env package.** The virtualenv entry was a bare
+`env/`, and a bare directory pattern matches at any depth, so `temper/env/` was invisible
+to git from the moment it was created — `make test` green locally, a missing module from a
+clean clone, which is the gate every milestone is measured by. The patterns are now
+anchored to the repo root, and `tests/test_repo_invariants.py` asks git directly whether
+any package source is excluded (skipped when git is unavailable). Worth the guard: this
+class of bug is invisible to every test that runs in the working tree.
+
+**5. Deliberately absent.** No timing assertion. The runtime budgets are measured and
+reported by the differential module (`make differential` prints tier wall time against the
+config's budget) but never asserted: a test that goes red because the box was busy teaches
+a session to rerun until green, which is the opposite of what the suite is for.
+
+**Watch items for M2.**
+
+- The env takes seeds only by *pool address*, never as a raw integer — `reset(seed=i)`
+  means "stream `i` of this env's pool". PPO wrappers that pass entropy-derived seeds will
+  need adapting, deliberately: it makes invariant 5 unbreakable rather than observed.
+- `EPISODE_KEY` is `"episode_summary"`, not `"episode"`, because gymnasium's
+  `RecordEpisodeStatistics` owns the latter and would overwrite it.
+- Baselines read their bin index out of the observation clock, so a vectorised or
+  frame-skipping rollout that perturbs the observation sequence will fail loudly instead of
+  silently replaying bin 0.

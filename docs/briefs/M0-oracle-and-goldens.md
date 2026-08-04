@@ -168,8 +168,15 @@ apart, and a guard test fails if anyone collapses them.
 The power law admits no sinh closed form — FrontierView linearises only to *derive* the
 schedule, then charges the power law to *cost* it. The oracle keeps both explicit:
 `cost_moments` (power law, golden-pinned) and `linear_cost_moments` (tangent, the frozen
-objective of §6.7). **M1 must encode the env reward from `linear_cost_moments` and the
-eval metric from `cost_moments`** — one objective, encoded once, per invariant 7.
+objective of §6.7). ~~**M1 must encode the env reward from `linear_cost_moments` and the
+eval metric from `cost_moments`**~~ — one objective, encoded once, per invariant 7.
+
+> **Superseded 2026-08-04 by M1 task 1.** That reward/metric split would itself have
+> violated invariant 7: M1 measured the two encodings on the Phase-1 golden parameter sets
+> and they differ by 12 %–54 % of expected cost, so training on one and grading on the
+> other would have compared two different objectives. Phase 1 is the linearised world
+> end-to-end and `cost_moments` is reporting context only — see `ARCHITECTURE.md` §9
+> (2026-08-04) and `docs/briefs/M1-env-and-analytic-differential.md` task 1.
 
 **3. Scope: two things beyond the literal task list, both load-bearing.**
 `optimal_kappa` / `optimal_trajectory` / `optimal_trajectory_by_solve` exist because of

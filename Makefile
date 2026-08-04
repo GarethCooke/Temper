@@ -4,19 +4,26 @@ PYTHON ?= python
 FRONTIERVIEW ?= ../FrontierView
 GOLDENS := tests/golden/vendor/frontierview_goldens.json
 
-.PHONY: help test test-verbose goldens clean
+.PHONY: help test test-verbose differential goldens clean
 
 help:
-	@echo "make test      run the pytest suite (the gate)"
-	@echo "make goldens   re-export the FrontierView fixtures (read-only there)"
-	@echo "               override the checkout with FRONTIERVIEW=/path/to/FrontierView"
-	@echo "make clean     remove caches and scratch results"
+	@echo "make test          run the pytest suite (the gate); excludes the deep tier"
+	@echo "make differential  the deep Monte-Carlo tier: M1's acceptance gate, minutes"
+	@echo "make goldens       re-export the FrontierView fixtures (read-only there)"
+	@echo "                   override the checkout with FRONTIERVIEW=/path/to/FrontierView"
+	@echo "make clean         remove caches and scratch results"
 
 test:
 	$(PYTHON) -m pytest
 
 test-verbose:
 	$(PYTHON) -m pytest -vv
+
+# The full 3 x 3 golden grid x 3 schedules at N_sim = 100,000, per
+# configs/m1_differential.yaml. Run at least once at milestone acceptance; the
+# command-line -m overrides the `not deep` in addopts.
+differential:
+	$(PYTHON) -m pytest -m deep -v
 
 # Regenerates $(GOLDENS) from a FrontierView checkout. Writes nothing into that
 # repo — the export imports its `api` package and nothing more (constitution §7).

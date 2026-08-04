@@ -10,7 +10,7 @@ requires-python = ">=3.11"
 dynamic = ["dependencies"]
 
 [tool.setuptools]
-packages = ["temper", "temper.oracle"]
+packages = ["temper", "temper.agents", "temper.env", "temper.eval", "temper.oracle"]
 
 [tool.setuptools.dynamic]
 dependencies = { file = ["requirements.txt"] }
@@ -20,6 +20,12 @@ minversion = "8.0"
 testpaths = ["tests"]
 # `temper` imports without an install step, so `make test` works from a clean clone.
 pythonpath = ["."]
-addopts = "-q --strict-markers --strict-config"
+# `make test` is the gate and has to stay evening-sized, so the deep differential
+# tier is opt-in: `make differential` (or `pytest -m deep`) runs it, and it is the
+# milestone acceptance gate rather than the per-commit one.
+addopts = "-q --strict-markers --strict-config -m 'not deep'"
+markers = [
+  "deep: the acceptance-gate differential tier — minutes, not seconds (make differential)",
+]
 # A warning in the reference engine is a defect in the reference engine.
 filterwarnings = ["error"]

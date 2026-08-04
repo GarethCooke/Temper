@@ -24,10 +24,14 @@ Temper is the controlled treatment that follows forging.
    client. A demo that the policy speaks a real venue wire; performance claims stay in the
    simulator.
 
-**Status:** M0 done — `temper/oracle` lands the Almgren–Chriss closed forms and matches 16
+**Status:** M1 done. `temper/oracle` lands the Almgren–Chriss closed forms and matches 16
 vendored FrontierView cases plus a 17-point frontier to float round-off, ten orders of
-magnitude inside the pre-stated 1e-6 tolerance. M1 (the environment and its analytic
-differential) is next. See `ROADMAP.md`.
+magnitude inside the pre-stated 1e-6 tolerance (M0). `temper/env` lands `ExecutionEnv` and
+proves it by differential: TWAP and both AC schedules run *as policies* through the real
+step loop, and their simulated cost moments match the closed forms across the full 3 × 3
+golden grid at 100,000 episodes a cell — plus five exact per-episode identities and a
+variational certificate that the schedule M2 grades against really is the minimiser. M2
+(PPO rediscovery) is next. See `ROADMAP.md`.
 
 ## Layout
 
@@ -50,8 +54,14 @@ Orientation docs at root: `ARCHITECTURE.md` (the constitution — read first),
 ```bash
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-make test        # or, without GNU make: python -m pytest
+make test          # or, without GNU make: python -m pytest
+make differential  # the deep Monte-Carlo tier: pytest -m deep
 ```
+
+`make test` is the per-commit gate and stays evening-sized (~11 s). `make differential` is
+the milestone acceptance gate: 27 (case, schedule) cells at 100,000 episodes each, ~2.5 min
+on the reference box, driven by `configs/m1_differential.yaml`. Both regenerate from that
+committed config plus one root seed.
 
 Python ≥ 3.11, CPU-only by design (constitution §6.9) — reference box is the Ryzen 7
 3800X the rest of the portfolio benchmarks on; a GPU only ever accelerates. The suite
@@ -59,7 +69,9 @@ needs no network and no GPU, and `tests/test_repo_invariants.py` enforces both.
 
 On Linux the default PyPI `torch` wheel bundles CUDA; add
 `--extra-index-url https://download.pytorch.org/whl/cpu` to keep the install CPU-sized.
-Torch is unused until M2 — the M0 suite runs on numpy and pytest alone.
+Torch is unused until M2 — the oracle, the env and the differential run on numpy,
+gymnasium, pyyaml and pytest alone, and the repo-invariant tests keep torch out of
+`temper/oracle` and `temper/env` for good.
 
 ### Regenerating the goldens
 

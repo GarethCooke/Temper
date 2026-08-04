@@ -1,7 +1,9 @@
-# Environments
-.venv/
-venv/
-env/
+# Environments. Anchored to the repo root on purpose: a bare `env/` also matches
+# `temper/env/`, which would have quietly kept the M1 environment package out of
+# every clone.
+/.venv/
+/venv/
+/env/
 
 # Python
 __pycache__/

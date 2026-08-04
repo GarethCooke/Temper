@@ -49,6 +49,24 @@ def test_pools_are_disjoint_across_several_root_seeds():
         assert disjoint(pool_seeds(root, "train", 32), pool_seeds(root, "eval", 32))
 
 
+def test_every_pool_is_disjoint_from_every_other():
+    """Including M1's diagnostic pool, which draws tens of millions of shocks."""
+    assert disjoint(*(pool_seeds(ROOT_SEED, pool, 32) for pool in POOLS))
+
+
+def test_the_pool_order_is_the_one_committed_results_were_addressed_by():
+    """Appending a pool is safe; inserting or reordering one is not.
+
+    The spawn key is `(pool index, stream index)`, so `train` and `eval` keep
+    their streams only while they keep positions 0 and 1. This pins that
+    directly — a reorder that silently re-randomised every previously reported
+    number would otherwise pass every other test in this file.
+    """
+    assert POOLS[:2] == ("train", "eval"), "existing pools moved; results would change"
+    for index, pool in enumerate(POOLS):
+        assert pool_sequence(ROOT_SEED, pool, 3).spawn_key == (index, 3)
+
+
 def test_pools_grow_without_renumbering():
     """Asking for more seeds must not move the ones already committed to results."""
     for pool in POOLS:
