@@ -163,7 +163,15 @@ identities" as a house convention alongside the Anvil/Crucible notes.
       (9 cases × 2 scales × 200 directions), worst ΔU/|U| **+1.3e-12** — every one uphill,
       floor −1e-9; (d) monotonicity 117 trades, smallest **+1.8e-4** of X.
 - [x] Clean clone from the committed branch: fresh venv, suite green, **test count matches
-      the in-tree run**; goldens, config and export script confirmed tracked.
+      the in-tree run**; goldens, config and export script confirmed tracked. Cloned at
+      `6d90dd8`, `python -m venv` + `pip install -r requirements.txt` (numpy 2.3.5,
+      pytest 8.4.2, gymnasium 1.2.1, torch 2.9.1, PyYAML 6.0.3): **681 passed, 27
+      deselected in 14.5 s** against 681/27 in 14.4 s in-tree — and every reported figure
+      identical to the digit, which is invariant 1 holding across a fresh install rather
+      than only across a rerun. `configs/m1_differential.yaml`,
+      `tests/golden/vendor/frontierview_goldens.json` (provenance `f87795f6`, clean, 16
+      cases) and `tools/export_frontierview_goldens.py` all present in the clone's index;
+      32 tracked files under `temper/`, `tests/`, `configs/`, `tools/`, none excluded.
 - [x] §9 carries the 12–54 % magnitude; M0 brief supersession note sits at the bolded
       sentence. Both were already true at M1 — confirmed, not re-landed. §9 gained one new
       entry from this session (the shock-ordering convention, finding 1).
