@@ -52,7 +52,7 @@ tiers:
     # `make differential`, marker `deep`. The acceptance gate: the full 3 x 3
     # golden grid, resolving mean shifts of ~0.9% of sigma_C and variance
     # mis-scalings of ~1.3%.
-    n_sim: 100000
+    n_sim: 200000
     mean_z_sigmas: 4.0
     var_z_sigmas: 4.0
     stream_base: 100
