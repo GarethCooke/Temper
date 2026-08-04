@@ -1,0 +1,33 @@
+# Environments
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Test / tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Scratch runs. Committed artefacts under results/ are added explicitly —
+# invariant 1 requires each to carry its config hash and git rev, and nothing
+# reaches that bar by accident.
+results/scratch/
+runs/
+wandb/
+*.pt
+*.ckpt
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,18 @@
+# Temper — pinned host dependencies. Python >= 3.11, CPU only (constitution §6.9).
+#
+# On Linux the default PyPI `torch` wheel bundles CUDA. To keep the install CPU-sized
+# there, prepend the CPU index:
+#
+#     pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+#
+# On Windows and macOS the PyPI wheel is already CPU-only. A GPU may accelerate;
+# it must never be needed.
+
+# --- the oracle and the test gate (M0) ---------------------------------------
+numpy==2.3.5
+pytest==8.4.2
+
+# --- landing with the environment and the agent (M1, M2) ---------------------
+gymnasium==1.2.1
+torch==2.9.1
+pyyaml==6.0.3
