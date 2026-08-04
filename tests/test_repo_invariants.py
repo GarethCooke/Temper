@@ -110,6 +110,98 @@ def test_the_env_does_not_import_the_power_law_moments():
         )
 
 
+#: The packages a policy's code lives in. M2's PPO lands under `agents/`, so
+#: `rglob` covers "any future training path" without this list needing an edit.
+POLICY_PACKAGES = ("agents",)
+
+
+def _string_literals(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    return {
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    }
+
+
+def _referenced_names(path: Path) -> set[str]:
+    """Every bare name, attribute and imported name a module mentions."""
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name):
+            names.add(node.id)
+        elif isinstance(node, ast.Attribute):
+            names.add(node.attr)
+        elif isinstance(node, ast.alias):
+            names.add(node.asname or node.name.split(".")[-1])
+    return names
+
+
+def test_the_shock_key_literal_lives_only_in_the_env_package():
+    """Constitution §4's observation minimality, enforced statically.
+
+    The realised price shock is published for the identity tests and for nothing
+    else. Written as a bare `"walk_bps"` it would be reachable from anywhere by
+    anyone who happened to know the string, and un-greppable when M2 wants to
+    ask "what can the agent see?". As the single constant
+    :data:`~temper.env.execution_env.SHOCK_KEY` it is one name, and this test is
+    what keeps it one name: the literal is rejected everywhere under `temper/`
+    except the package that defines it.
+    """
+    from temper.env import SHOCK_KEY
+
+    offenders = [
+        source.relative_to(REPO_ROOT)
+        for source in _package_sources()
+        if source.parent != PACKAGE_ROOT / "env" and SHOCK_KEY in _string_literals(source)
+    ]
+    assert not offenders, (
+        f"{', '.join(str(path) for path in offenders)} spell the shock key as a "
+        f"literal {SHOCK_KEY!r}; import temper.env.SHOCK_KEY instead so every read "
+        "of the price path is one greppable name"
+    )
+
+    # Non-vacuous: the constant really is the key the env publishes under.
+    env_literals = set().union(
+        *(_string_literals(source) for source in (PACKAGE_ROOT / "env").rglob("*.py"))
+    )
+    assert SHOCK_KEY in env_literals
+
+
+def test_no_policy_path_can_reach_the_shock():
+    """The agent's own code may not touch the price path by any spelling.
+
+    Stronger than the literal check, and aimed at a different failure: not
+    someone hard-coding the string, but a future PPO wrapper importing the
+    constant to build a richer observation "just for a debugging run". Phase 1's
+    rediscovery claim is only meaningful if the agent could not have learned
+    anything else (constitution §7), so the policy packages get no route at all —
+    while `temper/eval/rollout.py`, which records the shock so the identity tests
+    can subtract it, keeps its access through the named constant.
+    """
+    from temper.env import SHOCK_KEY
+
+    for package in POLICY_PACKAGES:
+        sources = sorted((PACKAGE_ROOT / package).rglob("*.py"))
+        assert sources, f"no sources found under temper/{package}"
+        for source in sources:
+            where = source.relative_to(REPO_ROOT)
+            assert SHOCK_KEY not in _string_literals(source), (
+                f"{where} names the shock key; a policy may not see the price path"
+            )
+            assert "SHOCK_KEY" not in _referenced_names(source), (
+                f"{where} imports SHOCK_KEY; a policy may not see the price path"
+            )
+
+    # The recorder does reach it, through the constant. If that ever reverts to a
+    # literal the test above catches it; if it disappears entirely the identity
+    # tests lose their input, and this says so first.
+    rollout = PACKAGE_ROOT / "eval" / "rollout.py"
+    assert "SHOCK_KEY" in _referenced_names(rollout)
+    assert SHOCK_KEY not in _string_literals(rollout)
+
+
 def test_the_env_does_not_import_a_schedule_or_a_closed_form():
     """The differential must not be checking the oracle against itself.
 

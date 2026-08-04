@@ -18,7 +18,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from temper.env import EPISODE_KEY, ExecutionEnv
+from temper.env import EPISODE_KEY, SHOCK_KEY, ExecutionEnv
 
 
 @dataclass(frozen=True)
@@ -78,7 +78,10 @@ def _episode(env: ExecutionEnv, policy, record: bool):
             penalties.append(info["penalty_bps"])
             rewards.append(reward)
             shares.append(info["shares"])
-            walks.append(info["walk_bps"])
+            # Through the named constant, never the literal: the diagnostic
+            # recorder is allowed to read the shock, a policy is not, and
+            # `tests/test_repo_invariants.py` enforces the difference statically.
+            walks.append(info[SHOCK_KEY])
 
     summary = info[EPISODE_KEY]
     if not record:

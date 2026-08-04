@@ -19,9 +19,10 @@ test:
 test-verbose:
 	$(PYTHON) -m pytest -vv
 
-# The full 3 x 3 golden grid x 3 schedules at N_sim = 100,000, per
-# configs/m1_differential.yaml. Run at least once at milestone acceptance; the
-# command-line -m overrides the `not deep` in addopts.
+# The full 3 x 3 golden grid x 3 schedules at N_sim = 200,000 — 27 cells and
+# 70,200,000 calls into ExecutionEnv.step, per configs/m1_differential.yaml. Run
+# at least once at milestone acceptance; the command-line -m overrides the
+# `not deep` in addopts.
 differential:
 	$(PYTHON) -m pytest -m deep -v
 

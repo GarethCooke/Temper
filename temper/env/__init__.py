@@ -12,6 +12,6 @@ end-to-end (``ARCHITECTURE.md`` §9, 2026-08-04) and both are enforced by
 ``tests/test_repo_invariants.py``.
 """
 
-from .execution_env import EPISODE_KEY, ExecutionEnv
+from .execution_env import EPISODE_KEY, SHOCK_KEY, ExecutionEnv
 
-__all__ = ["EPISODE_KEY", "ExecutionEnv"]
+__all__ = ["EPISODE_KEY", "SHOCK_KEY", "ExecutionEnv"]

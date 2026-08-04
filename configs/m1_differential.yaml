@@ -13,17 +13,28 @@
 
 brief: docs/briefs/M1-env-and-analytic-differential.md
 
+# --- the grid ---------------------------------------------------------------
+# ARCHITECTURE.md §9 (2026-08-04): T = 6.5 trading hours in half-hour bins, so
+# N = max(2, round(2T)) = 13. Written down here because the step-count totals
+# below are arithmetic in it and a silent regrid would otherwise just move them.
+canonical_bins: 13
+
 # --- randomness -------------------------------------------------------------
 # One root seed regenerates every number below (invariant 1). Streams are
 # addressed, not drawn: stream_index = stream_base + case_ordinal * n_schedules
 # + schedule_ordinal, over the `cases` and `schedules` lists in their committed
 # order. The tiers use disjoint stream ranges, so the fast tier's 180 000
-# episodes and the deep tier's 2.7 million share no shocks and the fast tier is
+# episodes and the deep tier's 5.4 million share no shocks and the fast tier is
 # a genuine (if weaker) independent check rather than a prefix of the deep one.
 seeding:
   root_seed: 20260804
   pool: m1/differential        # never `train` or `eval` — invariant 5
+  # Offsets from `identity_stream` already in use, so a new test picks a free
+  # one rather than silently sharing a shock sequence: +0..+11 the identity
+  # cells, +500 the under-trade force-liquidation, +600/+601 the replay pair,
+  # +700/+701 the env-contract cells, +1000.. the noise-identity cells.
   identity_stream: 900         # the per-episode identity tests
+  guard_stream: 1700           # the task-4 sinh-asymptote guard case
 
 # --- schedules under test ---------------------------------------------------
 # Baseline keys from temper.agents.baselines.BASELINES. Order fixes the stream
@@ -36,6 +47,12 @@ schedules: [twap, ac, optimal]
 # distributions are known and the 4-sigma bounds are exact, not asymptotic:
 #   |mean(z)|      <= mean_z_sigmas / sqrt(N)
 #   |var(z) - 1|   <= var_z_sigmas * sqrt(2 / N)
+#
+# `expected_steps` is the tier's total calls into `ExecutionEnv.step`, exactly:
+# cells x n_sim x canonical_bins. Asserted per cell and in total, so "every
+# episode went through the real step loop, one bin at a time" is arithmetic
+# rather than a claim about the harness — a vectorised shortcut would leave the
+# counter short however green the bands came out.
 tiers:
   fast:
     # In `make test`. One case per symbol at the middle lambda.
@@ -44,19 +61,23 @@ tiers:
     var_z_sigmas: 4.0
     stream_base: 0
     runtime_budget_seconds: 90
+    expected_steps: 2340000     # 9 cells x 20 000 x 13
     cases:
       - core:AAPL:X100000:T6.5:lam1e-05
       - core:MSFT:X250000:T6.5:lam1e-05
       - core:JPM:X500000:T6.5:lam1e-05
   deep:
     # `make differential`, marker `deep`. The acceptance gate: the full 3 x 3
-    # golden grid, resolving mean shifts of ~0.9% of sigma_C and variance
-    # mis-scalings of ~1.3%.
+    # golden grid, resolving mean shifts of 0.89% of sigma_C and variance
+    # mis-scalings of 1.26%. N_sim was raised from 100 000 by amendment 1 of
+    # docs/briefs/M1-env-and-analytic-differential.md — at 100 000 the low end of
+    # the off-by-one-in-sum(x_k^2) class sat 4.47 sigma against a 4 sigma gate.
     n_sim: 200000
     mean_z_sigmas: 4.0
     var_z_sigmas: 4.0
     stream_base: 100
     runtime_budget_seconds: 1800
+    expected_steps: 70200000    # 27 cells x 200 000 x 13
     cases:
       - core:AAPL:X100000:T6.5:lam1e-07
       - core:AAPL:X100000:T6.5:lam1e-05
@@ -69,6 +90,11 @@ tiers:
       - core:JPM:X500000:T6.5:lam0.001
 
 # --- exact (non-statistical) identities, per episode ------------------------
+# Every rtol here is relative to the *summed absolute terms* of the identity, not
+# to its surviving total: two of these equate sums that cancel ~1e2 bps of per-bin
+# quantities down to occasionally ~1e-2 bps, and a total-relative verdict would
+# depend on which Gaussian draws came up. See amendment 3 of
+# docs/briefs/M1-env-and-analytic-differential.md.
 identities:
   # Per-step shortfalls summed vs the shortfall rebuilt from the realised price
   # path; summed reward vs -(realised IS + lambda V).
@@ -77,12 +103,51 @@ identities:
   # than statistical — it is how invariant 7 is pinned — so it gets the tighter
   # bound.
   penalty_rtol: 1.0e-12
+  # The exact noise identity (M1a task 1): realised cost minus the oracle's
+  # E[cost] against the noise functional assembled independently in the test from
+  # sigma, tau, the realised schedule and the draws the seed address resolves to.
+  # This is what retires the last statistical leg of the differential — with it,
+  # V = sigma^2 tau sum(x_k^2) holds by construction rather than by sampling.
+  noise_rtol: 1.0e-12
   # Episodes per identity case. Small: these are exact identities, not estimates.
   episodes: 64
   # The under-trading policy of task 5(d): it executes this fraction of each
   # bin's TWAP trade, so the env's terminal force-liquidation has to charge a
   # remainder of roughly (1 - fraction) * X.
   undertrade_fraction: 0.5
+  # The noise identity runs on every (case, schedule) cell of the deep grid plus
+  # the guard case below, not just the fast tier's three cases.
+  noise_cases: deep
+
+# --- the M0 watch-item guard (task 4) ---------------------------------------
+# NOT a golden, and it must never be presented as one: no FrontierView number is
+# pinned by it and a future `make goldens` re-export must not try to source it.
+# Only the *symbol parameters* come from the vendored fixture (there is no second
+# home for a parameter set); the lambda is chosen here, and chosen for one reason.
+#
+# M0's watch item: above kappa*T = SINH_OVERFLOW_KT the vendored sinh trajectory
+# is replaced by its exp(-kappa t) asymptote, whose terminal holding is X*e^-kT
+# rather than a hard zero — and the env's x_N = 0 force-liquidation must not be
+# written to assume otherwise. No cell of the 3 x 3 grid reaches that branch (the
+# largest is kappa*T = 20.6, and `optimal` is smaller still), so the branch needs
+# a case of its own to be exercised at all.
+#
+# lambda = 1.0 puts AAPL at kappa*T ~ 650: past the threshold, and low enough
+# that X*e^-kT is still a representable positive double (~5.4e-278 shares). The
+# vendored `sinh-overflow-asymptote` case is *not* usable here — at its
+# lambda = 100 the residual underflows to exactly 0.0, so it takes the branch
+# without ever producing the residual the watch item is about.
+guard_case:
+  id: sinh-asymptote-residual
+  kind: guard                  # not `golden`; see above
+  params_from: core:AAPL:X100000:T6.5:lam1e-05   # symbol parameters and grid only
+  order_size: 100000.0
+  lambda_risk: 1.0
+  schedule: ac                 # the branch lives in the vendored kappa convention
+  episodes: 64
+  # Realised (force-liquidated) schedule's cost vs schedule_moments of that same
+  # realised schedule, relative to the summed absolute terms as above.
+  cost_rtol: 1.0e-10
 
 # --- the variational optimality certificate (task 0) ------------------------
 # Checks `optimal_trajectory` really is the minimiser of the frozen objective,

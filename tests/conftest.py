@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from temper.env import ExecutionEnv
+from temper.env import ExecutionEnv, execution_env
 from temper.oracle import Market, SymbolParams
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -166,8 +166,12 @@ def differential_pairs(tier: str) -> list[DifferentialPair]:
     ]
 
 
-def build_env(case: GoldenCase, stream_index: int) -> ExecutionEnv:
-    """The env for a golden case, seeded from the config's diagnostic pool."""
+def build_env(case, stream_index: int) -> ExecutionEnv:
+    """The env for a case, seeded from the config's diagnostic pool.
+
+    Takes a :class:`GoldenCase` or a :class:`GuardCase` — both carry a market, an
+    order size and a lambda, and nothing here needs to know which it has.
+    """
     seeding = M1_CONFIG["seeding"]
     return ExecutionEnv(
         case.market,
@@ -176,4 +180,104 @@ def build_env(case: GoldenCase, stream_index: int) -> ExecutionEnv:
         root_seed=int(seeding["root_seed"]),
         pool=seeding["pool"],
         stream_index=stream_index,
+    )
+
+
+# ---------------------------------------------------------------------------
+# The task-4 guard case — a case that is deliberately not a golden
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class GuardCase:
+    """A parameter set chosen *here* to reach a branch no golden reaches.
+
+    Structurally distinct from :class:`GoldenCase` on purpose: it has no ``ac``,
+    ``twap`` or ``derived`` block, so a test that tried to compare it against a
+    vendored number fails with an ``AttributeError`` rather than quietly
+    inventing one. The symbol parameters and the grid still come from the
+    fixture — there is no second home for a parameter set — but the lambda is
+    the config's, and nothing FrontierView exported is pinned by this case.
+    """
+
+    case_id: str
+    kind: str
+    symbol: str
+    order_size: float
+    lambda_risk: float
+    market: Market
+    schedule: str
+
+    def __str__(self) -> str:
+        return self.case_id
+
+
+def guard_case() -> GuardCase:
+    """The `guard_case` block of the config, resolved against the fixture."""
+    spec = M1_CONFIG["guard_case"]
+    if spec["kind"] != "guard":
+        raise ValueError(
+            f"the guard case is labelled {spec['kind']!r}; it is not a golden and "
+            "must not be presented as one (see the config's comment)"
+        )
+    source = case_by_id(spec["params_from"])
+    return GuardCase(
+        case_id=spec["id"],
+        kind=spec["kind"],
+        symbol=source.symbol,
+        order_size=float(spec["order_size"]),
+        lambda_risk=float(spec["lambda_risk"]),
+        market=source.market,
+        schedule=spec["schedule"],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Seed-pool discipline (M1a task 5)
+# ---------------------------------------------------------------------------
+
+#: Every ``(root_seed, pool, stream_index)`` an :class:`ExecutionEnv` resolved
+#: during this session, in order. Populated by the autouse fixture below and
+#: asserted on by ``tests/test_seed_pool_discipline.py``.
+RESOLVED_SEED_ADDRESSES: list[tuple[int, str, int]] = []
+
+#: Pools that hold committed M2 results. M1 is a diagnostic and may not spend a
+#: single stream out of either (constitution invariant 5).
+RESERVED_POOLS = frozenset({"train", "eval"})
+
+
+@pytest.fixture(scope="session", autouse=True)
+def record_env_seed_addresses():
+    """Record every pool address the env resolves, and forbid the reserved pools.
+
+    M0 pins that the pools are disjoint *by construction*. That is a different
+    statement from "the M1 harness drew from the diagnostic one", which is the
+    thing invariant 5 actually needs and which nothing checked: a `pool=` default
+    edited in the wrong direction would leave every M0 seeding test green while
+    M1's tens of millions of draws quietly burned streams that M2's committed
+    results are addressed by.
+
+    The env reaches randomness through exactly one call —
+    ``pool_rng(root_seed, pool, stream_index)`` in ``reset`` — so wrapping that
+    name records every draw stream the whole suite opens, and the check at
+    teardown covers the entire test path rather than the cells one test
+    remembered to drive.
+    """
+    real = execution_env.pool_rng
+
+    def recording(root_seed, pool, index):
+        RESOLVED_SEED_ADDRESSES.append((int(root_seed), str(pool), int(index)))
+        return real(root_seed, pool, index)
+
+    execution_env.pool_rng = recording
+    try:
+        yield RESOLVED_SEED_ADDRESSES
+    finally:
+        execution_env.pool_rng = real
+
+    trespassed = sorted({pool for _, pool, _ in RESOLVED_SEED_ADDRESSES} & RESERVED_POOLS)
+    assert not trespassed, (
+        f"the test path drew env episodes from {', '.join(trespassed)}; M1 is a "
+        "diagnostic and its draws belong to the m1/differential pool "
+        "(constitution invariant 5)"
     )

@@ -65,6 +65,15 @@ from temper.seeding import DIFFERENTIAL_POOL, pool_rng
 #: the kind of quiet substitution this milestone exists to prevent.
 EPISODE_KEY = "episode_summary"
 
+#: ``info`` key the realised price shock is published under — and the *only* route
+#: to it. The observation is `(time left, inventory left)` and nothing else
+#: (constitution §4: rediscovery must not smuggle in signal), so a policy that
+#: could see the shock would be seeing the future of its own price path. The key
+#: is a named constant rather than a literal so that
+#: ``tests/test_repo_invariants.py`` can statically reject the literal everywhere
+#: outside this package: one greppable name, and every read of it auditable.
+SHOCK_KEY = "walk_bps"
+
 
 def _as_shares(action) -> float:
     """Coerce an action to a share count.
@@ -155,6 +164,9 @@ class ExecutionEnv(Env):
         )
 
         self._trajectory = np.empty(n_bins + 1, dtype=np.float64)
+        # Monotone over the env's whole life — deliberately *not* cleared by
+        # `reset`. See the `step_count` property.
+        self._step_count = 0
         self._step_index: int | None = None
         self._inventory = 0.0
         self._walk = 0.0
@@ -170,6 +182,22 @@ class ExecutionEnv(Env):
     def seed_address(self) -> tuple[int, str, int]:
         """``(root_seed, pool, stream_index)`` — what a result must record."""
         return (self._root_seed, self._pool, self._stream_index)
+
+    @property
+    def step_count(self) -> int:
+        """Calls to :meth:`step` over this env's whole life. Never reset.
+
+        The differential's claim is that ``N_sim`` episodes went through *this*
+        loop, one bin at a time — "no vectorised side-channel", because the loop
+        is the thing under test. That is otherwise an unfalsifiable statement
+        about the harness: a future session could add a batched path that
+        computes the same costs a hundred times faster and every band would stay
+        green. Here the claim is arithmetic instead. Each tier asserts the
+        counter advanced by exactly ``N_sim * n_bins``
+        (``tests/test_differential.py``), so a shortcut round the loop shows up
+        as a missing count rather than as a pleasant surprise on the wall clock.
+        """
+        return self._step_count
 
     def reset(self, *, seed: int | None = None, options: dict | None = None):
         """Start a new episode; `seed` selects a stream index within the pool.
@@ -211,6 +239,7 @@ class ExecutionEnv(Env):
         shares = _as_shares(action)
         if math.isnan(shares):
             raise ValueError("action is NaN")
+        self._step_count += 1
 
         if step_index == self._last_bin:
             # The terminal constraint x_N = 0: whatever is left goes now, charged
@@ -260,8 +289,10 @@ class ExecutionEnv(Env):
             # The cumulative price shock this bin executed against. Published so a
             # test can subtract the noise off a single episode and compare what
             # remains against the oracle's E[cost] *exactly*, instead of only
-            # statistically — see tests/test_env_identities.py.
-            "walk_bps": self._walk,
+            # statistically — see tests/test_noise_identity.py. `info` is the only
+            # route to it: it is deliberately absent from the observation, and
+            # `SHOCK_KEY`'s docstring says why.
+            SHOCK_KEY: self._walk,
         }
         if terminated:
             info[EPISODE_KEY] = self._episode_summary()

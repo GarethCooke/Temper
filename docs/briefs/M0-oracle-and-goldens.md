@@ -195,3 +195,17 @@ worse than absent ones.
 `X·e^{−κT}` rather than exactly zero. Harmless in the oracle (≈1e-218 of X), but the env's
 `x_N = 0` force-liquidation must not be written to assume the oracle's trajectories
 already end at a hard zero.
+
+> **Closed 2026-08-04 by M1a task 4** — `tests/test_sinh_asymptote_guard.py`. The caution
+> was right and the code honours it: the env does not assume a hard-zero tail and
+> `SchedulePolicy` does not repair one. But the residual can never reach the
+> force-liquidation, so the item is closed rather than carried into M2. Taking the branch
+> requires `κT > 500`, so on the canonical 13-bin grid the per-bin decay is at most
+> `e^{−500/13}` = 2.0e-17 — below half an ulp at `X`. The first bin's planned trade
+> `X − x₁` therefore rounds to exactly `X`, the env holds zero from bin 1 onward, and the
+> terminal residual is annihilated some 200 orders of magnitude before anything could
+> charge it. No cell of the 3 × 3 grid reaches the branch either (largest `κT` = 20.6
+> vendored, 9.0 exact); a dedicated guard case in `configs/m1_differential.yaml` — a
+> guard, **not** a golden — runs the branch through the env anyway, where it pins that the
+> differential costs the schedule the env *realised* rather than the one the policy
+> planned.

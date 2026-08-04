@@ -22,10 +22,11 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from gymnasium import spaces
 from numpy.random import default_rng
 
 from temper.agents import baseline
-from temper.env import ExecutionEnv
+from temper.env import SHOCK_KEY, ExecutionEnv
 from temper.eval import run_episode
 from temper.oracle import schedule_moments, twap_trajectory
 
@@ -331,6 +332,127 @@ def test_the_observation_is_the_two_fractions_and_nothing_else(env):
         assert observation[1] == pytest.approx(max(0.0, 1.0 - (step + 1) / n_bins), abs=1e-12)
     assert terminated
     assert observation == pytest.approx(np.array([0.0, 0.0]))
+
+
+# ---------------------------------------------------------------------------
+# Observation minimality (M1a task 3) — closing the M2 leak before M2 exists
+# ---------------------------------------------------------------------------
+#
+# §4: "Rediscovery must not smuggle in signal." Under Phase-1 dynamics the shock
+# is the *only* thing an agent could learn from that TWAP and the sinh schedules
+# cannot see, so an observation that leaked it — by width, by a stray field, or
+# by a public attribute an M2 wrapper could reach for — would turn "the agent
+# rediscovered Almgren-Chriss" into "the agent traded on tomorrow's prices". The
+# tests below are cheap now and unwriteable once a training loop depends on the
+# answer.
+
+
+def test_the_observation_space_is_exactly_two_dimensional(env):
+    """Two numbers. Not two-or-more, and not a dict that could grow a third."""
+    assert isinstance(env.observation_space, spaces.Box)
+    assert env.observation_space.shape == (2,)
+    assert env.observation_space.dtype == np.float64
+
+    observation, _ = env.reset(seed=11)
+    assert observation.shape == (2,)
+    for _ in range(env.market.n_bins):
+        observation, _, _, _, _ = env.step(env.order_size / env.market.n_bins)
+        assert observation.shape == (2,)
+
+
+def test_the_observation_carries_no_information_about_the_shock():
+    """Two streams, different shocks, byte-identical observation sequences.
+
+    The structural version of "the shock is not in the observation": run the same
+    deterministic schedule against two different shock streams and require the
+    observations to be bitwise equal while the shocks are not. A leak of any
+    size — the walk itself, a noisy price, a realised-cost field — breaks this,
+    including one that a shape assertion would miss because it replaced a field
+    rather than adding one.
+    """
+    case = CASES[0]
+    policy_trades = twap_trajectory(case.market, case.order_size)
+    per_bin = -np.diff(policy_trades)
+
+    def observations(stream_index):
+        env = build_env(case, stream_index)
+        observation, _ = env.reset(seed=stream_index)
+        seen, shocks = [observation], []
+        for shares in per_bin:
+            observation, _, _, _, info = env.step(float(shares))
+            seen.append(observation)
+            shocks.append(info[SHOCK_KEY])
+        return np.array(seen), np.array(shocks)
+
+    first, first_shocks = observations(IDENTITY_STREAM + 800)
+    second, second_shocks = observations(IDENTITY_STREAM + 801)
+
+    assert not np.array_equal(first_shocks, second_shocks), (
+        "the two streams drew the same shocks; the comparison below is vacuous"
+    )
+    assert np.array_equal(first, second), (
+        "the observation changed with the shock stream: something about the price "
+        "path is reaching the agent, and rediscovery is no longer a claim about "
+        "learning the schedule (constitution §4)"
+    )
+
+
+def test_the_shock_is_published_through_info_and_nowhere_else(env):
+    """`info[SHOCK_KEY]` is the whole public route to the price path.
+
+    The env's public surface is pinned exactly rather than spot-checked: a new
+    public attribute is how a leak would actually arrive — nobody would put the
+    walk in the observation on purpose, but `env.walk_bps` for "debugging" is one
+    line and no test would have noticed.
+
+    Not covered, deliberately: gymnasium's own ``Env.np_random``. It is the
+    framework's contract rather than ours, and it exposes the *generator*, not
+    the realised path — anything drawing from it advances the stream and dies to
+    the determinism test instead.
+    """
+    env.reset(seed=12)
+    _, _, _, _, info = env.step(env.order_size / env.market.n_bins)
+    assert SHOCK_KEY in info
+    assert info[SHOCK_KEY] != 0.0
+
+    instance_surface = {name for name in vars(env) if not name.startswith("_")}
+    assert instance_surface == {
+        "market",
+        "order_size",
+        "lambda_risk",
+        "eta_tilde",
+        "action_space",
+        "observation_space",
+    }, "the env grew a public attribute; if it exposes the price path, §4 is broken"
+
+    class_surface = {name for name in vars(ExecutionEnv) if not name.startswith("_")}
+    assert class_surface == {"metadata", "seed_address", "step_count", "reset", "step"}
+
+    for name in instance_surface | class_surface:
+        value = getattr(env, name)
+        if isinstance(value, float):
+            assert value != info[SHOCK_KEY], f"{name} exposes the realised shock"
+
+
+def test_the_step_counter_is_monotone_and_survives_reset(env):
+    """M1a task 2's instrument, checked before the tiers lean on it."""
+    assert env.step_count == 0
+    env.reset(seed=13)
+    assert env.step_count == 0, "reset() must not clear the counter's history"
+
+    n_bins = env.market.n_bins
+    for expected in range(1, n_bins + 1):
+        env.step(env.order_size / n_bins)
+        assert env.step_count == expected
+
+    env.reset(seed=14)
+    assert env.step_count == n_bins, "the counter restarted; it is not monotone"
+    env.step(0.0)
+    assert env.step_count == n_bins + 1
+
+    with pytest.raises(ValueError, match="NaN"):
+        env.step(np.nan)
+    assert env.step_count == n_bins + 1, "a rejected action counted as a bin"
 
 
 def test_actions_are_clipped_to_what_is_left(env):

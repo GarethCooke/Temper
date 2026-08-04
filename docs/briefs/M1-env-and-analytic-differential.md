@@ -88,34 +88,53 @@ invariant-7 resolution below; M4 roadmap row led by the calibrated 0.6-power bre
 | Item | Value |
 | --- | --- |
 | Fast tier (in `make test`) | 3 cases (one per symbol, middle λ) × 3 schedules, N_sim = 20,000 |
-| Deep tier (`make differential`, marker `deep`) | full 3 × 3 golden grid × 3 schedules, N_sim = 100,000 |
+| Deep tier (`make differential`, marker `deep`) | full 3 × 3 golden grid × 3 schedules, N_sim = **200,000** (amended 2026-08-04, see below) |
 | Mean band (standardised) | \|mean(z)\| ≤ 4/√N_sim |
 | Variance band (standardised) | \|var(z) − 1\| ≤ 4·√(2/N_sim) |
-| Identity tests | ≤ 1e-10 relative (1e-12 for the penalty ≡ λV pin) |
+| Identity tests | ≤ 1e-10 relative (1e-12 for the penalty ≡ λV pin), **relative to the summed absolute terms** — see amendment 3 |
 | Variational match / PD / perturbation | ≤ 1e-12 rel · Cholesky succeeds · ≥ −1e-9·\|U\| |
 | Runtime budget, reference box | fast tier ≤ 90 s added to `make test` (suite total ≤ 3 min); deep tier ≤ 30 min |
 
 Resolution these bands buy (state in the test docstring, it's the point): fast tier
-detects mean shifts ≳ 2.8% of σ_C and variance mis-scalings ≳ 4%; deep tier ≳ 0.9% and
-1.3%. The κ-class bug (~18% on the objective) and off-by-one-in-`Σx_k²` class (~2–5%)
-both die in the deep tier, which is the acceptance gate.
+detects mean shifts ≳ 2.8% of σ_C and variance mis-scalings ≳ 4%; deep tier ≳ 0.89% and
+1.26%. The κ-class bug (~18% on the objective) and off-by-one-in-`Σx_k²` class (~2–5%,
+26% for TWAP at N = 13) both die in the deep tier, which is the acceptance gate.
 
-**Correction, at implementation (2026-08-04).** The deep-tier resolution figures are the
-ones for N_sim = 200,000; at the N_sim = 100,000 the table pre-states they are ≳ 1.3% of
-σ_C on the mean and ≳ 1.8% on the variance. The N_sim in the table is authoritative and
-was implemented as written — this is a correction to a derived claim, not a loosened band.
-The conclusion is unchanged: both named bug classes are still far outside the deep tier's
-bands (the `Σx_k²` off-by-one is 26% on V for TWAP at N = 13).
+### Amendments (invariant 3 — recorded before the work they licensed, 2026-08-04)
+
+Three pre-stated numbers moved. Each is recorded here, with its reason, per
+`docs/briefs/M1a-acceptance-hardening.md`'s preflight.
+
+1. **Deep-tier N_sim: 100,000 → 200,000.** Reason: it restores the resolution this
+   brief's own prose claimed, and the margin on the weakest named bug class. At
+   N = 100,000 the low end of the off-by-one-in-`Σx_k²` class (~2%) sits 4.47σ against a
+   4σ gate — roughly two detections in three. At N = 200,000 it is 6.3σ (~99%). Both the
+   table above and `configs/m1_differential.yaml` carry 200,000; the config is what the
+   tests read.
+2. **Deep-tier resolution prose: ≳ 1.3% / 1.8% → ≳ 0.89% / 1.26%.** These are the
+   N = 200,000 figures (4/√N = 0.894%, 4·√(2/N) = 1.265%). The original 0.9%/1.3% prose
+   in this brief was *already* the N = 200,000 pair while the table pre-stated 100,000;
+   amendment 1 makes the table match the prose rather than the other way round.
+3. **The identity-test tolerance denominator.** "≤ 1e-10 relative" now reads *relative to
+   the summed absolute terms*, not to the surviving total. Reason: `Σr = −(IS + λV)`
+   cancels ~1e2 bps per-bin terms down to totals that are occasionally ~1e-2 bps, so a
+   total-relative verdict is seed-dependent while round-off is ~1e-14 absolute either
+   way. The bar itself is unchanged; what it is relative to is now stated. Worst observed
+   use of that budget: 8.8e-12.
+
+Amendment 3 generalises past Temper: *scale-relative tolerances for cancelling
+identities* is now a house convention, cross-filed alongside the Anvil/Crucible notes.
 
 ## Definition of done
 
 - [x] Clean clone → `make test` green (mingw32-make / `python -m pytest` per README),
-      suite ≤ 3 min on the reference box. **502 tests, 12 s**, of which the fast
-      differential tier is ~10 s across its 9 cells.
+      suite ≤ 3 min on the reference box. **681 tests, 14 s** (M1a added 179), of which
+      the fast differential tier is ~11 s across its 9 cells.
 - [x] `make differential` green, ≤ 30 min, run at least once at acceptance.
-      **27 cells, 149 s** (~4.7 µs per `step`; 35.1 M steps through the real loop).
-      No cell used more than 62% of its band; worst mean-band use 61% (fast, MSFT `ac`),
-      worst variance-band use 47% (deep, JPM λ=1e-3 TWAP).
+      Re-run at N_sim = 200,000 for M1a: **27 cells, 317 s**, 70,200,000 steps through the
+      real loop at 221 k steps/s — the step count asserted, not inferred.
+      No cell used more than 61% of its band; worst mean-band use 61% (fast, MSFT `ac`),
+      worst variance-band use 50% (deep, MSFT λ=1e-3 `ac`).
 - [x] Task-0 certificate green: PD + solve-match + perturbation + monotonicity assert.
       `tests/test_variational_certificate.py`, 9 cases × 5 checks; the generic solve
       matches `optimal_trajectory` and the quadratic is pinned to the oracle's own
@@ -195,6 +214,28 @@ class of bug is invisible to every test that runs in the working tree.
 reported by the differential module (`make differential` prints tier wall time against the
 config's budget) but never asserted: a test that goes red because the box was busy teaches
 a session to rerun until green, which is the opposite of what the suite is for.
+
+### Amended by M1a (2026-08-04) — what the Monte-Carlo tiers are now *for*
+
+`docs/briefs/M1a-acceptance-hardening.md` task 1 landed the exact per-episode noise
+identity: the realised cost minus the oracle's `E[cost]` equals
+`−σ_bin · Σ_{k=0}^{N−1} (x_k/X)·ξ_k` to ~1e-13 relative, on all 27 deep cells, the
+force-liquidated under-trader and the asymptote guard case. **That changes what the
+tiers certify.** The variance of a known linear form in iid standard normals is
+arithmetic, so `V = σ²τ Σ x_k²` now holds *by construction*, not by sampling — the tiers
+no longer gate the cost assembly. What they still and only certify is the **draws**: that
+they are iid standard normal and uncorrelated across bins. Belt and braces, and a smaller
+claim than it was.
+
+M2 should read the guarantee list this way:
+
+| Statement | How it is held |
+| --- | --- |
+| The env pays out the oracle's functional (invariant 7) | **Exact**, per episode — penalty ≡ λV to 5.8e-16 |
+| Realised cost less the price path is the oracle's `E[cost]` | **Exact**, per episode |
+| Realised noise is the right linear form in the right draws | **Exact**, per episode (M1a task 1) |
+| Every episode ran through the real `step` loop, bin by bin | **Exact** — step counter, 70,200,000 deep / 2,340,000 fast |
+| The shocks are iid standard normal, uncorrelated across bins | **Sampled** — the 4σ bands, and nothing else |
 
 **Watch items for M2.**
 

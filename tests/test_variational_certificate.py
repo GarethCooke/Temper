@@ -96,6 +96,52 @@ def _stationary_trajectory(case) -> np.ndarray:
     return np.concatenate(([case.order_size], interior, [0.0]))
 
 
+#: What each part actually observed, so the certificate reports itself rather
+#: than only passing. M1's acceptance did not say which of the four parts were
+#: green; a green dot per test is not the same evidence as "the generic solve
+#: matched to 4e-16 of X on nine cases".
+_OBSERVED: dict[str, list[float]] = {
+    "(a) Cholesky": [],
+    "(b) solve vs closed form": [],
+    "(c) perturbation": [],
+    "(d) monotonicity": [],
+}
+_COUNTS: dict[str, int] = dict.fromkeys(_OBSERVED, 0)
+
+
+def _record(part: str, value: float, count: int = 1) -> None:
+    _OBSERVED[part].append(value)
+    _COUNTS[part] += count
+
+
+@pytest.fixture(scope="module", autouse=True)
+def report_certificate(request):
+    """Print the four parts individually, with the worst number each saw."""
+    yield
+    if not any(_OBSERVED.values()):
+        return
+    writer = request.config.get_terminal_writer()
+    writer.line("")
+    writer.line(f"variational certificate, {len(CASES)} cases:")
+    units = {
+        "(a) Cholesky": "smallest pivot",
+        "(b) solve vs closed form": f"worst, of X (band {SOLVE_RTOL:.0e})",
+        "(c) perturbation": f"worst dU / |U| (floor -{TOLERANCE_REL:.0e})",
+        "(d) monotonicity": "smallest trade, of X",
+    }
+    # (b) is a distance from the right answer, so its worst is the largest; the
+    # other three are margins, so theirs is the smallest.
+    smallest_is_worst = {"(a) Cholesky", "(c) perturbation", "(d) monotonicity"}
+    for part, values in _OBSERVED.items():
+        if not values:
+            continue
+        worst = min(values) if part in smallest_is_worst else max(values)
+        writer.line(
+            f"  {part:26s} green, {_COUNTS[part]:5d} checks   "
+            f"{worst:+.3e}  {units[part]}"
+        )
+
+
 @pytest.fixture(params=CASES, ids=str)
 def case(request):
     """The 3 x 3 golden grid the config names for the certificate."""
@@ -146,6 +192,7 @@ def test_the_hessian_is_positive_definite(case):
     factor = np.linalg.cholesky(hessian)  # raises LinAlgError if not PD
     assert np.all(np.diag(factor) > 0.0)
     assert np.allclose(factor @ factor.T, hessian, rtol=1e-12, atol=0.0)
+    _record("(a) Cholesky", float(np.min(np.diag(factor))))
 
 
 def test_the_generic_solve_matches_the_closed_form(case):
@@ -157,6 +204,7 @@ def test_the_generic_solve_matches_the_closed_form(case):
         f"stationarity solve and closed form differ by {worst:.3e} of X "
         f"(band {SOLVE_RTOL:.0e})"
     )
+    _record("(b) solve vs closed form", worst, count=case.market.n_bins - 1)
 
 
 def test_no_perturbation_of_the_optimum_lowers_the_objective(case):
@@ -187,6 +235,7 @@ def test_no_perturbation_of_the_optimum_lowers_the_objective(case):
             f"a perturbation at |d| = {scale:g}X lowered the objective by "
             f"{-worst:.3e} bps (floor {floor:.3e})"
         )
+        _record("(c) perturbation", worst / abs(best), count=DIRECTIONS)
 
 
 def test_the_optimum_is_monotone_so_the_spread_term_is_constant(case):
@@ -206,3 +255,4 @@ def test_the_optimum_is_monotone_so_the_spread_term_is_constant(case):
 
     spread = case.market.params.half_spread * np.sum(np.abs(executed)) / case.order_size
     assert spread == pytest.approx(case.market.params.half_spread, rel=1e-12)
+    _record("(d) monotonicity", float(np.min(executed)) / case.order_size, count=len(executed))

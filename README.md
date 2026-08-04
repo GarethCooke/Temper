@@ -29,9 +29,12 @@ vendored FrontierView cases plus a 17-point frontier to float round-off, ten ord
 magnitude inside the pre-stated 1e-6 tolerance (M0). `temper/env` lands `ExecutionEnv` and
 proves it by differential: TWAP and both AC schedules run *as policies* through the real
 step loop, and their simulated cost moments match the closed forms across the full 3 × 3
-golden grid at 100,000 episodes a cell — plus five exact per-episode identities and a
-variational certificate that the schedule M2 grades against really is the minimiser. M2
-(PPO rediscovery) is next. See `ROADMAP.md`.
+golden grid at 200,000 episodes a cell. The differential is mostly not statistical — an
+exact per-episode identity pins the realised noise to the specific draws the env made, so
+the cost assembly holds by construction and the Monte-Carlo tiers certify only that the
+shocks are iid normal. Alongside it: six exact per-episode identities, an exact step
+count, and a variational certificate that the schedule M2 grades against really is the
+minimiser. M2 (PPO rediscovery) is next. See `ROADMAP.md`.
 
 ## Layout
 
@@ -58,10 +61,11 @@ make test          # or, without GNU make: python -m pytest
 make differential  # the deep Monte-Carlo tier: pytest -m deep
 ```
 
-`make test` is the per-commit gate and stays evening-sized (~11 s). `make differential` is
-the milestone acceptance gate: 27 (case, schedule) cells at 100,000 episodes each, ~2.5 min
-on the reference box, driven by `configs/m1_differential.yaml`. Both regenerate from that
-committed config plus one root seed.
+`make test` is the per-commit gate and stays evening-sized (~14 s). `make differential` is
+the milestone acceptance gate: 27 (case, schedule) cells at 200,000 episodes each — 70.2 M
+calls into the real `step` loop, counted and asserted — ~5.5 min on the reference box,
+driven by `configs/m1_differential.yaml`. Both regenerate from that committed config plus
+one root seed.
 
 Python ≥ 3.11, CPU-only by design (constitution §6.9) — reference box is the Ryzen 7
 3800X the rest of the portfolio benchmarks on; a GPU only ever accelerates. The suite
