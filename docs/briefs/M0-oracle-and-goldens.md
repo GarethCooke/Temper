@@ -171,12 +171,15 @@ schedule, then charges the power law to *cost* it. The oracle keeps both explici
 objective of §6.7). ~~**M1 must encode the env reward from `linear_cost_moments` and the
 eval metric from `cost_moments`**~~ — one objective, encoded once, per invariant 7.
 
-> **Superseded 2026-08-04 by M1 task 1.** That reward/metric split would itself have
-> violated invariant 7: M1 measured the two encodings on the Phase-1 golden parameter sets
-> and they differ by 12 %–54 % of expected cost, so training on one and grading on the
-> other would have compared two different objectives. Phase 1 is the linearised world
-> end-to-end and `cost_moments` is reporting context only — see `ARCHITECTURE.md` §9
-> (2026-08-04) and `docs/briefs/M1-env-and-analytic-differential.md` task 1.
+> **⚠ Superseded — do not implement this sentence.** The split would violate invariant 7:
+> training reward and eval metric would be different functionals. Ratified wrong at M0's
+> closing review; resolved by M1 task 1. Phase 1 is the linearised world end-to-end —
+> dynamics at tangent η̃, reward, eval metric and oracle all one encoding — and
+> `cost_moments` is quarantined to reporting context, enforced by refusal, behaviour and
+> static checks (`tests/test_objective_registry.py`). The two encodings differ by 12 %–54 %
+> of expected cost on the Phase-1 golden sets, so this was a real defect rather than a
+> stylistic one. See the invariant-7 entry in `ARCHITECTURE.md` §9 (2026-08-04) and
+> `docs/briefs/M1-env-and-analytic-differential.md` task 1.
 
 **3. Scope: two things beyond the literal task list, both load-bearing.**
 `optimal_kappa` / `optimal_trajectory` / `optimal_trajectory_by_solve` exist because of
@@ -196,7 +199,8 @@ worse than absent ones.
 `x_N = 0` force-liquidation must not be written to assume the oracle's trajectories
 already end at a hard zero.
 
-> **Closed 2026-08-04 by M1a task 4** — `tests/test_sinh_asymptote_guard.py`. The caution
+> **Closed by M1a — unreachable, not merely untriggered.** M1a task 4,
+> `tests/test_sinh_asymptote_guard.py` (2026-08-04). The caution
 > was right and the code honours it: the env does not assume a hard-zero tail and
 > `SchedulePolicy` does not repair one. But the residual can never reach the
 > force-liquidation, so the item is closed rather than carried into M2. Taking the branch
@@ -208,4 +212,7 @@ already end at a hard zero.
 > vendored, 9.0 exact); a dedicated guard case in `configs/m1_differential.yaml` — a
 > guard, **not** a golden — runs the branch through the env anyway, where it pins that the
 > differential costs the schedule the env *realised* rather than the one the policy
-> planned.
+> planned. The vendored `sinh-overflow-asymptote` golden could not have served as that
+> guard case either: at its λ = 100 the residual underflows to exactly 0.0, so it takes the
+> branch without ever producing the residual this watch item is about. M1a's guard uses
+> λ = 1.0 and is deliberately not a golden.

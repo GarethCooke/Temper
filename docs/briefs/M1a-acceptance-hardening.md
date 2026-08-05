@@ -50,6 +50,18 @@ identities" as a house convention alongside the Anvil/Crucible notes.
    where `x_k` are the post-bin holdings of the schedule actually executed and `ξ_k` are
    the raw draws the env used.
 
+   > **⚠ Superseded during implementation.** The functional specified above —
+   > `σ√τ·Σ_{k=1}^{N−1} x_k ξ_k` over post-bin holdings — is textbook Almgren–Chriss and is
+   > **wrong for this project**. The shock is charged before the bin, so the sum runs
+   > `k = 0…N−1` over inventory before each bin and retains its `x_0 = X` term. The gap is
+   > identically 1 in normalised units — 20.6 % of `V` for TWAP at `N = 13`, i.e. precisely
+   > the off-by-one-in-`Σx_k²` class this task was written to kill. The normative convention
+   > is `shortfall_variance_bps2`, which reproduces the vendored variance to 9.5e-16
+   > (invariant 2). Implemented as normative; recorded in `ARCHITECTURE.md` §9 and in
+   > finding 1 below. The brief's specification of an independent functional was correct as
+   > *method* and wrong as *content*, which is the intended failure mode: the test was
+   > assembled from the normative source rather than from this brief.
+
    Anti-tautology conditions, all load-bearing: the functional is assembled **in the test**
    from §4 and the case parameters, importing only σ, τ and the schedule — never from an
    env internal or an oracle helper that already computes it; the sign follows §4's

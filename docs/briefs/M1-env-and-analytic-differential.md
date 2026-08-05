@@ -247,3 +247,25 @@ M2 should read the guarantee list this way:
 - Baselines read their bin index out of the observation clock, so a vectorised or
   frame-skipping rollout that perturbs the observation sequence will fail loudly instead of
   silently replaying bin 0.
+
+### Accepted 2026-08-04 — after M1a
+
+Green on `m1-env-and-analytic-differential`, accepted after M1a. 681 tests, 14 s;
+`make differential` 27 cells, 317 s at 221 k steps/s. Clean clone from `6d90dd8` with a
+fresh venv: 681 passed / 27 deselected, every figure identical to the digit.
+
+Two §9 amendments: the invariant-7 quarantine (12 %–54 %) and the shock-timing index
+convention (20.6 % of `V` for TWAP at `N = 13`). M0's `sinh-overflow-asymptote` watch item
+closed as unreachable.
+
+| Quantity | Pre-stated | Worst observed | Margin |
+| --- | --- | --- | --- |
+| Exact noise identity | 1e-12 | **1.29e-13** | 7.8× |
+| Variational solve vs `optimal_trajectory` | 1e-12 of X | **1.4e-15** | 714× |
+| Identity tests (summed-terms relative) | 1e-10 | **8.8e-12** | 11× |
+| Mean band use, 27 deep cells | 4σ | **55 %** | — |
+| Variance band use, 27 deep cells | 4σ | **50 %** | — |
+
+Band use of 55 %/50 % across 27 cells is the expected shape, not a near-miss: the expected
+maximum of 27 null draws is ≈2.4σ against a 4σ gate, so a worst case near 60 % is what a
+true null looks like. A worst case of 10 % would have been the result worth investigating.
