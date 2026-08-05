@@ -90,13 +90,15 @@ Until code exists this section is the source of truth; from M1 onward
 - **Determinism.** The env is seeded; identical `(config, seed)` produces an identical
   trajectory. Train and eval seed pools are disjoint by construction (§6.5).
 - **Sign convention.** v1 is sell-side only; the buy side is a mirror and out of scope (§8).
-- **Amended by M0.** The three 2026-08-04 entries in §9 refine this section against
-  what the vendored goldens turned out to contain: which κ the "AC sinh trajectory"
-  above refers to, that the linear temporary coefficient is the tangent η̃ rather than
-  η, and the canonical grid and units. Read them before implementing against §4.
+- **Amended by M0.** Three §9 entries refine this section against what the vendored goldens
+  turned out to contain: *The oracle carries two Almgren–Chriss decay rates, not one*
+  (which κ the "AC sinh trajectory" above refers to), *Phase-1 temporary impact is linear
+  at the tangent η̃, not at η*, and *The canonical grid is FrontierView's, in hours*. Read
+  all three before implementing against §4.
 - **Amended by M1a.** The shock is charged *before* each bin, so `x_k` in the reward and in
   `Σx_k²` is inventory **before** bin `k`, with `x_0 = X` included and `x_N` excluded. See
-  the shock-timing §9 entry (2026-08-04); the index convention is normative, pinned by
+  the §9 entry *The shock lands before the bin executes, so the shortfall variance sums
+  inventory before each bin*; the index convention is normative, pinned by
   `shortfall_variance_bps2` against the vendored goldens to 9.5e-16.
 
 ## 5. Agent & training
@@ -190,6 +192,13 @@ placement, GPU dependence, any venue other than Anvil, and any suggestion of liv
 trading.
 
 ## 9. Amendment log
+
+**Cite entries by title, not by date.** The `Date` column records the *session* date, not a
+commit date, and several entries legitimately share one — M0, M1 and M1a all closed on
+2026-08-04, and five entries carry it. Titles are unique; dates are not, so every pointer
+elsewhere in the repo names the entry it means. A session reconciling this table against
+`git log` will find more entries on a day than that day has commits: that is the sessions
+and the commits keeping different time, not drift to be "corrected".
 
 | Date       | Change                | Why |
 | ---------- | --------------------- | --- |

@@ -178,7 +178,8 @@ eval metric from `cost_moments`**~~ — one objective, encoded once, per invaria
 > `cost_moments` is quarantined to reporting context, enforced by refusal, behaviour and
 > static checks (`tests/test_objective_registry.py`). The two encodings differ by 12 %–54 %
 > of expected cost on the Phase-1 golden sets, so this was a real defect rather than a
-> stylistic one. See the invariant-7 entry in `ARCHITECTURE.md` §9 (2026-08-04) and
+> stylistic one. See the §9 entry *Phase 1 is the linearised world end-to-end;
+> `cost_moments` is reporting context only* and
 > `docs/briefs/M1-env-and-analytic-differential.md` task 1.
 
 **3. Scope: two things beyond the literal task list, both load-bearing.**

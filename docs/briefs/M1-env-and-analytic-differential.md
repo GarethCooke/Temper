@@ -182,8 +182,9 @@ reward from `linear_cost_moments` and the eval metric from `cost_moments` would 
 trained the agent on one functional and graded it on another, differing by up to half the
 number being reported: invariant 7 violated in the one way it was written to prevent.
 Phase 1 is now the linearised world end-to-end, `cost_moments` is quarantined to
-`temper.eval.metrics.CONTEXT`, and the resolution is in `ARCHITECTURE.md` §9. M0's brief
-carries a supersession note so the wrong instruction cannot be followed twice.
+`temper.eval.metrics.CONTEXT`, and the resolution is in the `ARCHITECTURE.md` §9 entry
+*Phase 1 is the linearised world end-to-end; `cost_moments` is reporting context only*.
+M0's brief carries a supersession note so the wrong instruction cannot be followed twice.
 
 **2. An exact per-episode expectation identity, beyond the brief's five.**
 The env publishes the cumulative price shock each bin executed against, so a test can
@@ -214,6 +215,12 @@ class of bug is invisible to every test that runs in the working tree.
 reported by the differential module (`make differential` prints tier wall time against the
 config's budget) but never asserted: a test that goes red because the box was busy teaches
 a session to rerun until green, which is the opposite of what the suite is for.
+
+> **This is not where M1 ends — keep reading.** Two later sections in this file carry the
+> same date and are easy to stop short of. *Amended by M1a* restates what the Monte-Carlo
+> tiers still certify once the exact noise identity landed (a smaller claim than it was),
+> and *Accepted — after M1a* is M1's acceptance record: the two §9 amendments M1a added,
+> the clean-clone figures, and the pre-stated-vs-observed margins table.
 
 ### Amended by M1a (2026-08-04) — what the Monte-Carlo tiers are now *for*
 

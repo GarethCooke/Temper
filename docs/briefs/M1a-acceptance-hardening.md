@@ -44,7 +44,7 @@ identities" as a house convention alongside the Anvil/Crucible notes.
 
 ## Tasks
 
-1. **Exact noise identity — retire the last statistical leg.** The env already publishes
+1. **Exact noise identity — ⚠ SUPERSEDED, see note below.** The env already publishes
    the per-bin shock (finding 2). Assert per episode that the realised cost minus the
    analytic `E[cost]` equals the noise functional `σ√τ · Σ_{k=1}^{N−1} x_k ξ_k` exactly,
    where `x_k` are the post-bin holdings of the schedule actually executed and `ξ_k` are
@@ -57,10 +57,12 @@ identities" as a house convention alongside the Anvil/Crucible notes.
    > identically 1 in normalised units — 20.6 % of `V` for TWAP at `N = 13`, i.e. precisely
    > the off-by-one-in-`Σx_k²` class this task was written to kill. The normative convention
    > is `shortfall_variance_bps2`, which reproduces the vendored variance to 9.5e-16
-   > (invariant 2). Implemented as normative; recorded in `ARCHITECTURE.md` §9 and in
-   > finding 1 below. The brief's specification of an independent functional was correct as
-   > *method* and wrong as *content*, which is the intended failure mode: the test was
-   > assembled from the normative source rather than from this brief.
+   > (invariant 2). Implemented as normative; recorded in the `ARCHITECTURE.md` §9 entry
+   > *The shock lands before the bin executes, so the shortfall variance sums inventory
+   > before each bin*, and in finding 1 below. The brief's specification of an independent
+   > functional was correct as *method* and wrong as *content*, which is the intended
+   > failure mode: the test was assembled from the normative source rather than from this
+   > brief.
 
    Anti-tautology conditions, all load-bearing: the functional is assembled **in the test**
    from §4 and the case parameters, importing only σ, τ and the schedule — never from an
@@ -136,7 +138,7 @@ identities" as a house convention alongside the Anvil/Crucible notes.
 | --- | --- |
 | Deep tier | 3 × 3 golden grid × 3 schedules = 27 cells, N_sim = 200,000 |
 | Fast tier | unchanged — 3 cases × 3 schedules = 9 cells, N_sim = 20,000 |
-| Canonical bins | N = 13 (§9, 2026-08-04) |
+| Canonical bins | N = 13 (§9 *The canonical grid is FrontierView's, in hours*) |
 | Step count, deep tier | exactly 27 × 200,000 × 13 = **70,200,000** |
 | Step count, fast tier | exactly 9 × 20,000 × 13 = **2,340,000** |
 | Mean band (standardised) | \|mean(z)\| ≤ 4/√N_sim → 0.89 % at deep tier |
