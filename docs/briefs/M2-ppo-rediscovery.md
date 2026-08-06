@@ -367,7 +367,7 @@ truncation). Graded analytically — one deterministic rollout per seed through
 | worst excess | +46.12 % | +0.0176 % |
 | median ‖δ‖₂ (band: 28 797) | 32 902 shares | **1 336 shares** |
 | red flags | none | none |
-| runtime | 1 247–1 329 s/seed, 6 404 s sweep | 1 277–1 460 s/seed, 6 748 s sweep |
+| runtime | 1 431–1 740 s/seed, 8 071 s sweep | 1 525–1 634 s/seed, 7 869 s sweep |
 | **verdict** | **MISS** (both criteria) | **PASS** |
 
 Baselines, graded through the identical rollout and grader: TWAP 1.0000, vendored AC
@@ -385,11 +385,33 @@ five essentially rediscovers the sinh (0.009, inside ε) and another barely lear
 overlap: the *worst* control-variate seed beats the *best* sampled seed by 29×, so the
 estimator change is not seed noise.
 
-Runtime note: both sweeps ran on a 16-thread host, sequentially and otherwise idle. An
-earlier attempt that ran them concurrently truncated seeds against the 30-minute per-seed
-cap, and a later one lost a seed to the host sleeping mid-run; neither is committed. The
-committed runs used `SetThreadExecutionState` to hold the host awake for the duration — a
-process-scoped call that reverts on exit and changes no power setting.
+### The acceptance run is also a reproducibility test
+
+The committed artefacts were produced by `make sweep` from committed revision `415392e`,
+with `git_dirty: false` — the recorded revision genuinely contains the code that made them.
+Getting there meant running the sweeps twice, which turned a provenance chore into a
+measurement, and the measurement is the strongest statement in this brief:
+
+**All ten seeds reproduced bitwise.** Not the medians, not "within tolerance" — every seed's
+graded objective *and* its full 14-point inventory trajectory are identical, in a fresh
+process, at wall-clock speeds differing by up to 30 %, at a different revision, hours apart.
+The sampled sweep's median is 0.098198 both times.
+
+That fixes how far the seed discipline reaches. Exactly reproducible: the shock streams
+(pool-addressed, invariant 5), the network initialisation, the minibatch order, and — once
+pinned — torch's reduction order. Not reproducible, and the reason `ppo.torch_threads` had
+to become a committed hyperparameter rather than a property of the host: the same seed
+address scored 0.165 and 0.066 of the TWAP gap on four threads versus eight, before it was
+pinned. Wall-clock is not reproducible either and does not need to be; it varied 1 431–1 740 s
+per seed across runs whose results were identical to the digit.
+
+Runtime note: both sweeps ran on a 16-thread host, sequentially and otherwise idle, holding
+the host awake with a process-scoped `SetThreadExecutionState` that reverts on exit and
+changes no power setting. Three earlier attempts are *not* committed and are recorded here
+because each was discarded for a reason worth knowing: one ran the two sweeps concurrently
+and truncated seeds against the per-seed cap; one lost a seed to the host sleeping mid-run;
+one lost a seed to the cap firing at 1 801 s, which is the truncation that prompted the
+session note below on where a budget belongs.
 
 ## Definition of done
 
@@ -414,7 +436,8 @@ process-scoped call that reverts on exit and changes no power setting.
 - [x] Figures in `results/` with config hash + git rev; matplotlib pinned (3.11.1) and
       confined to `temper/eval/figures.py`; repo-invariants extension green, including that
       `Agg` is selected before `pyplot` is imported.
-- [x] Clean clone green; `make test` 17.9 s against a 3-minute ceiling (778 tests).
+- [x] Clean clone green; `make test` 23 s against a 3-minute ceiling (786 tests), run
+      through the documented `make` entry point rather than a bare pytest invocation.
 - [x] Control variate was used: amendment 1 recorded *before* the run, with a correction
       recorded after it saying which parts of its reasoning the sweep contradicted. The
       restated claim is in `configs/m2_ppo.yaml`, copied verbatim into
