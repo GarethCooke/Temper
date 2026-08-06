@@ -158,7 +158,16 @@ ppo:
   torch_threads: 8
   hidden_sizes: [64, 64]
   log_std_init: -1.0
-  max_seconds: 1800             # the brief's per-seed budget, enforced
+  # A runaway guard, NOT the acceptance budget. The brief's 30-minute per-seed
+  # budget is `runtime.seconds_per_seed` below, and it is enforced where a budget
+  # belongs: by the suite, on the recorded wall clock, *after* the run produced a
+  # result. Encoding it here as a hard stop was a mistake — it turned "this took
+  # 30 min 1 s" into "this result does not exist", destroying a 12 M-step seed and
+  # the four-hour sweep around it, and teaching nothing except that a clock ran
+  # out. 5400 s is 3x the budget: high enough that marginal slowness completes and
+  # gets reported honestly, low enough to still catch pathology (a host that
+  # sleeps mid-run, which happened once and cost a sweep).
+  max_seconds: 5400
 
 # --- runtime budgets (reference box: Ryzen 7 3800X, CPU only) ---------------
 runtime:

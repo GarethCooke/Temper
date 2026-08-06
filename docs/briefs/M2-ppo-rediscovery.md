@@ -449,6 +449,26 @@ second λ "for comparison"; hyperparameter search beyond what the runtime budget
   running statistics for, a fixed constant does. The margin is real but not large (13 points
   on the worst seed, where tuning probes had suggested 30) — a session that tightens this bar
   should expect to tune, not to find headroom lying around.
+- **A budget is reported, not enforced by truncation — changed after it bit me, and the
+  reasoning is on the record because of that.** The brief pre-states ≤30 min per training
+  seed. I encoded that as `ppo.max_seconds: 1800`, a hard stop inside the training loop. It
+  fired on a seed that reached 1 801 s, cutting it off 404 updates short and voiding the
+  four-hour sweep around it. The threshold was not wrong and it has **not** been loosened:
+  `runtime.seconds_per_seed` is still 1 800 and `tests/test_m2_rediscovery.py` still fails
+  any seed that exceeds it. What changed is *where* it is enforced — by the suite, on the
+  recorded wall clock, after the run produced a result, rather than by destroying the result
+  mid-flight. `ppo.max_seconds` is now 5 400 s, a runaway guard for pathology (a host that
+  slept mid-run, which cost a sweep earlier the same day) rather than a razor on the budget
+  itself. The distinction matters: a marginal overrun should produce a valid experiment plus
+  an honest "over budget" flag for a human to judge; the old encoding produced neither. I am
+  noting the timing plainly — this is a change made by someone inconvenienced by the thing
+  being changed — which is why the acceptance criterion itself is untouched and still
+  asserted.
+- **Sustained load moves the runtime, and the brief's budget is stated for a rested box.**
+  The same sweep's seeds took 1 247–1 329 s on a cold machine and 1 598–1 801 s after ~18 h
+  of continuous training on the same host, with identical results to every digit. Runtime is
+  a property of the host's thermal state; the *numbers* are not. A session that finds itself
+  near the cap should let the box cool rather than reach for the config.
 - The failure this milestone exists to prevent is an agent that looks like it rediscovered
   AC because the metric drifted toward it. Analytic grading through `schedule_moments`, the
   red-flag test, and the fixed-affine reward scaling are the three things holding that line.
