@@ -36,11 +36,19 @@ from numpy.random import Generator, SeedSequence, default_rng
 #: tens of millions of shocks, and doing that from ``train`` or ``eval`` would
 #: burn streams that committed M2 results are addressed by. Diagnostics get their
 #: own pool for the same reason train and eval have separate ones (invariant 5).
-POOLS: tuple[str, ...] = ("train", "eval", "m1/differential")
+#: ``m2/diagnostic`` is the same idea one milestone on: M2's fast tests need an
+#: env to drive, and driving it from ``eval`` would spend streams the committed
+#: rediscovery result is addressed by — on a check that does not care which
+#: shocks it gets.
+POOLS: tuple[str, ...] = ("train", "eval", "m1/differential", "m2/diagnostic")
 
 #: The pool M1's Monte-Carlo differential draws from. Named here rather than
 #: spelled as a literal at the call sites so the quarantine is greppable.
 DIFFERENTIAL_POOL = "m1/differential"
+
+#: The pool M2's non-reported checks draw from — the action-space, grading and
+#: control-variate tests, none of which report a number.
+M2_DIAGNOSTIC_POOL = "m2/diagnostic"
 
 _POOL_INDEX = {name: index for index, name in enumerate(POOLS)}
 

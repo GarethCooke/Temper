@@ -151,6 +151,70 @@ def optimal_trajectory(
     )
 
 
+def objective_hessian(
+    market: Market, order_size: float, lambda_risk: float
+) -> np.ndarray:
+    """Curvature of the frozen objective in the interior inventory levels.
+
+    Writing the objective as ``U(x) = A * sum (x_i - x_{i+1})^2 + B * sum x_i^2``
+    plus schedule-invariant constants — the decomposition
+    :func:`optimal_kappa`'s docstring solves — the second derivative with respect
+    to the ``n_bins - 1`` free holdings ``x_1 .. x_{N-1}`` is
+
+    .. code::
+
+        H = 2A * tridiag(-1, 2, -1) + 2B * I
+        A = eta_tilde * BPS / (X * dt),  B = lambda * (sigma_bin * BPS)^2 / X^2
+
+    in bps per share². It is the same matrix
+    ``tests/test_variational_certificate.py`` assembles independently to certify
+    that ``optimal_trajectory`` is the minimum; here it is oracle surface because
+    M2 derives its *trajectory* tolerance from it rather than choosing one
+    (``docs/briefs/M2-ppo-rediscovery.md``). Constants do not appear: permanent
+    cost and the half-spread are schedule-invariant for a monotone schedule that
+    fully liquidates, so they shift ``U`` without curving it.
+    """
+    if lambda_risk < 0.0:
+        raise ValueError(f"lambda_risk must be non-negative, got {lambda_risk}")
+    if order_size <= 0.0:
+        raise ValueError(f"order_size must be positive, got {order_size}")
+
+    a = linearised_eta(market, order_size) * BPS / (order_size * market.dt)
+    b = lambda_risk * (market.sigma_bin * BPS) ** 2 / order_size**2
+
+    size = market.n_bins - 1
+    if size < 1:
+        return np.zeros((0, 0))
+
+    second_difference = np.zeros((size, size))
+    np.fill_diagonal(second_difference, 2.0)
+    off = np.arange(size - 1)
+    second_difference[off, off + 1] = -1.0
+    second_difference[off + 1, off] = -1.0
+    return 2.0 * a * second_difference + 2.0 * b * np.eye(size)
+
+
+def objective_curvature_floor(
+    market: Market, order_size: float, lambda_risk: float
+) -> float:
+    """``lambda_min`` of :func:`objective_hessian` — the flattest direction.
+
+    Closed form: the second-difference matrix has eigenvalues
+    ``2 - 2 cos(k pi / N)``, so the smallest eigenvalue of ``H`` is
+    ``4A (1 - cos(pi / N)) + 2B``. Computed that way rather than by
+    ``eigvalsh`` because it is the number a tolerance is divided by, and an
+    iterative eigensolver returning something a few ulps low would loosen a
+    pre-stated band by exactly the amount nobody would notice. The two agree to
+    machine precision, which ``tests/test_m2_reference.py`` pins.
+    """
+    a = linearised_eta(market, order_size) * BPS / (order_size * market.dt)
+    b = lambda_risk * (market.sigma_bin * BPS) ** 2 / order_size**2
+    n = market.n_bins
+    if n < 2:
+        raise ValueError(f"an interior holding needs n_bins >= 2, got {n}")
+    return 4.0 * a * (1.0 - math.cos(math.pi / n)) + 2.0 * b
+
+
 def optimal_trajectory_by_solve(
     market: Market, order_size: float, lambda_risk: float
 ) -> np.ndarray:

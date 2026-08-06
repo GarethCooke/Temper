@@ -1,0 +1,161 @@
+# M2 — PPO rediscovery on **sampled rewards**: the default estimator, and the
+# recorded finding that it does not clear epsilon inside the runtime budget.
+#
+# This is the brief's task-3 default and the claim M2 set out to make: an agent
+# trained on the realised reward, at a per-episode signal-to-noise ratio of about
+# 1:70, recovering Almgren-Chriss. It does not get there inside the runtime
+# budget — the measured numbers are in results/m2_rediscovery_sampled.json, and
+# the single-seed diagnostics that established the rate are in the brief's
+# amendment 1. It is committed rather than deleted because the miss is a result:
+# it is what motivated the sanctioned control variate, and it is the finding M3
+# would otherwise have to rediscover.
+#
+# Everything below is identical to configs/m2_ppo.yaml except `estimator`, so the
+# two runs differ in the estimator and in nothing else. The lambda is not a
+# choice: it is the output of task 0's rule applied to the oracle's reference
+# table, and `Experiment.verify_lambda_rule` re-derives it at the top of every run
+# and in `tests/test_m2_reference.py`. Editing it without editing the rule is red.
+
+brief: docs/briefs/M2-ppo-rediscovery.md
+
+# --- the case ---------------------------------------------------------------
+# The frontier case: AAPL, 100 k shares, one full session. The symbol parameters
+# and the grid are FrontierView's, repeated here rather than read out of
+# `tests/golden/vendor/` because that fixture is test data and neither `temper/`
+# nor `tools/` may depend on it. The repetition is the thing that could drift, so
+# `tests/test_m2_reference.py` compares every field against the golden case named
+# by `params_from` — one changed digit is a red test, not a quiet re-calibration.
+case:
+  id: frontier
+  params_from: core:AAPL:X100000:T6.5:lam1e-05   # symbol parameters and grid only
+  symbol: AAPL
+  order_size: 100000.0
+  horizon_hours: 6.5
+  n_bins: 13                    # ARCHITECTURE.md §9: max(2, round(2T)), half-hour bins
+  params:
+    adv: 60000000
+    sigma: 0.0155
+    half_spread: 0.3
+    eta: 0.142
+    gamma: 0.314
+
+# --- task 0: how lambda was fixed, and what the rule selected ----------------
+# Applied to M0's 17-point log-half-decade grid and to nothing else:
+#   (i)  (J_twap - J_optimal) / J_optimal >= 0.20   — keeps the testbed discriminative
+#   (ii) the optimum's largest single-bin fraction <= 0.50 — rejects near-immediate
+#        liquidation, where the control problem is trivial
+# The smallest admissible grid point is 10^-3.5. At 10^-4 condition (i) fails
+# (gap 16.8 %); at 10^-3.5 the gap is 56.3 % and the largest bin is 32.6 % of X.
+lambda_selection:
+  grid: vendor                              # temper.oracle.VENDOR_LAMBDA_GRID
+  rule:
+    min_twap_gap: 0.20
+    max_bin_fraction: 0.50
+  lambda_risk: 3.1622776601683794e-04       # 10^-3.5
+
+# --- the pre-stated bar -----------------------------------------------------
+# Stated as fractions of the TWAP gap rather than of the objective: "within 5 %
+# of the distance TWAP already covers" means the same thing at every lambda,
+# where a bps tolerance would be trivially met at low lambda and unmeetable at
+# high. Zero is the optimum; one is TWAP.
+tolerances:
+  epsilon_gap_fraction: 0.05     # median across seeds
+  per_seed_gap_fraction: 0.10    # no individual seed worse than this
+  # J_agent < J_optimal - red_flag_rtol * |J_optimal| is a hard failure, never a
+  # reported result: §4 states the optimum over adapted policies *is* the
+  # deterministic sinh, and M1's certificate established that
+  # `optimal_trajectory` is it. Beating it is a defect in the metric, the env or
+  # the grading path (ARCHITECTURE.md §1.1).
+  red_flag_rtol: 1.0e-9
+
+# --- randomness -------------------------------------------------------------
+# Training draws from `train`, evaluation from `eval`, disjoint by construction
+# (temper/seeding.py). Streams are addressed, not drawn: training seed ordinal i
+# puts its parallel envs on streams i * env_stream_stride + 0 .. num_envs - 1, so
+# adding a sixth seed cannot move the streams the first five were reported on.
+seeding:
+  root_seed: 20260805
+  train_pool: train
+  eval_pool: eval
+  n_seeds: 5
+  env_stream_stride: 4096       # must exceed ppo.num_envs
+  # Two unrelated eval streams. The eval schedule must be *bitwise* identical
+  # across them — that is what makes analytic grading valid, and it fails loudly
+  # if price ever enters the observation.
+  eval_streams: [0, 1]
+
+# --- the estimator (task 3) -------------------------------------------------
+# The default is vanilla PPO on sampled rewards, at a per-episode signal-to-noise
+# ratio of roughly 1:70. The sanctioned fallback subtracts M1a's exact noise
+# identity from the training reward, which drives reward variance to zero and so
+# trains the agent on the *expected* reward. Under Phase-1 certainty equivalence
+# the optimal policy is unchanged, so it does not alter what is being
+# rediscovered — but it weakens the claim, and the brief requires the amendment
+# to be recorded *before* the run. `claim` is copied verbatim into results/ and
+# into the figure caption.
+estimator:
+  control_variate: false
+  claim: >-
+    PPO trained on sampled rewards under the full Phase-1 price noise
+    (per-episode cost SD ~95 bps against a ~2.4 bps objective).
+
+# --- reward scaling (task 4) ------------------------------------------------
+# A single affine constant, applied identically at train and eval. NOT a running
+# normaliser: running statistics make the reward non-stationary and seed
+# dependent, which is objective drift by the back door (invariant 7). 0.02 is
+# roughly one over the per-bin volatility in bps (sigma_bin * 1e4 = 43.0), which
+# puts a typical per-step reward near unit scale. The graded metric is computed
+# on the *unscaled* objective through `schedule_moments` regardless, so this
+# constant provably cannot move what is being rediscovered.
+reward:
+  scale: 0.02
+
+# --- PPO --------------------------------------------------------------------
+# gamma = 1 and gae_lambda = 1 are not defaults carried over from CleanRL; they
+# are the finite-horizon choice. The episode is 13 bins and the objective is the
+# undiscounted sum, so any gamma < 1 optimises a different functional
+# (invariant 7). gae_lambda = 1 makes the advantage an unbiased Monte-Carlo
+# estimate whatever the critic does — bootstrapping would trade a variance
+# reduction the critic cannot deliver here (the noise is unpredictable from a
+# price-free observation) for a bias that a 5 % tolerance cannot absorb.
+ppo:
+  total_timesteps: 12000000
+  num_envs: 512
+  num_steps: 13                 # exactly one episode per env per rollout
+  learning_rate: 1.0e-3
+  anneal_lr: true
+  gamma: 1.0
+  gae_lambda: 1.0
+  num_minibatches: 4
+  update_epochs: 10
+  clip_coef: 0.2
+  clip_vloss: true
+  ent_coef: 0.0
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  norm_adv: true
+  # Pinned, because it is the one input to a trained artefact the seed address
+  # does not reach: torch's CPU reductions sum in a thread-count-dependent order,
+  # PPO compounds that over 1802 updates, and this objective is flat enough near
+  # its minimum for the difference to move the trajectory visibly. Unpinned,
+  # "same config, same seed" reproduces only on a host with the same core count.
+  torch_threads: 8
+  hidden_sizes: [64, 64]
+  log_std_init: -1.0
+  max_seconds: 1800             # the brief's per-seed budget, enforced
+
+# --- runtime budgets (reference box: Ryzen 7 3800X, CPU only) ---------------
+runtime:
+  seconds_per_seed: 1800        # <= 30 min per training seed
+  sweep_seconds: 10800          # <= 3 h for the 5-seed sweep
+
+# --- what gets committed ----------------------------------------------------
+results:
+  metrics: results/m2_rediscovery_sampled.json
+  figure: results/m2_trajectory_overlay_sampled
+  formats: [png]
+  # Per-update traces kept per seed. `null` = whole. At five seeds these traces
+  # are what make the seed spread checkable rather than asserted, and ~1.2 MB is
+  # a fair price. M3's arithmetic differs — see the ROADMAP's M3 row for the
+  # budget it must set.
+  trace_points: null

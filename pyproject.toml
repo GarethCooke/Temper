@@ -20,12 +20,14 @@ minversion = "8.0"
 testpaths = ["tests"]
 # `temper` imports without an install step, so `make test` works from a clean clone.
 pythonpath = ["."]
-# `make test` is the gate and has to stay evening-sized, so the deep differential
-# tier is opt-in: `make differential` (or `pytest -m deep`) runs it, and it is the
-# milestone acceptance gate rather than the per-commit one.
-addopts = "-q --strict-markers --strict-config -m 'not deep'"
+# `make test` is the gate and has to stay evening-sized, so anything measured in
+# minutes is opt-in. `make differential` runs M1's deep tier, `make smoke` the PPO
+# convergence check, `make sweep` M2's 5-seed regeneration; all three are
+# milestone acceptance gates rather than per-commit ones.
+addopts = "-q --strict-markers --strict-config -m 'not deep and not training'"
 markers = [
   "deep: the acceptance-gate differential tier — minutes, not seconds (make differential)",
+  "training: runs a training loop — minutes to hours (make smoke, make sweep)",
 ]
 # A warning in the reference engine is a defect in the reference engine.
 filterwarnings = ["error"]

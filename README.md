@@ -24,7 +24,20 @@ Temper is the controlled treatment that follows forging.
    client. A demo that the policy speaks a real venue wire; performance claims stay in the
    simulator.
 
-**Status:** M1 done. `temper/oracle` lands the Almgren–Chriss closed forms and matches 16
+**Status:** M2 done. The agent rediscovers Almgren–Chriss — and the interesting part is what
+it took. Trained on the noise-free reward it converges on the exact discrete optimum to a
+median of **+0.0115 % of `J_optimal`** across five seeds (0.0002 of the TWAP gap against a
+pre-stated ε of 0.05), sitting a median 1 336 shares from the sinh where the objective's own
+curvature allows 28 797. Trained on the *realised* reward — the same agent, the same
+hyperparameters, the full 1:70 per-episode signal-to-noise ratio — it misses the same bar
+(median 0.098, worst seed 0.819), and misses it as a **lottery** rather than a plateau: one
+seed in five lands inside ε, another barely learns at all. Both runs are committed, differ
+in exactly one config field, and the weaker claim travels with the figure. Grading is
+analytic: the observation carries no price, so a deterministic policy induces an open-loop
+schedule whose objective is a closed form — one rollout per seed, zero Monte-Carlo error,
+behind a bitwise assertion that the schedule really is shock-independent.
+
+Earlier: `temper/oracle` lands the Almgren–Chriss closed forms and matches 16
 vendored FrontierView cases plus a 17-point frontier to float round-off, ten orders of
 magnitude inside the pre-stated 1e-6 tolerance (M0). `temper/env` lands `ExecutionEnv` and
 proves it by differential: TWAP and both AC schedules run *as policies* through the real
@@ -34,13 +47,14 @@ exact per-episode identity pins the realised noise to the specific draws the env
 the cost assembly holds by construction and the Monte-Carlo tiers certify only that the
 shocks are iid normal. Alongside it: six exact per-episode identities, an exact step
 count, and a variational certificate that the schedule M2 grades against really is the
-minimiser. M2 (PPO rediscovery) is next. See `ROADMAP.md`.
+minimiser. M3 (the frontier sweep) is next. See `ROADMAP.md`.
 
 ## Layout
 
 ```
 temper/     the package: oracle/ (AC closed forms), env/ (seeded market models),
-            agents/ (baselines + single-file PPO), eval/ (Monte-Carlo grading, figures)
+            agents/ (baselines, single-file PPO, the fraction-of-remaining action),
+            eval/ (grading — analytic and Monte-Carlo, reference tables, figures)
 configs/    one committed config per experiment/figure
 tests/      pytest; golden/vendor/ holds FrontierView-generated fixtures (provenance-stamped)
 results/    committed metrics JSON + figures — regenerable from config + seed
@@ -58,14 +72,31 @@ Orientation docs at root: `ARCHITECTURE.md` (the constitution — read first),
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 make test          # or, without GNU make: python -m pytest
-make differential  # the deep Monte-Carlo tier: pytest -m deep
+make differential  # M1's deep Monte-Carlo tier: pytest -m deep
+make smoke         # M2's PPO convergence check on Pendulum + CartPole
+make reference     # M2's oracle-only table, and the lambda its rule fixes
+make sweep         # M2's 5-seed sweeps, both estimators — hours, unattended
 ```
 
-`make test` is the per-commit gate and stays evening-sized (~14 s). `make differential` is
-the milestone acceptance gate: 27 (case, schedule) cells at 200,000 episodes each — 70.2 M
-calls into the real `step` loop, counted and asserted — ~5.5 min on the reference box,
-driven by `configs/m1_differential.yaml`. Both regenerate from that committed config plus
-one root seed.
+`make test` is the per-commit gate and stays evening-sized (~15 s; the brief's ceiling is
+3 min). The rest are milestone acceptance gates, each behind a pytest marker or a driver so
+the per-commit loop never waits on them:
+
+- `make differential` — 27 (case, schedule) cells at 200,000 episodes each, 70.2 M calls
+  into the real `step` loop, counted and asserted; ~5.5 min, from `configs/m1_differential.yaml`.
+- `make smoke` — the CleanRL adaptation solving `Pendulum-v1` and `CartPole-v1` on three
+  seeds each, ~7 min, from `configs/ppo_smoke.yaml`. It stays in the suite permanently
+  because it is what separates "PPO is broken" from "the env is hard" for every later
+  milestone.
+- `make sweep` — M2's acceptance run, from `configs/m2_ppo.yaml` and
+  `configs/m2_ppo_sampled.yaml`. Hours, unattended, and it writes the committed
+  `results/*.json` and the overlay figures. `--figure-only` redraws a figure from the
+  committed JSON without retraining.
+
+Everything regenerates from a committed config plus one root seed. Every entry in
+`results/` carries the config's SHA-256 and the git revision that produced it, and the
+suite re-reads that digest — a result cannot survive an edit to the thresholds it was
+measured against.
 
 Python ≥ 3.11, CPU-only by design (constitution §6.9) — reference box is the Ryzen 7
 3800X the rest of the portfolio benchmarks on; a GPU only ever accelerates. The suite
@@ -73,9 +104,11 @@ needs no network and no GPU, and `tests/test_repo_invariants.py` enforces both.
 
 On Linux the default PyPI `torch` wheel bundles CUDA; add
 `--extra-index-url https://download.pytorch.org/whl/cpu` to keep the install CPU-sized.
-Torch is unused until M2 — the oracle, the env and the differential run on numpy,
+Torch enters only with M2's agent — the oracle, the env and the differential run on numpy,
 gymnasium, pyyaml and pytest alone, and the repo-invariant tests keep torch out of
-`temper/oracle` and `temper/env` for good.
+`temper/oracle` and `temper/env` for good. Matplotlib arrives with M2's figure and is
+confined by the same mechanism to `temper/eval/figures.py`, which forces the `Agg` backend
+before importing pyplot; importing `temper.eval` pulls neither.
 
 ### Regenerating the goldens
 

@@ -238,6 +238,131 @@ def test_the_env_does_not_import_a_schedule_or_a_closed_form():
         )
 
 
+#: The one module under `temper/` allowed to import matplotlib. M2 adds plotting
+#: as a pinned dependency; the core stays headless and import-light, so the
+#: allow-list is a path rather than a convention.
+PLOTTING_MODULE = PACKAGE_ROOT / "eval" / "figures.py"
+
+#: Import roots that pull a rendering stack in.
+PLOTTING_MODULES = {"matplotlib", "pylab", "seaborn", "plotly"}
+
+
+def test_matplotlib_is_confined_to_the_one_plotting_module():
+    """Invariant: a figure library may not reach the oracle, the env or the agent.
+
+    A plotting stack on the import path of `temper/` would be dragged behind
+    every test, every training run and eventually the M6 Anvil client — and it
+    is the sort of dependency that arrives one convenience import at a time.
+    The allow-list is exactly one file.
+    """
+    offenders = [
+        source.relative_to(REPO_ROOT)
+        for source in _package_sources()
+        if source != PLOTTING_MODULE and _imported_roots(source) & PLOTTING_MODULES
+    ]
+    assert not offenders, (
+        f"{', '.join(str(path) for path in offenders)} import a plotting stack; "
+        f"only {PLOTTING_MODULE.relative_to(REPO_ROOT)} may"
+    )
+
+
+def test_the_plotting_module_forces_a_headless_backend_before_pyplot():
+    """`Agg` is selected before `pyplot` is imported, or a run can block on a display.
+
+    Order matters and is invisible at runtime on a developer's machine, which is
+    exactly why it is checked here rather than trusted: `matplotlib.use` after
+    `pyplot` has already chosen a backend is a no-op on some versions and a
+    warning on others.
+    """
+    assert PLOTTING_MODULE.exists(), "the plotting module is missing"
+    tree = ast.parse(PLOTTING_MODULE.read_text(encoding="utf-8"), filename=str(PLOTTING_MODULE))
+
+    use_line = None
+    pyplot_line = None
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "use"
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
+            and node.args[0].value == "Agg"
+        ):
+            use_line = node.lineno
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "matplotlib.pyplot":
+                    pyplot_line = node.lineno
+
+    assert use_line is not None, "the plotting module does not force the Agg backend"
+    assert pyplot_line is not None, "the plotting module does not import pyplot"
+    assert use_line < pyplot_line, (
+        f"matplotlib.use('Agg') is on line {use_line}, after pyplot on line "
+        f"{pyplot_line}; the backend must be chosen first"
+    )
+
+
+#: Names that betray a *running* normaliser. M2 task 4: any reward scaling is a
+#: single affine transform with constants in the committed config, applied
+#: identically at train and eval. Running statistics make the reward
+#: non-stationary and seed-dependent, which is objective drift by the back door
+#: (constitution invariant 7) — and CleanRL's own wrappers are the most likely
+#: route in, so they are named.
+RUNNING_NORMALISERS = {
+    "NormalizeObservation",
+    "NormalizeReward",
+    "RunningMeanStd",
+    "VecNormalize",
+}
+
+
+def test_no_running_normaliser_anywhere_in_the_package():
+    """The scaling is affine and committed, or it is not scaling — it is drift.
+
+    Structural rather than behavioural because the failure is invisible in any
+    single episode: a running normaliser produces perfectly reasonable rewards
+    and changes what "the objective" means between one seed and the next.
+    """
+    for source in _package_sources():
+        names = _referenced_names(source) | _string_literals(source)
+        offenders = sorted(names & RUNNING_NORMALISERS)
+        assert not offenders, (
+            f"{source.relative_to(REPO_ROOT)} reaches for {', '.join(offenders)}; "
+            "M2 task 4 allows one committed affine constant and no running "
+            "statistics (see temper/agents/execution.py:RewardScale)"
+        )
+
+
+def test_the_policy_packages_do_not_import_the_control_variate():
+    """The estimator seam stays a seam.
+
+    :mod:`temper.eval.variate` reads the env's published price shock, which is
+    why it lives under `eval/` and is handed to the training loop as a parameter
+    by the experiment driver. A policy package importing it — even without ever
+    naming the shock key — would put the price path one attribute access away
+    from an observation, and would make the static guards above true but
+    uninformative.
+    """
+    for package in POLICY_PACKAGES:
+        for source in sorted((PACKAGE_ROOT / package).rglob("*.py")):
+            text = source.read_text(encoding="utf-8")
+            tree = ast.parse(text, filename=str(source))
+            modules = {
+                node.module
+                for node in ast.walk(tree)
+                if isinstance(node, ast.ImportFrom) and node.module
+            } | {
+                alias.name
+                for node in ast.walk(tree)
+                if isinstance(node, ast.Import)
+                for alias in node.names
+            }
+            assert not any(name.endswith("variate") for name in modules), (
+                f"{source.relative_to(REPO_ROOT)} imports the control variate; "
+                "the driver composes it, a policy package never sees it"
+            )
+
+
 def test_the_oracle_computes_with_sockets_disabled():
     """The static check with a runtime backstop: no network in the test path."""
 

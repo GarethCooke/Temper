@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import math
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 import pytest
@@ -24,6 +25,7 @@ from temper.oracle import Market, SymbolParams
 REPO_ROOT = Path(__file__).resolve().parents[1]
 GOLDEN_PATH = REPO_ROOT / "tests" / "golden" / "vendor" / "frontierview_goldens.json"
 M1_CONFIG_PATH = REPO_ROOT / "configs" / "m1_differential.yaml"
+M2_CONFIG_PATH = REPO_ROOT / "configs" / "m2_ppo.yaml"
 
 #: Pre-stated M0 tolerances (docs/briefs/M0-oracle-and-goldens.md).
 TRAJECTORY_RTOL = 1e-6  # relative to the parent order size X
@@ -233,6 +235,26 @@ def guard_case() -> GuardCase:
 
 
 # ---------------------------------------------------------------------------
+# M2: the PPO rediscovery config (configs/m2_ppo.yaml)
+# ---------------------------------------------------------------------------
+
+
+@lru_cache(maxsize=1)
+def m2_experiment():
+    """The committed M2 experiment, resolved once per session.
+
+    Imported inside the function rather than at module scope because
+    :mod:`temper.eval.experiment` reaches :mod:`temper.agents.ppo` for its
+    hyperparameter dataclass, and that pulls torch onto the import path of every
+    test in the suite — including the oracle's, which are meant to prove they do
+    not need it.
+    """
+    from temper.eval.experiment import load_experiment
+
+    return load_experiment(M2_CONFIG_PATH)
+
+
+# ---------------------------------------------------------------------------
 # Seed-pool discipline (M1a task 5)
 # ---------------------------------------------------------------------------
 
@@ -241,21 +263,62 @@ def guard_case() -> GuardCase:
 #: asserted on by ``tests/test_seed_pool_discipline.py``.
 RESOLVED_SEED_ADDRESSES: list[tuple[int, str, int]] = []
 
-#: Pools that hold committed M2 results. M1 is a diagnostic and may not spend a
-#: single stream out of either (constitution invariant 5).
+#: The same draws, attributed: ``(test module, root_seed, pool, stream_index)``.
+#: Attribution is what M2 forced. Until M2 the rule was simply "nothing in the
+#: suite may touch `train` or `eval`", which was checkable without knowing who
+#: was asking. M2 legitimately trains out of `train` and evaluates out of `eval`,
+#: so the rule becomes *which* module may spend *which* pool — and a global
+#: counter cannot express that.
+SEED_ADDRESS_LEDGER: list[tuple[str, int, str, int]] = []
+
+#: Pools that hold committed results. Only the modules granted them below may
+#: spend a stream out of either (constitution invariant 5).
 RESERVED_POOLS = frozenset({"train", "eval"})
+
+#: Exactly which pools each test module may open. An allow-list of *pools* per
+#: module rather than a list of trusted modules, because the failure worth
+#: catching is not a stranger reaching for `train` — it is M2's own evaluation
+#: quietly grading on a stream it trained on, which is invariant 5's whole
+#: subject and which a blanket "M2 may use the reserved pools" could not see.
+#:
+#: Everything not named here gets :data:`DEFAULT_POOL_ALLOWANCE`, which is how
+#: M1's original property ("the differential draws only from its diagnostic
+#: pool") survives M2 landing in the same session.
+POOL_ALLOWANCE: dict[str, frozenset[str]] = {
+    "test_m2_action_space.py": frozenset({"m2/diagnostic"}),
+    "test_m2_grading.py": frozenset({"m2/diagnostic", "eval"}),
+    "test_m2_variate.py": frozenset({"m2/diagnostic"}),
+    "test_m2_rediscovery.py": frozenset({"m2/diagnostic", "train", "eval"}),
+}
+
+DEFAULT_POOL_ALLOWANCE = frozenset({"m1/differential"})
+
+
+def pool_allowance(module: str) -> frozenset[str]:
+    """The pools `module` may open."""
+    return POOL_ALLOWANCE.get(module, DEFAULT_POOL_ALLOWANCE)
+
+#: The module currently running, for the ledger. Set by the hook below; a plain
+#: module global because the recorder it feeds is a monkeypatched function and
+#: has no other route to pytest's state.
+_CURRENT_MODULE = "<session>"
+
+
+def pytest_runtest_setup(item):
+    global _CURRENT_MODULE
+    _CURRENT_MODULE = Path(str(item.fspath)).name
 
 
 @pytest.fixture(scope="session", autouse=True)
 def record_env_seed_addresses():
-    """Record every pool address the env resolves, and forbid the reserved pools.
+    """Record every pool address the env resolves, and police the reserved pools.
 
     M0 pins that the pools are disjoint *by construction*. That is a different
-    statement from "the M1 harness drew from the diagnostic one", which is the
-    thing invariant 5 actually needs and which nothing checked: a `pool=` default
-    edited in the wrong direction would leave every M0 seeding test green while
-    M1's tens of millions of draws quietly burned streams that M2's committed
-    results are addressed by.
+    statement from "the harness drew from the pool it was supposed to", which is
+    the thing invariant 5 actually needs and which nothing checked: a `pool=`
+    default edited in the wrong direction would leave every M0 seeding test green
+    while M1's tens of millions of draws quietly burned streams that M2's
+    committed results are addressed by.
 
     The env reaches randomness through exactly one call —
     ``pool_rng(root_seed, pool, stream_index)`` in ``reset`` — so wrapping that
@@ -267,6 +330,9 @@ def record_env_seed_addresses():
 
     def recording(root_seed, pool, index):
         RESOLVED_SEED_ADDRESSES.append((int(root_seed), str(pool), int(index)))
+        SEED_ADDRESS_LEDGER.append(
+            (_CURRENT_MODULE, int(root_seed), str(pool), int(index))
+        )
         return real(root_seed, pool, index)
 
     execution_env.pool_rng = recording
@@ -275,9 +341,17 @@ def record_env_seed_addresses():
     finally:
         execution_env.pool_rng = real
 
-    trespassed = sorted({pool for _, pool, _ in RESOLVED_SEED_ADDRESSES} & RESERVED_POOLS)
-    assert not trespassed, (
-        f"the test path drew env episodes from {', '.join(trespassed)}; M1 is a "
-        "diagnostic and its draws belong to the m1/differential pool "
-        "(constitution invariant 5)"
+    trespasses = sorted(
+        {
+            (module, pool)
+            for module, _, pool, _ in SEED_ADDRESS_LEDGER
+            if pool not in pool_allowance(module)
+        }
+    )
+    assert not trespasses, (
+        "these modules drew env episodes from a pool they are not allowed: "
+        + ", ".join(f"{module} -> {pool}" for module, pool in trespasses)
+        + ". Diagnostics belong in m1/differential or m2/diagnostic; `train` and "
+        "`eval` hold committed M2 results and are separated from each other by "
+        "constitution invariant 5."
     )

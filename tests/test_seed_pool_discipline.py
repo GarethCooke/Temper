@@ -35,13 +35,17 @@ from temper.env import ExecutionEnv
 from temper.seeding import DIFFERENTIAL_POOL, POOLS, pool_rng, pool_sequence
 
 from .conftest import (
+    DEFAULT_POOL_ALLOWANCE,
     M1_CONFIG,
+    POOL_ALLOWANCE,
     RESERVED_POOLS,
     RESOLVED_SEED_ADDRESSES,
+    SEED_ADDRESS_LEDGER,
     build_env,
     case_by_id,
     differential_pairs,
     guard_case,
+    pool_allowance,
 )
 
 SEEDING = M1_CONFIG["seeding"]
@@ -104,27 +108,97 @@ def test_the_identity_and_guard_streams_are_addressed_the_same_way():
 
 
 def test_the_recorder_is_installed_and_has_seen_the_env_work():
-    """Non-vacuity: the session-wide check would notice if it were bypassed."""
+    """Non-vacuity: the session-wide check would notice if it were bypassed.
+
+    Scoped to the modules on the default allowance, because M2 runs in the same
+    session from its own committed root seed — a whole-session assertion on the
+    root would now be asserting that two milestones share one, which is the
+    opposite of what a per-experiment config is for.
+    """
     assert RESOLVED_SEED_ADDRESSES, (
         "no env stream was recorded; the conftest recorder is not wrapping the "
         "env's route to randomness and its teardown assertion proves nothing"
     )
-    assert {root for root, _, _ in RESOLVED_SEED_ADDRESSES} == {ROOT_SEED}
+    m1_roots = {
+        root
+        for module, root, _, _ in SEED_ADDRESS_LEDGER
+        if module not in POOL_ALLOWANCE
+    }
+    assert m1_roots == {ROOT_SEED}
 
 
-def test_no_reserved_pool_has_been_opened():
+def test_no_reserved_pool_has_been_opened_by_a_module_that_does_not_own_one():
     """Invariant 5, on everything the suite has run so far.
+
+    Until M2 this was the flat statement *nothing in the suite touches `train` or
+    `eval`*, which was true and checkable without knowing who was asking. M2
+    trains out of `train` and evaluates out of `eval` — both legitimately — so
+    the property became per-module: every draw is attributed, and a module may
+    open only the reserved pools ``conftest.RESERVED_POOL_OWNERS`` grants it.
+    That is strictly stronger than what it replaced, because it also catches M2
+    grading on a stream it trained on, which the flat version could not have
+    seen.
 
     The complete statement is made at session teardown, over the whole path
     including whatever ran after this. This is the same assertion made early, so
     a violation is attributed to a test rather than to the session.
     """
-    opened = {pool for _, pool, _ in RESOLVED_SEED_ADDRESSES}
-    assert not opened & RESERVED_POOLS, (
-        f"the env drew from {sorted(opened & RESERVED_POOLS)}; M1 is a diagnostic "
-        "and train/eval streams belong to committed M2 results"
+    trespasses = sorted(
+        {
+            (module, pool)
+            for module, _, pool, _ in SEED_ADDRESS_LEDGER
+            if pool not in pool_allowance(module)
+        }
     )
-    assert opened == {POOL}
+    assert not trespasses, (
+        "modules drew from a pool they are not allowed: "
+        + ", ".join(f"{module} -> {pool}" for module, pool in trespasses)
+    )
+
+
+def test_the_m1_differential_path_still_uses_only_the_diagnostic_pool():
+    """The original property, kept exactly, for the modules it was written about.
+
+    M1's tens of millions of episodes are a diagnostic; not one of them may be
+    charged to a stream a committed M2 result is addressed by. Attributing the
+    ledger is what lets this stay an unconditional statement about M1 while M2
+    spends `train` and `eval` in the same session.
+    """
+    m1_modules = sorted(
+        {
+            module
+            for module, _, _, _ in SEED_ADDRESS_LEDGER
+            if module not in POOL_ALLOWANCE
+        }
+    )
+    assert m1_modules, "the ledger recorded no M1 module; the recorder is not wired"
+
+    opened = {
+        pool
+        for module, _, pool, _ in SEED_ADDRESS_LEDGER
+        if module not in POOL_ALLOWANCE
+    }
+    assert opened == {POOL} == set(DEFAULT_POOL_ALLOWANCE), (
+        f"the diagnostic path opened {sorted(opened)}, expected only {POOL!r}"
+    )
+
+
+def test_no_module_is_granted_both_training_and_evaluation_streams_by_accident():
+    """The allowance table says what it means, and says it about few modules.
+
+    Only the module that regenerates the committed result needs both pools —
+    that is what a sweep *is*. Any other module holding both would be able to
+    grade on the streams it trained on without a single test noticing, which is
+    the failure invariant 5 exists to prevent.
+    """
+    holders = sorted(
+        module
+        for module, pools in POOL_ALLOWANCE.items()
+        if RESERVED_POOLS <= pools
+    )
+    assert holders == ["test_m2_rediscovery.py"], (
+        f"{holders} hold both train and eval; only the sweep regeneration may"
+    )
 
 
 def test_the_streams_m1_spends_are_not_train_or_eval_streams():

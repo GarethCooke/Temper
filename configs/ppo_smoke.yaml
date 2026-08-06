@@ -1,0 +1,98 @@
+# The PPO convergence smoke test — control tasks, permanently in the suite.
+#
+# Constitution §5: the CleanRL adaptation is validated on a standard control task
+# *before* it is ever pointed at a Temper env. This config is what that validation
+# is stated in, and it stays in the suite for good: from M3 onward it is the thing
+# that distinguishes "PPO is broken" from "the env is hard", which is otherwise a
+# judgement call made at 2 a.m. about a flat training curve.
+#
+# Both environments ship with the pinned gymnasium — no new dependency. Neither
+# has anything to do with execution; that is the point. If `temper/agents/ppo.py`
+# stops being able to solve Pendulum, no result it produces on ExecutionEnv means
+# anything.
+#
+# Thresholds are pre-stated in docs/briefs/M2-ppo-rediscovery.md (task 2) and may
+# only be loosened by amending that brief first.
+
+brief: docs/briefs/M2-ppo-rediscovery.md
+
+tasks:
+  # The continuous path — the one Temper uses. A Gaussian head, an action clipped
+  # into a box, and a reward the agent has to learn to trade off over a horizon.
+  - id: pendulum
+    env_id: Pendulum-v1
+    threshold: -200.0            # mean return over `eval_episodes` greedy episodes
+    eval_episodes: 100
+    seeds: 3
+    # Addressed, not drawn: seed ordinal i uses pool_seeds(root_seed, pool, n)[i]
+    # of a pool that holds no committed result.
+    root_seed: 20260805
+    pool: m2/diagnostic
+    # A fixed affine constant, through the same `RewardScale` wrapper Temper uses
+    # — deliberately, because it is the one place the smoke test can also
+    # demonstrate that the sanctioned scaling mechanism works. Pendulum's reward
+    # runs to -16.3 per step, so unscaled value targets reach ~-160 at gamma 0.9
+    # and the critic spends its budget learning a magnitude rather than a shape;
+    # at 0.1 the agent clears the threshold by ~35 points instead of missing it
+    # by ~20. CleanRL reaches for a *running* NormalizeReward here, which this
+    # repo forbids outright (invariant 7) — a committed constant does the same
+    # job without making the reward non-stationary. The threshold below is
+    # measured on the *unscaled* env, so the constant cannot flatter it.
+    reward_scale: 0.1
+    ppo:
+      total_timesteps: 300000    # the brief's budget; the test asserts it fits
+      num_envs: 4
+      num_steps: 1024
+      learning_rate: 1.0e-3
+      anneal_lr: true
+      # 0.9, not 0.99. Pendulum's swing-up needs only a short effective horizon
+      # and a long one buries the signal — this is the standard tuned value
+      # (rl-baselines3-zoo), not a number chosen to make the test pass.
+      gamma: 0.9
+      gae_lambda: 0.95
+      num_minibatches: 8
+      update_epochs: 10
+      clip_coef: 0.2
+      clip_vloss: true
+      ent_coef: 0.0
+      vf_coef: 0.5
+      max_grad_norm: 0.5
+      norm_adv: true
+      hidden_sizes: [64, 64]
+      # exp(0.5) = 1.65 on a +/-2 action space: swing-up needs sustained torque,
+      # and the default unit std explores it only by accident.
+      log_std_init: 0.5
+      max_seconds: 300
+
+  # The discrete path — cheap, and it exists only to check that the categorical
+  # head shares the loop rather than rotting quietly beside it.
+  - id: cartpole
+    env_id: CartPole-v1
+    threshold: 475.0
+    eval_episodes: 20
+    seeds: 3
+    root_seed: 20260805
+    pool: m2/diagnostic
+    reward_scale: 1.0            # CartPole pays 1 per step; there is nothing to scale
+    ppo:
+      total_timesteps: 250000
+      num_envs: 16
+      num_steps: 128
+      learning_rate: 1.0e-3
+      anneal_lr: true
+      gamma: 0.99
+      gae_lambda: 0.95
+      num_minibatches: 4
+      update_epochs: 4
+      clip_coef: 0.2
+      clip_vloss: true
+      ent_coef: 0.01
+      vf_coef: 0.5
+      max_grad_norm: 0.5
+      norm_adv: true
+      hidden_sizes: [64, 64]
+      log_std_init: 0.0          # unused by the categorical head
+      max_seconds: 120
+
+# The whole smoke test, all tasks and all seeds, on the reference box.
+runtime_budget_seconds: 600
