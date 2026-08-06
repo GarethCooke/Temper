@@ -12,22 +12,67 @@ The work is in :mod:`temper.eval.sweep`; this file is argument parsing, printing
 and the figure — so the suite can run the same sweep without a subprocess, and
 so matplotlib stays off the package's import path.
 
-Exit status is the verdict: non-zero if the median missed epsilon, if a seed fell
-outside the per-seed floor, or if any seed scored below the certified optimum.
+Exit status is whether the run reached the verdict ``--expect`` says it should,
+which is not the same as whether it passed: the sampled-reward sweep is M2's
+recorded *miss*, and it clearing epsilon would be the surprising outcome.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
-from temper.eval.experiment import Experiment, load_experiment
-from temper.eval.figures import trajectory_overlay
-from temper.eval.sweep import build_document, run_sweep
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_CONFIG = REPO_ROOT / "configs" / "m2_ppo.yaml"
+
+
+def _config_path(argv: list[str]) -> Path:
+    """`--config` out of raw argv, before argparse and before torch exists."""
+    for index, item in enumerate(argv):
+        if item == "--config" and index + 1 < len(argv):
+            return Path(argv[index + 1])
+        if item.startswith("--config="):
+            return Path(item.split("=", 1)[1])
+    return DEFAULT_CONFIG
+
+
+def _pin_thread_env(argv: list[str]) -> None:
+    """Pin the OpenMP/BLAS pools from the config, *before* torch is imported.
+
+    ``ppo.torch_threads`` fixes torch's intra-op pool, which is what decides
+    reduction order and therefore the trained weights — that is the
+    reproducibility half, and it is applied inside ``train``. This is the
+    *runtime* half, and it has to happen before the first torch import because
+    the OpenMP pool is sized once, at load.
+
+    It is here rather than in the Makefile because leaving it to the environment
+    is a trap with teeth. Run without it on this 8-physical/16-logical host, the
+    surrounding pools default to 16, oversubscribe, and every seed takes ~25 %
+    longer — which pushed one seed of an acceptance sweep from ~1 300 s to
+    1 801 s, one second past the brief's 30-minute per-seed cap, truncating it
+    and costing the whole run. The cap was right; the environment was the bug.
+    ``setdefault`` so an operator who exports these deliberately still wins.
+    """
+    import yaml  # cheap, and pulls in nothing heavy
+
+    try:
+        document = yaml.safe_load(_config_path(argv).read_text(encoding="utf-8"))
+        threads = int(document["ppo"]["torch_threads"])
+    except (OSError, KeyError, TypeError, ValueError):
+        return  # a bad config is argparse's problem to report, not this hook's
+    if threads > 0:
+        for name in ("OMP_NUM_THREADS", "MKL_NUM_THREADS"):
+            os.environ.setdefault(name, str(threads))
+
+
+_pin_thread_env(sys.argv[1:])
+
+from temper.eval.experiment import Experiment, load_experiment  # noqa: E402
+from temper.eval.figures import trajectory_overlay  # noqa: E402
+from temper.eval.sweep import build_document, run_sweep  # noqa: E402
 
 
 def _stdout_utf8() -> None:
@@ -154,6 +199,17 @@ def main() -> int:
         action="store_true",
         help="redraw the figure from the committed metrics JSON; train nothing",
     )
+    parser.add_argument(
+        "--expect",
+        choices=("pass", "miss"),
+        default="pass",
+        help=(
+            "the verdict this run is expected to reach. Exit status is whether "
+            "the run met that expectation, not whether it passed — the "
+            "sampled-reward sweep is M2's *recorded miss* and a pass from it "
+            "would be the surprising outcome"
+        ),
+    )
     args = parser.parse_args()
 
     experiment = load_experiment(args.config)
@@ -217,11 +273,17 @@ def main() -> int:
             "certified optimum. This is a defect, not a result "
             "(ARCHITECTURE.md §1.1)."
         )
-    print(
-        f"sweep {verdict['sweep_seconds']:.0f}s · verdict: "
-        f"{'PASS' if verdict['passed'] else 'MISS'}"
-    )
-    return 0 if verdict["passed"] else 1
+    reached = "pass" if verdict["passed"] else "miss"
+    print(f"sweep {verdict['sweep_seconds']:.0f}s · verdict: {reached.upper()}")
+    if reached != args.expect:
+        print(
+            f"...but --expect {args.expect} was stated. A run that does not reach "
+            "the verdict it was expected to reach is a finding either way: if a "
+            "recorded miss starts passing, the amendment that rests on it needs "
+            "revisiting (docs/briefs/M2-ppo-rediscovery.md, amendment 1)."
+        )
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

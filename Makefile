@@ -47,11 +47,19 @@ reference:
 # M2's acceptance run: five training seeds per estimator, graded analytically
 # against the oracle, writing results/*.json and the overlay figures. Hours on
 # the reference box — this is the unattended run, not a per-commit gate. Both
-# configs are run because the sampled-reward plateau is a committed result, not a
+# configs are run because the sampled-reward miss is a committed result, not a
 # discarded attempt (docs/briefs/M2-ppo-rediscovery.md, amendment 1).
+#
+# `--expect miss` on the first line is load-bearing rather than a mute button.
+# The driver's exit status is "did this run reach the verdict it was expected
+# to?", so the sampled sweep failing to clear epsilon is a success here and
+# *clearing* it would stop the target — which is right, because a recorded miss
+# that starts passing invalidates the amendment resting on it. Written as `-`
+# (ignore errors) this line would have hidden that in exactly the case worth
+# hearing about.
 sweep:
-	$(PYTHON) tools/m2_train.py --config $(M2_SAMPLED) --quiet
-	$(PYTHON) tools/m2_train.py --config $(M2_CONFIG) --quiet
+	$(PYTHON) tools/m2_train.py --config $(M2_SAMPLED) --quiet --expect miss
+	$(PYTHON) tools/m2_train.py --config $(M2_CONFIG) --quiet --expect pass
 
 # Regenerates $(GOLDENS) from a FrontierView checkout. Writes nothing into that
 # repo — the export imports its `api` package and nothing more (constitution §7).

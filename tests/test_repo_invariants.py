@@ -363,6 +363,37 @@ def test_the_policy_packages_do_not_import_the_control_variate():
             )
 
 
+def test_the_sweep_target_runs_both_estimators_and_states_each_expectation():
+    """`make sweep` must reach the second config, and must not do so by muting the first.
+
+    The defect this pins was real: the driver exits non-zero on a MISS verdict,
+    the sampled-reward sweep is M2's *recorded miss*, so `make sweep` aborted
+    after two hours having produced exactly one of the two artefacts it exists to
+    produce. The obvious fix — make's `-` ignore-errors prefix — would have been
+    worse than the bug, because it also silences the one outcome worth hearing
+    about: a recorded miss that starts passing invalidates the amendment resting
+    on it. `--expect` makes the exit status mean "did this reach the verdict it
+    was supposed to?", which is both a working target and a live check.
+    """
+    makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
+    lines = [
+        line.strip()
+        for line in makefile.splitlines()
+        if "m2_train.py" in line and not line.lstrip().startswith("#")
+    ]
+    assert len(lines) == 2, f"expected two sweep invocations, found {len(lines)}"
+    assert any("--expect miss" in line for line in lines), (
+        "the sampled-reward sweep must declare that it is expected to miss"
+    )
+    assert any("--expect pass" in line for line in lines), (
+        "the control-variate sweep must declare that it is expected to pass"
+    )
+    assert not any(line.startswith("-") for line in lines), (
+        "a sweep line is prefixed with `-`, which ignores its exit status; use "
+        "--expect so a surprising verdict still stops the target"
+    )
+
+
 def test_the_oracle_computes_with_sockets_disabled():
     """The static check with a runtime backstop: no network in the test path."""
 
