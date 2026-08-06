@@ -17,10 +17,18 @@ import math
 import sys
 from pathlib import Path
 
-from temper.eval.experiment import LAMBDA_GRIDS, load_experiment
-from temper.eval.reference import select_lambda
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+# `python tools/x.py` from a clean clone has no `temper` on its path: pytest
+# injects it via pyproject's `pythonpath`, and nothing else does. Rather than
+# require callers to export PYTHONPATH — which the Makefile targets did not, so
+# `make reference` and `make sweep` were broken from a fresh clone while every
+# hand-run invocation worked — the tool puts its own repo root on the path.
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from temper.eval.experiment import LAMBDA_GRIDS, load_experiment  # noqa: E402
+from temper.eval.reference import select_lambda  # noqa: E402
 
 
 def _fmt(value: float, places: int = 4) -> str:

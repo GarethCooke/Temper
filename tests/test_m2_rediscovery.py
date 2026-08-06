@@ -433,6 +433,24 @@ def test_the_overlay_still_renders_headless(tmp_path):
     assert len(written) == 1
     assert written[0].stat().st_size > 10_000
 
+    # Redrawing an unchanged result must be byte-identical. matplotlib stamps a
+    # `Date` chunk into a PNG by default, which would make every redraw a diff —
+    # and a figure that always shows as modified is one nobody checks, so a real
+    # change to it would go unnoticed.
+    first = written[0].read_bytes()
+    again = trajectory_overlay(
+        tmp_path / "overlay",
+        hours=experiment.case.market.times,
+        agent_trajectories=[r["grade"]["trajectory"] for r in document["seeds"]],
+        reference=experiment.reference(),
+        order_size=experiment.case.order_size,
+        band=experiment.band(),
+        provenance=experiment.provenance(REPO_ROOT),
+        caption="render check",
+        formats=("png",),
+    )
+    assert again[0].read_bytes() == first, "a redraw of the same result differs"
+
     with pytest.raises(ValueError):
         trajectory_overlay(
             tmp_path / "empty",

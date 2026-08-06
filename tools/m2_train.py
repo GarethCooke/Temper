@@ -28,6 +28,14 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = REPO_ROOT / "configs" / "m2_ppo.yaml"
 
+# `python tools/x.py` from a clean clone has no `temper` on its path: pytest
+# injects it via pyproject's `pythonpath`, and nothing else does. Rather than
+# require callers to export PYTHONPATH — which the Makefile targets did not, so
+# `make reference` and `make sweep` were broken from a fresh clone while every
+# hand-run invocation worked — the tool puts its own repo root on the path.
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 
 def _config_path(argv: list[str]) -> Path:
     """`--config` out of raw argv, before argparse and before torch exists."""
@@ -72,6 +80,7 @@ _pin_thread_env(sys.argv[1:])
 
 from temper.eval.experiment import Experiment, load_experiment  # noqa: E402
 from temper.eval.figures import trajectory_overlay  # noqa: E402
+from temper.eval.provenance import Provenance  # noqa: E402
 from temper.eval.sweep import build_document, run_sweep  # noqa: E402
 
 
@@ -164,7 +173,13 @@ def write_figure(experiment: Experiment, document: dict) -> None:
         reference=experiment.reference(),
         order_size=experiment.case.order_size,
         band=experiment.band(),
-        provenance=experiment.provenance(REPO_ROOT),
+        # The *run's* stamp, read back out of the document — not a fresh one. A
+        # figure is a view of a result, so its footer must name the revision that
+        # produced the result, not the revision that happened to be checked out
+        # when someone redrew it. Re-stamping here would put today's git state on
+        # a picture of last week's run, which is the precise failure the footer
+        # exists to prevent.
+        provenance=Provenance(**document["provenance"]),
         caption=caption,
         formats=experiment.figure_formats,
     )

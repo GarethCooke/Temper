@@ -199,10 +199,16 @@ def trajectory_overlay(
     written: list[Path] = []
     for suffix in formats:
         out = target.with_suffix(f".{suffix.lstrip('.')}")
-        # `metadata` is deliberately empty of timestamps: two runs of the same
-        # config and seed should differ in no byte, so a regenerated figure shows
-        # up as unchanged in `git status` rather than as a diff nobody can read.
-        figure.savefig(out, dpi=160, metadata={"Software": None, "Creator": None})
+        # No timestamp of any kind. matplotlib stamps a `Date` chunk into a PNG
+        # by default, which makes every redraw a diff — and a figure that always
+        # shows as modified is one nobody checks, so a *real* change to it would
+        # go unnoticed. With Date/Software suppressed, redrawing an unchanged
+        # result is byte-identical and `git status` stays meaningful.
+        figure.savefig(
+            out,
+            dpi=160,
+            metadata={"Software": None, "Creator": None, "Date": None},
+        )
         written.append(out)
     plt.close(figure)
     return written
