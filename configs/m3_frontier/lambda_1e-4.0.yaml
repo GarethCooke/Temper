@@ -1,0 +1,101 @@
+# GENERATED — do not edit. One point of the M3 frontier sweep, stamped from the
+# template named in configs/m3_frontier.yaml by `tools/m3_frontier.py configs`;
+# tests/test_m3_frontier.py asserts this file is byte-identical to what the
+# generator produces, so a sweep point cannot drift from the template.
+#
+#   lambda        0.0001   (10^-4.0, point 3 of 9 on the m3 grid)
+#   template      configs/m3_antithetic_validation.yaml
+#   differs in    lambda_selection (frontier_grid, lambda_risk), ppo.total_timesteps
+#                 (the update budget task 2 amended), runtime (per-point bounds),
+#                 results (per-point paths, trace_points 128), no gate, and the
+#                 claim's closing sentence (which names the validation run rather
+#                 than calling itself one)
+#
+# Everything else — the case, the tolerances (5 % / 10 % of THIS lambda's TWAP
+# gap), the seed addressing, the reward scale, the estimator and its claim, the
+# PPO hyperparameters — is the template's, which is M2's control-variate config
+# with ten seeds and the antithetic regime.
+
+milestone: M3
+brief: docs/briefs/M3-antithetic-and-frontier.md
+case:
+  id: frontier
+  params_from: core:AAPL:X100000:T6.5:lam1e-05
+  symbol: AAPL
+  order_size: 100000.0
+  horizon_hours: 6.5
+  n_bins: 13
+  params:
+    adv: 60000000
+    sigma: 0.0155
+    half_spread: 0.3
+    eta: 0.142
+    gamma: 0.314
+lambda_selection:
+  grid: vendor
+  rule:
+    min_twap_gap: 0.2
+    max_bin_fraction: 0.5
+  lambda_risk: 0.0001
+  frontier_grid: m3
+tolerances:
+  epsilon_gap_fraction: 0.05
+  per_seed_gap_fraction: 0.1
+  red_flag_rtol: 1.0e-09
+seeding:
+  root_seed: 20260805
+  train_pool: train
+  eval_pool: eval
+  n_seeds: 10
+  env_stream_stride: 4096
+  eval_streams:
+  - 0
+  - 1
+estimator:
+  regime: antithetic
+  claim: 'PPO trained on the antithetic-averaged reward: each episode is run as (ξ, −ξ) —
+    the same actions against the shock path and its exact negation — and the two realised
+    rewards are averaged. The observation carries no price, so both halves take identical
+    actions, and because Phase-1 cost is affine in the shocks the noise cancels exactly on
+    the average; the agent optimises the expected objective without the analytic noise form
+    ever being subtracted. Under Phase-1 certainty equivalence the optimal policy is unchanged,
+    so what is rediscovered does not move. This is NOT a claim about learning under noise:
+    it is a claim about a variance-reduction estimator that needs only the ability to replay
+    with negated draws, validated at M2''s lambda against the control variate''s committed
+    answer (results/m3_antithetic_validation.json against results/m2_rediscovery.json) and
+    against the sampled regime''s recorded miss (results/m2_rediscovery_sampled.json). This
+    file is one point of the M3 frontier sweep at the lambda it names, on the update budget
+    the brief''s amendment 1 fixed.'
+reward:
+  scale: 0.02
+ppo:
+  total_timesteps: 5000000
+  num_envs: 512
+  num_steps: 13
+  learning_rate: 0.001
+  anneal_lr: true
+  gamma: 1.0
+  gae_lambda: 1.0
+  num_minibatches: 4
+  update_epochs: 10
+  clip_coef: 0.2
+  clip_vloss: true
+  ent_coef: 0.0
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  norm_adv: true
+  torch_threads: 8
+  hidden_sizes:
+  - 64
+  - 64
+  log_std_init: -1.0
+  max_seconds: 5400
+runtime:
+  seconds_per_seed: 1200
+  sweep_seconds: 12000
+results:
+  metrics: results/m3_frontier/lambda_1e-4.0.json
+  figure: results/m3_frontier/lambda_1e-4.0
+  formats:
+  - png
+  trace_points: 128

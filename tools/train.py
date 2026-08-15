@@ -145,9 +145,14 @@ def _header(experiment: Experiment) -> None:
     reference = experiment.reference()
     case = experiment.case
     estimator = REGIME_LABELS[experiment.estimator.regime]
+    where = (
+        "rule-selected"
+        if experiment.frontier_grid is None
+        else f"{experiment.frontier_grid} frontier grid"
+    )
     print(
         f"{experiment.milestone} — {case.symbol}, X = {case.order_size:,.0f}, "
-        f"λ = {experiment.lambda_risk:.6e} (rule-selected), "
+        f"λ = {experiment.lambda_risk:.6e} ({where}), "
         f"{experiment.seeds.n_seeds} seeds, {estimator}"
     )
     print(
@@ -290,13 +295,15 @@ def main() -> int:
     )
     parser.add_argument(
         "--expect",
-        choices=("pass", "miss"),
+        choices=("pass", "miss", "any"),
         default="pass",
         help=(
             "the verdict this run is expected to reach. Exit status is whether "
             "the run met that expectation, not whether it passed — the "
             "sampled-reward sweep is M2's *recorded miss* and a pass from it "
-            "would be the surprising outcome"
+            "would be the surprising outcome. `any` is for a frontier sweep "
+            "point, where missing the per-lambda epsilon is a finding rather "
+            "than an error; a red flag still exits non-zero under `any`"
         ),
     )
     args = parser.parse_args()
@@ -312,8 +319,13 @@ def main() -> int:
     if args.dry_run:
         reference = experiment.verify_lambda_rule()
         gate_reference = experiment.verify_gate_reference()
+        where = (
+            "matches the rule"
+            if experiment.frontier_grid is None
+            else f"is a point of the {experiment.frontier_grid} frontier grid"
+        )
         print(
-            f"config OK · λ = {experiment.lambda_risk:.6e} matches the rule · "
+            f"config OK · λ = {experiment.lambda_risk:.6e} {where} · "
             f"J_optimal {reference.optimal.objective:.6f} bps · "
             f"ε = {experiment.tolerances.epsilon_gap_fraction:.0%} of a "
             f"{reference.twap_gap:.2%} gap"
@@ -388,6 +400,8 @@ def main() -> int:
         )
     reached = "pass" if verdict["passed"] else "miss"
     print(f"sweep {verdict['sweep_seconds']:.0f}s · verdict: {reached.upper()}")
+    if args.expect == "any":
+        return 1 if verdict["red_flags"] else 0
     if reached != args.expect:
         print(
             f"...but --expect {args.expect} was stated. A run that does not reach "

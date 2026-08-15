@@ -41,6 +41,18 @@ from temper.oracle import VENDOR_LAMBDA_GRID, Market, SymbolParams
 #: anything else would be selecting lambda from a set chosen after the fact.
 LAMBDA_GRIDS: dict[str, tuple[float, ...]] = {"vendor": VENDOR_LAMBDA_GRID}
 
+#: Frontier sub-grids a sweep config may sit on. Each is a subset of the vendor
+#: grid — the same float values, taken by index, so a sweep point's lambda is
+#: bit-identical to the reference table's — and each must contain the lambda
+#: M2's rule selects, so every sweep carries a point directly comparable to a
+#: committed result. ``m3`` is the nine half-decade points from 1e-5 to 1e-1:
+#: below 1e-5 the three schedules coincide to the fourth digit and the frontier
+#: is degenerate; above 1e-1 the optimum is a single bin. Sized in M3 task 3
+#: from task 1's measured cost (docs/briefs/M3-antithetic-and-frontier.md).
+FRONTIER_GRIDS: dict[str, tuple[float, ...]] = {
+    "m3": tuple(VENDOR_LAMBDA_GRID[8:17]),
+}
+
 
 @dataclass(frozen=True)
 class ExecutionCase:
@@ -274,6 +286,9 @@ class Experiment:
     lambda_risk: float
     lambda_grid: str
     rule: LambdaRule
+    #: The frontier sub-grid this experiment is one point of, or ``None`` when
+    #: its lambda is the rule-selected one (M2, and M3's validation run).
+    frontier_grid: str | None
     tolerances: Tolerances
     seeds: SeedPlan
     reward_scale: float
@@ -302,6 +317,10 @@ class Experiment:
         """The three schedules at the committed lambda."""
         return reference_row(self.case.market, self.case.order_size, self.lambda_risk)
 
+    def rule_selected(self) -> ReferenceRow:
+        """The row M2 task 0's rule selects on the committed grid."""
+        return select_lambda(self.table(), self.rule)
+
     def verify_lambda_rule(self) -> ReferenceRow:
         """Re-derive lambda from the rule; raise if the config disagrees.
 
@@ -309,8 +328,40 @@ class Experiment:
         cost is seventeen closed-form evaluations; the thing it buys is that no
         reported M2 number can have been produced at a lambda somebody chose
         after seeing a curve (invariant 3).
+
+        A frontier sweep point is the one legitimate exception, and it is
+        checked rather than exempted: its lambda must be a member of the named
+        frontier grid, that grid must be a subset of the committed grid, and it
+        must contain the rule-selected lambda — so the sweep is a pre-stated set
+        of points around a committed one, not a set chosen after the fact.
         """
-        selected = select_lambda(self.table(), self.rule)
+        selected = self.rule_selected()
+        if self.frontier_grid is not None:
+            try:
+                frontier = FRONTIER_GRIDS[self.frontier_grid]
+            except KeyError:
+                raise ValueError(
+                    f"{self.path.name} names frontier grid {self.frontier_grid!r}; "
+                    f"known grids are {', '.join(sorted(FRONTIER_GRIDS))}"
+                ) from None
+            grid = LAMBDA_GRIDS[self.lambda_grid]
+            if not set(frontier) <= set(grid):
+                raise ValueError(
+                    f"frontier grid {self.frontier_grid!r} is not a subset of the "
+                    f"{self.lambda_grid} grid"
+                )
+            if selected.lambda_risk not in frontier:
+                raise ValueError(
+                    f"frontier grid {self.frontier_grid!r} does not contain the "
+                    f"rule-selected lambda {selected.lambda_risk:.6e}; the sweep "
+                    "must include a point comparable to a committed result"
+                )
+            if self.lambda_risk not in frontier:
+                raise ValueError(
+                    f"{self.path.name} fixes lambda = {self.lambda_risk:.6e}, which "
+                    f"is not a point of frontier grid {self.frontier_grid!r}"
+                )
+            return self.reference()
         if selected.lambda_risk != self.lambda_risk:
             raise ValueError(
                 f"{self.path.name} fixes lambda = {self.lambda_risk:.6e}, but task "
@@ -374,6 +425,7 @@ class Experiment:
             "case": self.case.as_dict(),
             "lambda_risk": self.lambda_risk,
             "lambda_grid": self.lambda_grid,
+            "frontier_grid": self.frontier_grid,
             "lambda_rule": {
                 "min_twap_gap": self.rule.min_twap_gap,
                 "max_bin_fraction": self.rule.max_bin_fraction,
@@ -386,6 +438,21 @@ class Experiment:
             "runtime": self.runtime.as_dict(),
             "gate": None if self.gate is None else self.gate.as_dict(),
         }
+
+
+def repo_root_of(config_path: str | Path) -> Path:
+    """The repository root a config's relative paths are resolved against.
+
+    The nearest ancestor holding ``pyproject.toml`` — so a config one directory
+    deeper (``configs/m3_frontier/<point>.yaml``) resolves ``results/...`` to the
+    same place ``configs/<experiment>.yaml`` does. Falls back to two levels up,
+    the layout every committed config has always had.
+    """
+    path = Path(config_path).resolve()
+    for ancestor in path.parents:
+        if (ancestor / "pyproject.toml").exists():
+            return ancestor
+    return path.parent.parent
 
 
 def _market(block: dict) -> Market:
@@ -411,7 +478,7 @@ def load_experiment(path: str | Path) -> Experiment:
         )
 
     results = document["results"]
-    root = config_path.resolve().parent.parent
+    root = repo_root_of(config_path)
     gate_block = document.get("gate")
     return Experiment(
         path=config_path,
@@ -427,6 +494,11 @@ def load_experiment(path: str | Path) -> Experiment:
         ),
         lambda_risk=float(selection["lambda_risk"]),
         lambda_grid=grid,
+        frontier_grid=(
+            None
+            if selection.get("frontier_grid") is None
+            else str(selection["frontier_grid"])
+        ),
         rule=LambdaRule(
             min_twap_gap=float(selection["rule"]["min_twap_gap"]),
             max_bin_fraction=float(selection["rule"]["max_bin_fraction"]),

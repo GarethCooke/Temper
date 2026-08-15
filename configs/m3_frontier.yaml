@@ -1,0 +1,89 @@
+# M3 tasks 3–5 — the frontier sweep manifest.
+#
+# Not an experiment: the manifest names the frontier grid, the template every
+# lambda point is stamped from, and exactly which fields a point may change.
+# `python tools/m3_frontier.py configs` generates configs/m3_frontier/*.yaml from
+# it, and tests/test_m3_frontier.py asserts the committed point configs are
+# byte-identical to what the generator writes — a sweep point cannot drift from
+# the template. Each point is then an ordinary experiment: run by tools/train.py,
+# graded analytically against that lambda's certified optimum, with the three
+# baselines through the identical grader, its own derived trajectory band and
+# its own per-lambda tolerance (5 % / 10 % of THAT lambda's TWAP gap).
+#
+# The grid, the seed count, the update budget and the wall-clock estimate below
+# were fixed in docs/briefs/M3-antithetic-and-frontier.md, task 3, from task 1's
+# measured per-seed cost and task 2's measured pairing multiplier and flat-point
+# analysis — before the sweep started, as invariant 3 requires. Ten seeds per
+# point is not negotiable (M2's IQR of 0.081 against a 0.05 tolerance); the grid
+# is what was thinned.
+
+milestone: M3
+brief: docs/briefs/M3-antithetic-and-frontier.md
+
+frontier:
+  # temper.eval.experiment.FRONTIER_GRIDS["m3"]: the nine half-decade points
+  # 1e-5 .. 1e-1 of the vendor grid, taken by index so each lambda is the
+  # reference table's float exactly. Contains 10^-3.5, M2's rule-selected point,
+  # so the sweep carries a run directly comparable to a committed result.
+  grid: m3
+
+  # Every point is this config — M2's control-variate config with ten seeds and
+  # the antithetic regime, validated in task 1 — with only the fields under
+  # `overrides` (and lambda, and the per-point results paths) changed.
+  template: configs/m3_antithetic_validation.yaml
+  points_dir: configs/m3_frontier
+
+  overrides:
+    estimator:
+      # The regime is the template's. Only the claim's closing sentence changes:
+      # the template's says "validated here", which is true of the validation
+      # run and would be false of a sweep point. tests/test_m3_frontier.py
+      # requires the mechanism paragraph to be the template's word for word.
+      regime: antithetic
+      claim: >-
+        PPO trained on the antithetic-averaged reward: each episode is run as
+        (ξ, −ξ) — the same actions against the shock path and its exact negation —
+        and the two realised rewards are averaged. The observation carries no
+        price, so both halves take identical actions, and because Phase-1 cost is
+        affine in the shocks the noise cancels exactly on the average; the agent
+        optimises the expected objective without the analytic noise form ever being
+        subtracted. Under Phase-1 certainty equivalence the optimal policy is
+        unchanged, so what is rediscovered does not move. This is NOT a claim about
+        learning under noise: it is a claim about a variance-reduction estimator
+        that needs only the ability to replay with negated draws, validated at
+        M2's lambda against the control variate's committed answer
+        (results/m3_antithetic_validation.json against results/m2_rediscovery.json)
+        and against the sampled regime's recorded miss
+        (results/m2_rediscovery_sampled.json). This file is one point of the M3
+        frontier sweep at the lambda it names, on the update budget the brief's
+        amendment 1 fixed.
+    ppo:
+      # The update budget, cut from M2's blind 1 802 updates by the brief's
+      # amendment 1 (task 2): on the antithetic and control-variate traces the
+      # training return is within epsilon of its final value by update ~60 and
+      # within epsilon/10 by ~160; M2's own 3 M-step probe landed at +0.004 % of
+      # J_optimal. 5 M steps = 751 updates, with the learning rate annealed to
+      # zero over that span as it was over 1 802.
+      total_timesteps: 5000000
+    runtime:
+      # Per-point outer bounds, from task 1's measured per-seed wall-clock at
+      # 1 802 updates scaled to 751 and rounded up with thermal headroom (M2:
+      # +25 % after 18 h of continuous load). Reported, not enforced mid-run.
+      seconds_per_seed: 1200
+      sweep_seconds: 12000
+    results:
+      # ROADMAP, M3 row: per-update traces are thinned to 128 points per seed
+      # (uniform, both ends kept) so nine lambdas do not commit ~20 MB of trace;
+      # graded values and trajectories stay whole. Full-resolution traces live
+      # in the validation run at 10^-3.5.
+      trace_points: 128
+
+  results:
+    metrics: results/m3_frontier.json          # the aggregate the figure is drawn from
+    figure: results/m3_frontier
+    formats: [png]
+    points_dir: results/m3_frontier            # one <point>.json + overlay per lambda
+
+  # The full-budget (1 802-update) run at M2's lambda, drawn beside the sweep's
+  # own 10^-3.5 point so the effect of the budget cut is visible on the same axes.
+  full_budget_point: results/m3_antithetic_validation.json
