@@ -16,6 +16,7 @@ a red test rather than a plausible figure.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -155,22 +156,97 @@ class SeedPlan:
         }
 
 
+#: The reward regimes an experiment may train on. ``sampled`` is the realised
+#: reward, M2's default; ``control_variate`` subtracts M1a's analytic noise
+#: identity (M2's amendment 1); ``antithetic`` averages each episode with its
+#: negated-shock mirror (M3). The claim a result may make depends on which.
+SAMPLED = "sampled"
+CONTROL_VARIATE = "control_variate"
+ANTITHETIC = "antithetic"
+REGIMES: tuple[str, ...] = (SAMPLED, CONTROL_VARIATE, ANTITHETIC)
+
+
 @dataclass(frozen=True)
 class Estimator:
     """Which reward the agent is trained on, and what that lets the result claim.
 
-    ``control_variate: false`` is M2's default and its headline: vanilla PPO on
-    sampled rewards. Turning it on is a *weaker* claim, not a better run, and the
-    brief requires the amendment to be recorded before the run rather than after
-    — so the claim string lives here, beside the switch, and is copied verbatim
-    into ``results/`` and the figure caption.
+    ``sampled`` is M2's default and its headline: vanilla PPO on the realised
+    reward. The other two are variance-reduction regimes and each is a *weaker*
+    claim, not a better run — the control variate because it subtracts the
+    analytic noise form, antithetic pairing because it trains on the average of
+    a mirrored pair. The brief requires the amendment to be recorded before the
+    run rather than after, so the claim string lives here, beside the switch,
+    and is copied verbatim into ``results/`` and the figure caption.
+
+    ``control_variate`` survives as a boolean view for the M2 configs, which
+    spell the regime that way; a config may state either form and, if it states
+    both, they must agree.
     """
 
-    control_variate: bool
+    regime: str
     claim: str
 
+    def __post_init__(self) -> None:
+        if self.regime not in REGIMES:
+            raise ValueError(
+                f"unknown estimator regime {self.regime!r}; expected one of "
+                f"{', '.join(REGIMES)}"
+            )
+
+    @property
+    def control_variate(self) -> bool:
+        return self.regime == CONTROL_VARIATE
+
+    @property
+    def antithetic(self) -> bool:
+        return self.regime == ANTITHETIC
+
+    @property
+    def sampled(self) -> bool:
+        return self.regime == SAMPLED
+
     def as_dict(self) -> dict:
-        return {"control_variate": self.control_variate, "claim": self.claim}
+        return {
+            "regime": self.regime,
+            "control_variate": self.control_variate,
+            "claim": self.claim,
+        }
+
+
+def _estimator(block: dict) -> Estimator:
+    """Resolve the config's `estimator` block, in either spelling."""
+    regime = block.get("regime")
+    switch = block.get("control_variate")
+    if regime is None and switch is None:
+        raise ValueError("the estimator block must state `regime` or `control_variate`")
+    if regime is None:
+        regime = CONTROL_VARIATE if bool(switch) else SAMPLED
+    elif switch is not None and bool(switch) != (regime == CONTROL_VARIATE):
+        raise ValueError(
+            f"estimator regime {regime!r} contradicts control_variate: {switch!r}"
+        )
+    return Estimator(regime=str(regime), claim=str(block["claim"]).strip())
+
+
+@dataclass(frozen=True)
+class Gate:
+    """A validation bar stated against a committed result rather than against ε.
+
+    M3 task 1 is a gate: antithetic pairing must reproduce, to within an order of
+    magnitude, the median gap fraction M2's control variate already established
+    at the same lambda. That is a different question from "did the agent meet
+    the milestone tolerance", so it is a different block, and the verdict
+    reports it separately.
+    """
+
+    median_gap_fraction: float
+    reference: Path
+
+    def as_dict(self) -> dict:
+        return {
+            "median_gap_fraction": self.median_gap_fraction,
+            "reference": self.reference.name,
+        }
 
 
 @dataclass(frozen=True)
@@ -193,6 +269,7 @@ class Experiment:
 
     path: Path
     document: dict
+    milestone: str
     case: ExecutionCase
     lambda_risk: float
     lambda_grid: str
@@ -210,6 +287,8 @@ class Experiment:
     #: keeps them whole. See :func:`~temper.eval.sweep.thin` for why this is a
     #: committed field rather than a default.
     trace_points: int | None
+    #: The validation gate, if this experiment is one (M3 task 1); else ``None``.
+    gate: Gate | None = None
 
     # -- oracle surface, derived on demand ---------------------------------
 
@@ -243,6 +322,25 @@ class Experiment:
             )
         return selected
 
+    def verify_gate_reference(self) -> float | None:
+        """The gate's reference result exists and states a median; else raise.
+
+        Called at the top of a run and by ``--dry-run``, because a gate that
+        discovers its reference is missing *after* the night's training has
+        finished would discard the run with nothing written. Returns the
+        reference's median gap fraction, or ``None`` when there is no gate.
+        """
+        if self.gate is None:
+            return None
+        if not self.gate.reference.exists():
+            raise FileNotFoundError(
+                f"{self.path.name} gates against {self.gate.reference}, which "
+                "does not exist; the committed result it validates against must "
+                "be present before the run"
+            )
+        document = json.loads(self.gate.reference.read_text(encoding="utf-8"))
+        return float(document["summary"]["gap_fraction"]["median"])
+
     # -- the derived trajectory band ---------------------------------------
 
     def band(self, gap_fraction: float | None = None) -> TrajectoryBand:
@@ -272,6 +370,7 @@ class Experiment:
         """The committed contract, for the results file's `config` block."""
         return {
             "path": self.path.name,
+            "milestone": self.milestone,
             "case": self.case.as_dict(),
             "lambda_risk": self.lambda_risk,
             "lambda_grid": self.lambda_grid,
@@ -285,6 +384,7 @@ class Experiment:
             "estimator": self.estimator.as_dict(),
             "ppo": self.ppo.as_dict(),
             "runtime": self.runtime.as_dict(),
+            "gate": None if self.gate is None else self.gate.as_dict(),
         }
 
 
@@ -312,9 +412,12 @@ def load_experiment(path: str | Path) -> Experiment:
 
     results = document["results"]
     root = config_path.resolve().parent.parent
+    gate_block = document.get("gate")
     return Experiment(
         path=config_path,
         document=document,
+        # M2's configs predate the key and are frozen by their committed digests.
+        milestone=str(document.get("milestone", "M2")),
         case=ExecutionCase(
             case_id=case_block["id"],
             params_from=case_block["params_from"],
@@ -346,10 +449,7 @@ def load_experiment(path: str | Path) -> Experiment:
             eval_streams=tuple(int(s) for s in document["seeding"]["eval_streams"]),
         ),
         reward_scale=float(document["reward"]["scale"]),
-        estimator=Estimator(
-            control_variate=bool(document["estimator"]["control_variate"]),
-            claim=str(document["estimator"]["claim"]).strip(),
-        ),
+        estimator=_estimator(document["estimator"]),
         ppo=PPOConfig.from_mapping(document["ppo"]),
         runtime=Runtime(
             seconds_per_seed=float(document["runtime"]["seconds_per_seed"]),
@@ -362,6 +462,14 @@ def load_experiment(path: str | Path) -> Experiment:
             None
             if results.get("trace_points") is None
             else int(results["trace_points"])
+        ),
+        gate=(
+            None
+            if gate_block is None
+            else Gate(
+                median_gap_fraction=float(gate_block["median_gap_fraction"]),
+                reference=root / gate_block["reference"],
+            )
         ),
     )
 

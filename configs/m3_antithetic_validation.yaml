@@ -1,0 +1,159 @@
+# M3 task 1 — antithetic pairing, validated at M2's lambda before it is used.
+#
+# The gate for everything else in M3. Ten training seeds, the antithetic reward
+# regime, and everything else *identical* to configs/m2_ppo.yaml — the same case,
+# the same rule-selected lambda, the same tolerances, the same PPO hyperparameters
+# and update budget, the same reward scale, the same seed pools and stream
+# addressing (seeds 0..4 are the very addresses M2's control-variate sweep was
+# reported on; 5..9 extend the same rule). tests/test_m3_validation.py asserts the
+# field-by-field identity, so "the pairing reproduces the variate's answer" is a
+# measurement rather than an interpretation.
+#
+# Acceptance is against M2's control-variate result, NOT against epsilon
+# (docs/briefs/M3-antithetic-and-frontier.md, task 1): median gap fraction
+# <= 0.002, i.e. within an order of magnitude of the variate's 0.0002. A median in
+# the sampled regime's neighbourhood (~0.098) means the pairing is not cancelling
+# and the argument the milestone rests on is wrong — in which case the finding is
+# the miss, and the sweep does not start.
+#
+# Read by tools/train.py and tests/test_m3_*.py. Those read *this file*, not
+# literals (invariant 3); every number here is pre-stated in the brief and may
+# only be loosened by amending it first.
+
+milestone: M3
+brief: docs/briefs/M3-antithetic-and-frontier.md
+
+# --- the case ---------------------------------------------------------------
+# Verbatim from configs/m2_ppo.yaml. See that file for why the parameters are
+# repeated here rather than read out of tests/golden/vendor/.
+case:
+  id: frontier
+  params_from: core:AAPL:X100000:T6.5:lam1e-05   # symbol parameters and grid only
+  symbol: AAPL
+  order_size: 100000.0
+  horizon_hours: 6.5
+  n_bins: 13                    # ARCHITECTURE.md §9: max(2, round(2T)), half-hour bins
+  params:
+    adv: 60000000
+    sigma: 0.0155
+    half_spread: 0.3
+    eta: 0.142
+    gamma: 0.314
+
+# --- lambda: M2's, by M2's rule ---------------------------------------------
+# Not a choice. It is the output of M2 task 0's rule applied to the oracle's
+# reference table, re-derived by `Experiment.verify_lambda_rule` at the top of
+# every run. Task 1 runs at exactly this point so that its result is directly
+# comparable to a committed one.
+lambda_selection:
+  grid: vendor                              # temper.oracle.VENDOR_LAMBDA_GRID
+  rule:
+    min_twap_gap: 0.20
+    max_bin_fraction: 0.50
+  lambda_risk: 3.1622776601683794e-04       # 10^-3.5
+
+# --- the milestone bar, unchanged from M2 -----------------------------------
+# Kept identical because task 1 is "everything else identical". The verdict this
+# run is *expected* to reach is the epsilon one; the gate below is the task-1
+# acceptance and is reported and asserted separately.
+tolerances:
+  epsilon_gap_fraction: 0.05     # median across seeds
+  per_seed_gap_fraction: 0.10    # no individual seed worse than this
+  red_flag_rtol: 1.0e-9          # J_agent < J_optimal - rtol*|J_optimal| is a hard failure
+
+# --- the task-1 gate --------------------------------------------------------
+# Against a committed result, not against epsilon. The reference file's median
+# gap fraction is read at build time and written beside this bar into the
+# results JSON, so the comparison the gate makes is on the record.
+gate:
+  median_gap_fraction: 0.002
+  reference: results/m2_rediscovery.json
+
+# --- randomness -------------------------------------------------------------
+# Same root seed and stride as M2, so seed ordinal i sits on the same shock
+# streams and the same torch seed as M2's seed i. Ten seeds: the brief's number,
+# and M2's IQR of 0.081 against a 0.05 tolerance is why five is not enough.
+seeding:
+  root_seed: 20260805
+  train_pool: train
+  eval_pool: eval
+  n_seeds: 10
+  env_stream_stride: 4096       # must exceed ppo.num_envs
+  eval_streams: [0, 1]
+
+# --- the estimator: antithetic pairing --------------------------------------
+# Each episode is run as (xi, -xi): a primary env and a mirror at the same seed
+# address whose every draw is the exact negation of the primary's, stepped in
+# lockstep with the same action, and the two rewards averaged
+# (temper/eval/antithetic.py). The observation carries no price, so both halves
+# take identical actions — asserted bitwise on every step, not assumed — and
+# because Phase-1 cost is affine in the shocks the noise cancels exactly on the
+# average. The analytic noise form is never touched: this needs only the ability
+# to replay with negated draws, which is why it survives into Phase 2 where the
+# control variate cannot. `claim` is copied verbatim into results/ and the figure
+# caption.
+estimator:
+  regime: antithetic
+  claim: >-
+    PPO trained on the antithetic-averaged reward: each episode is run as
+    (ξ, −ξ) — the same actions against the shock path and its exact negation —
+    and the two realised rewards are averaged. The observation carries no
+    price, so both halves take identical actions, and because Phase-1 cost is
+    affine in the shocks the noise cancels exactly on the average; the agent
+    optimises the expected objective without the analytic noise form ever being
+    subtracted. Under Phase-1 certainty equivalence the optimal policy is
+    unchanged, so what is rediscovered does not move. This is NOT a claim about
+    learning under noise: it is a claim about a variance-reduction estimator
+    that needs only the ability to replay with negated draws, validated here
+    against the control variate's committed answer at the same lambda
+    (results/m2_rediscovery.json) and against the sampled regime's recorded miss
+    (results/m2_rediscovery_sampled.json).
+
+# --- reward scaling — verbatim from M2 --------------------------------------
+reward:
+  scale: 0.02
+
+# --- PPO — verbatim from M2, including the update budget --------------------
+# 12 M steps = 1 802 updates is M2's blind budget, kept here because task 1 is a
+# like-for-like comparison. Whether the sweep keeps it is task 2's question, to
+# be answered from these traces and recorded as an amendment before the sweep.
+ppo:
+  total_timesteps: 12000000
+  num_envs: 512
+  num_steps: 13                 # exactly one episode per env per rollout
+  learning_rate: 1.0e-3
+  anneal_lr: true
+  gamma: 1.0
+  gae_lambda: 1.0
+  num_minibatches: 4
+  update_epochs: 10
+  clip_coef: 0.2
+  clip_vloss: true
+  ent_coef: 0.0
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  norm_adv: true
+  torch_threads: 8              # pinned: thread count is a reproducibility axis
+  hidden_sizes: [64, 64]
+  log_std_init: -1.0
+  max_seconds: 5400             # runaway guard, not the budget (see m2_ppo.yaml)
+
+# --- runtime budgets (reference box: Ryzen 7 3800X, CPU only) ---------------
+# The pairing steps two envs per pair-step, so the naive bound is 2x M2's per-seed
+# time; the brief expects less (the network forward/backward passes are shared)
+# and asks for the multiplier to be *measured*. These are the honest outer bounds
+# stated before the run — the measured per-seed wall-clock is what task 3 sizes
+# the sweep from.
+runtime:
+  seconds_per_seed: 3600        # <= 2x M2's 30-minute per-seed budget
+  sweep_seconds: 36000          # <= 10 h for the 10-seed run
+
+# --- what gets committed ----------------------------------------------------
+results:
+  metrics: results/m3_antithetic_validation.json
+  figure: results/m3_antithetic_overlay
+  formats: [png]
+  # Whole traces at this lambda: it is the one point M2 already reports at full
+  # resolution, so the M2 <-> M3 comparison stays exact (ROADMAP, M3 row). The
+  # sweep configs set trace_points: 128.
+  trace_points: null

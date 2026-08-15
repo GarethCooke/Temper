@@ -114,9 +114,12 @@ class FractionAction(Wrapper):
     through untouched.
     """
 
-    def __init__(self, env: ExecutionEnv) -> None:
+    def __init__(self, env: Env) -> None:
         super().__init__(env)
-        self.order_size = float(env.order_size)
+        # `unwrapped`, not `env`: an estimator wrapper (the control variate, the
+        # antithetic pair) may sit between this and the ExecutionEnv, and the
+        # parent order is the raw env's to state.
+        self.order_size = float(env.unwrapped.order_size)
         self.action_space = FRACTION_SPACE
         self._observation = np.zeros(2, dtype=np.float64)
 
@@ -176,12 +179,16 @@ def execution_env_factory(
     ``reset()``, so each parallel env spends exactly the stream its factory
     named (constitution invariant 5).
 
-    `reward_wrapper` is the seam M2 task 3's sanctioned control variate would
-    enter through — a ``Env -> Env`` callable applied *before* the scaling, so
-    the variate works in bps and the scale is applied once to whatever is left.
-    It is a parameter rather than an import because computing the variate means
-    reading the env's published price shock, which no module under
-    ``temper/agents/`` may name; the experiment driver passes it in.
+    `reward_wrapper` is the seam an estimator enters through — M2's sanctioned
+    control variate, M3's antithetic pair — an ``Env -> Env`` callable applied to
+    the **raw** env, below the fraction action and below the scaling. Below the
+    scaling so the estimator works in the env's own bps and the scale is applied
+    once to whatever is left; below the fraction action so an estimator that
+    steps a second env (the antithetic mirror) hands it the same *shares* the
+    primary received, with the fraction converted exactly once. It is a
+    parameter rather than an import because every estimator so far reads the
+    env's published price shock, which no module under ``temper/agents/`` may
+    name; the experiment driver passes it in.
     """
 
     def make() -> Env:
@@ -193,9 +200,9 @@ def execution_env_factory(
             pool=pool,
             stream_index=stream_index,
         )
-        env = FractionAction(env)
         if reward_wrapper is not None:
             env = reward_wrapper(env)
+        env = FractionAction(env)
         if reward_scale != 1.0:
             env = RewardScale(env, reward_scale)
         return env

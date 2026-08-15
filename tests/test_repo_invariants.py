@@ -336,12 +336,12 @@ def test_no_running_normaliser_anywhere_in_the_package():
 def test_the_policy_packages_do_not_import_the_control_variate():
     """The estimator seam stays a seam.
 
-    :mod:`temper.eval.variate` reads the env's published price shock, which is
-    why it lives under `eval/` and is handed to the training loop as a parameter
-    by the experiment driver. A policy package importing it — even without ever
-    naming the shock key — would put the price path one attribute access away
-    from an observation, and would make the static guards above true but
-    uninformative.
+    :mod:`temper.eval.variate` and :mod:`temper.eval.antithetic` both read the
+    env's published price shock, which is why they live under `eval/` and are
+    handed to the training loop as a parameter by the experiment driver. A
+    policy package importing either — even without ever naming the shock key —
+    would put the price path one attribute access away from an observation, and
+    would make the static guards above true but uninformative.
     """
     for package in POLICY_PACKAGES:
         for source in sorted((PACKAGE_ROOT / package).rglob("*.py")):
@@ -357,10 +357,30 @@ def test_the_policy_packages_do_not_import_the_control_variate():
                 if isinstance(node, ast.Import)
                 for alias in node.names
             }
-            assert not any(name.endswith("variate") for name in modules), (
-                f"{source.relative_to(REPO_ROOT)} imports the control variate; "
-                "the driver composes it, a policy package never sees it"
+            assert not any(
+                name.endswith("variate") or name.endswith("antithetic")
+                for name in modules
+            ), (
+                f"{source.relative_to(REPO_ROOT)} imports an estimator (the "
+                "control variate or the antithetic pair); the driver composes "
+                "it, a policy package never sees it"
             )
+
+
+def _target_recipe(makefile: str, target: str) -> list[str]:
+    """The non-comment recipe lines of one make target."""
+    lines: list[str] = []
+    inside = False
+    for line in makefile.splitlines():
+        if line.startswith(f"{target}:"):
+            inside = True
+            continue
+        if inside:
+            if not line.startswith("	"):
+                break
+            if not line.strip().startswith("#"):
+                lines.append(line.strip())
+    return lines
 
 
 def test_the_sweep_target_runs_both_estimators_and_states_each_expectation():
@@ -376,12 +396,9 @@ def test_the_sweep_target_runs_both_estimators_and_states_each_expectation():
     was supposed to?", which is both a working target and a live check.
     """
     makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
-    lines = [
-        line.strip()
-        for line in makefile.splitlines()
-        if "m2_train.py" in line and not line.lstrip().startswith("#")
-    ]
+    lines = _target_recipe(makefile, "sweep")
     assert len(lines) == 2, f"expected two sweep invocations, found {len(lines)}"
+    assert all("tools/train.py" in line for line in lines)
     assert any("--expect miss" in line for line in lines), (
         "the sampled-reward sweep must declare that it is expected to miss"
     )

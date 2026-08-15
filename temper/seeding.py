@@ -39,8 +39,15 @@ from numpy.random import Generator, SeedSequence, default_rng
 #: ``m2/diagnostic`` is the same idea one milestone on: M2's fast tests need an
 #: env to drive, and driving it from ``eval`` would spend streams the committed
 #: rediscovery result is addressed by — on a check that does not care which
-#: shocks it gets.
-POOLS: tuple[str, ...] = ("train", "eval", "m1/differential", "m2/diagnostic")
+#: shocks it gets. ``m3/diagnostic`` continues the pattern for M3's antithetic
+#: pairing checks, which are diagnostics of an estimator and report no number.
+POOLS: tuple[str, ...] = (
+    "train",
+    "eval",
+    "m1/differential",
+    "m2/diagnostic",
+    "m3/diagnostic",
+)
 
 #: The pool M1's Monte-Carlo differential draws from. Named here rather than
 #: spelled as a literal at the call sites so the quarantine is greppable.
@@ -49,6 +56,10 @@ DIFFERENTIAL_POOL = "m1/differential"
 #: The pool M2's non-reported checks draw from — the action-space, grading and
 #: control-variate tests, none of which report a number.
 M2_DIAGNOSTIC_POOL = "m2/diagnostic"
+
+#: The pool M3's non-reported checks draw from — the antithetic pairing's
+#: action-identity, shock-negation and zero-variance tests.
+M3_DIAGNOSTIC_POOL = "m3/diagnostic"
 
 _POOL_INDEX = {name: index for index, name in enumerate(POOLS)}
 

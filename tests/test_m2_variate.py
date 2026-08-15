@@ -189,9 +189,12 @@ def test_the_variate_leaves_the_realised_schedule_untouched():
 def test_the_variate_composes_under_the_reward_scale_in_that_order():
     """Wrapped inside the scaling, so the variate works in the env's own bps.
 
-    The factory builds ``RewardScale(DeterministicReward(FractionAction(env)))``.
-    If the order were reversed the variate would have to undo the scale, which is
-    one more place for two constants to disagree.
+    The factory builds ``RewardScale(FractionAction(DeterministicReward(env)))``
+    (M3 moved the estimator below the fraction action so an estimator that steps
+    a mirror env hands it the same shares; the reward arithmetic is unchanged —
+    ``tests/test_m3_antithetic.py`` pins the chain). If the scale came first the
+    variate would have to undo it, which is one more place for two constants to
+    disagree.
     """
     scale = EXPERIMENT.reward_scale
     fractions = twap_fractions(N_BINS)

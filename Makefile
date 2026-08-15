@@ -6,8 +6,9 @@ GOLDENS := tests/golden/vendor/frontierview_goldens.json
 
 M2_CONFIG   ?= configs/m2_ppo.yaml
 M2_SAMPLED  ?= configs/m2_ppo_sampled.yaml
+M3_VALIDATE ?= configs/m3_antithetic_validation.yaml
 
-.PHONY: help test test-verbose differential smoke sweep reference goldens clean
+.PHONY: help test test-verbose differential smoke sweep reference validate goldens clean
 
 help:
 	@echo "make test          run the pytest suite (the gate); excludes the marked tiers"
@@ -15,6 +16,7 @@ help:
 	@echo "make smoke         PPO convergence on Pendulum + CartPole: M2's task 2, ~7 min"
 	@echo "make reference     M2 task 0: the oracle-only table, and the lambda it fixes"
 	@echo "make sweep         M2's 5-seed sweeps, both estimators - hours, unattended"
+	@echo "make validate      M3 task 1: antithetic pairing at M2's lambda, 10 seeds - a night"
 	@echo "make goldens       re-export the FrontierView fixtures (read-only there)"
 	@echo "                   override the checkout with FRONTIERVIEW=/path/to/FrontierView"
 	@echo "make clean         remove caches and scratch results"
@@ -58,8 +60,18 @@ reference:
 # (ignore errors) this line would have hidden that in exactly the case worth
 # hearing about.
 sweep:
-	$(PYTHON) tools/m2_train.py --config $(M2_SAMPLED) --quiet --expect miss
-	$(PYTHON) tools/m2_train.py --config $(M2_CONFIG) --quiet --expect pass
+	$(PYTHON) tools/train.py --config $(M2_SAMPLED) --quiet --expect miss
+	$(PYTHON) tools/train.py --config $(M2_CONFIG) --quiet --expect pass
+
+# M3 task 1 — the gate for everything else in that milestone: antithetic pairing
+# at M2's lambda, ten seeds, everything else identical to configs/m2_ppo.yaml.
+# The verdict it is expected to reach is the epsilon one; the *gate* (median gap
+# within an order of magnitude of the control variate's) is reported beside it
+# and asserted by tests/test_m3_validation.py against the committed result.
+# Serial with everything else, and unattended: 512 envs x 8 threads saturates
+# the reference box, and two concurrent sweeps truncate each other (M2).
+validate:
+	$(PYTHON) tools/train.py --config $(M3_VALIDATE) --quiet --expect pass
 
 # Regenerates $(GOLDENS) from a FrontierView checkout. Writes nothing into that
 # repo — the export imports its `api` package and nothing more (constitution §7).

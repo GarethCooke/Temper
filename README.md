@@ -76,6 +76,7 @@ make differential  # M1's deep Monte-Carlo tier: pytest -m deep
 make smoke         # M2's PPO convergence check on Pendulum + CartPole
 make reference     # M2's oracle-only table, and the lambda its rule fixes
 make sweep         # M2's 5-seed sweeps, both estimators — hours, unattended
+make validate      # M3 task 1: antithetic pairing at M2's λ, 10 seeds — a night
 ```
 
 `make test` is the per-commit gate and stays evening-sized (~15 s; the brief's ceiling is
@@ -92,6 +93,12 @@ the per-commit loop never waits on them:
   `configs/m2_ppo_sampled.yaml`. Hours, unattended, and it writes the committed
   `results/*.json` and the overlay figures. `--figure-only` redraws a figure from the
   committed JSON without retraining.
+- `make validate` — M3's gate, from `configs/m3_antithetic_validation.yaml`: the
+  antithetic-pairing regime at M2's λ on ten seeds, everything else identical to M2's
+  control-variate config, accepted against that run's committed median rather than
+  against ε. A night, unattended, strictly serial with everything else on the box.
+  All three training targets go through one driver, `tools/train.py`, which reads
+  the milestone, the reward regime and the λ off the config.
 
 Everything regenerates from a committed config plus one root seed. Every entry in
 `results/` carries the config's SHA-256 and the git revision that produced it, and the

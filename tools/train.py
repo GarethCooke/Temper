@@ -1,12 +1,15 @@
-"""M2 — train the PPO agent on ``ExecutionEnv`` and grade it against the oracle.
+"""Train the PPO agent on ``ExecutionEnv`` from a committed config; grade it against the oracle.
 
-    python tools/m2_train.py --config configs/m2_ppo.yaml
+    python tools/train.py --config configs/m2_ppo.yaml
+    python tools/train.py --config configs/m3_antithetic_validation.yaml
 
 Runs the committed number of training seeds, evaluates each deterministically,
 grades the schedule each induced *analytically* through
 :func:`~temper.oracle.cost.schedule_moments`, and writes the metrics JSON and the
 trajectory-overlay figure named by the config. Both carry the config digest and
-the git revision (constitution invariant 1).
+the git revision (constitution invariant 1). Which milestone, which reward regime
+and which lambda are all the config's to say; this driver reads them and prints
+them.
 
 The work is in :mod:`temper.eval.sweep`; this file is argument parsing, printing
 and the figure — so the suite can run the same sweep without a subprocess, and
@@ -15,6 +18,11 @@ so matplotlib stays off the package's import path.
 Exit status is whether the run reached the verdict ``--expect`` says it should,
 which is not the same as whether it passed: the sampled-reward sweep is M2's
 recorded *miss*, and it clearing epsilon would be the surprising outcome.
+
+History: this file was ``tools/m2_train.py`` through M2, and the two M2 configs
+still name it that way in their comments — those files are frozen by the
+digests their committed results carry, so the comment stays stale rather than
+the results going unverifiable.
 """
 
 from __future__ import annotations
@@ -83,20 +91,62 @@ from temper.eval.figures import trajectory_overlay  # noqa: E402
 from temper.eval.provenance import Provenance  # noqa: E402
 from temper.eval.sweep import build_document, run_sweep  # noqa: E402
 
+#: How each reward regime reads in a header and a figure caption.
+REGIME_LABELS = {
+    "sampled": "sampled rewards — the full Phase-1 price noise",
+    "control_variate": "control variate — the deterministic (noise-free) reward",
+    "antithetic": "antithetic pairing — each episode as (ξ, −ξ), rewards averaged",
+}
+
 
 def _stdout_utf8() -> None:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
 
 
+class _KeepAwake:
+    """Hold the host awake for the run's lifetime, on Windows; a no-op elsewhere.
+
+    Process-scoped: ``SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)``
+    on entry, ``ES_CONTINUOUS`` alone on exit, which reverts it. No power setting
+    is changed. M2 lost a seed of a four-hour sweep to the host sleeping mid-run,
+    and the fix belongs with the run rather than in the operator's memory. Best
+    effort: if the call is unavailable, the run proceeds and says so.
+    """
+
+    ES_CONTINUOUS = 0x80000000
+    ES_SYSTEM_REQUIRED = 0x00000001
+
+    def __init__(self) -> None:
+        self._kernel = None
+
+    def __enter__(self):
+        if sys.platform == "win32":
+            try:
+                import ctypes
+
+                self._kernel = ctypes.windll.kernel32
+                self._kernel.SetThreadExecutionState(
+                    self.ES_CONTINUOUS | self.ES_SYSTEM_REQUIRED
+                )
+                print("  host held awake for the run (SetThreadExecutionState)")
+            except Exception as error:  # pragma: no cover - platform dependent
+                self._kernel = None
+                print(f"  could not hold the host awake: {error!r}")
+        return self
+
+    def __exit__(self, *exc):
+        if self._kernel is not None:
+            self._kernel.SetThreadExecutionState(self.ES_CONTINUOUS)
+        return False
+
+
 def _header(experiment: Experiment) -> None:
     reference = experiment.reference()
     case = experiment.case
-    estimator = (
-        "control variate" if experiment.estimator.control_variate else "sampled rewards"
-    )
+    estimator = REGIME_LABELS[experiment.estimator.regime]
     print(
-        f"M2 — {case.symbol}, X = {case.order_size:,.0f}, "
+        f"{experiment.milestone} — {case.symbol}, X = {case.order_size:,.0f}, "
         f"λ = {experiment.lambda_risk:.6e} (rule-selected), "
         f"{experiment.seeds.n_seeds} seeds, {estimator}"
     )
@@ -125,7 +175,7 @@ def _progress(experiment: Experiment):
     return report
 
 
-def _on_seed(ordinal: int, grade, result) -> None:
+def _on_seed(ordinal: int, grade, result, pairs=()) -> None:
     print(
         f"  seed {ordinal}: J {grade.objective:.6f} bps · "
         f"excess {grade.relative_excess:+.4%} = {grade.gap_fraction:.1%} of the "
@@ -134,6 +184,18 @@ def _on_seed(ordinal: int, grade, result) -> None:
         f"{' · RED FLAG' if grade.red_flag else ''}",
         flush=True,
     )
+    if pairs:
+        import numpy as np
+
+        sampled = float(np.nanmedian([u.sampled_variance for u in pairs]))
+        averaged = float(np.nanmedian([u.averaged_variance for u in pairs]))
+        ratio = float(np.nanmedian([u.variance_ratio for u in pairs]))
+        print(
+            f"          reward variance per update (median over updates): "
+            f"sampled half {sampled:.1f} bps² · averaged {averaged:.3e} bps² · "
+            f"ratio {ratio:.2e}",
+            flush=True,
+        )
 
 
 def write_figure(experiment: Experiment, document: dict) -> None:
@@ -146,25 +208,37 @@ def write_figure(experiment: Experiment, document: dict) -> None:
     figure and a metrics file from different runs.
     """
     summary = document["summary"]
-    estimator = (
-        "control variate — the deterministic (noise-free) reward"
-        if experiment.estimator.control_variate
-        else "sampled rewards — the full Phase-1 price noise"
-    )
+    estimator = REGIME_LABELS[experiment.estimator.regime]
     verdict = document["verdict"]
-    # Three short lines rather than two long ones: at 8 inches wide a title much
-    # past ~75 characters runs off the canvas, and matplotlib will not tell you.
+    gate = document.get("gate")
+    # Short lines rather than long ones: at 8 inches wide a title much past ~75
+    # characters runs off the canvas, and matplotlib will not tell you. The
+    # no-gate form is M2's, character for character, so M2's committed figures
+    # still redraw byte-identically; a gated run gets a fourth line.
     caption = (
-        f"M2 rediscovery — {experiment.case.symbol}, "
+        f"{experiment.milestone} rediscovery — {experiment.case.symbol}, "
         f"X = {experiment.case.order_size:,.0f} shares, "
         f"λ = {experiment.lambda_risk:.3e}, {len(document['seeds'])} seeds\n"
         f"estimator: {estimator}\n"
-        f"median excess {summary['relative_excess']['median']:+.3%} of J_optimal "
-        f"= {summary['gap_fraction']['median']:.1%} of the TWAP gap "
-        f"(ε = {experiment.tolerances.epsilon_gap_fraction:.0%}, "
-        f"{'met' if verdict['epsilon_met'] else 'MISSED'}; "
-        f"worst seed {summary['gap_fraction']['worst']:.1%})"
     )
+    if gate is None:
+        caption += (
+            f"median excess {summary['relative_excess']['median']:+.3%} of J_optimal "
+            f"= {summary['gap_fraction']['median']:.1%} of the TWAP gap "
+            f"(ε = {experiment.tolerances.epsilon_gap_fraction:.0%}, "
+            f"{'met' if verdict['epsilon_met'] else 'MISSED'}; "
+            f"worst seed {summary['gap_fraction']['worst']:.1%})"
+        )
+    else:
+        caption += (
+            f"median excess {summary['relative_excess']['median']:+.4%} of J_optimal "
+            f"= {summary['gap_fraction']['median']:.3%} of the TWAP gap; "
+            f"worst seed {summary['gap_fraction']['worst']:.3%}\n"
+            f"gate: median ≤ {gate['median_gap_fraction_max']:g} against the "
+            f"{gate['reference_regime'].replace('_', ' ')}'s "
+            f"{gate['reference_median_gap_fraction']:.4f} — "
+            f"{'met' if gate['met'] else 'MISSED'}"
+        )
 
     written = trajectory_overlay(
         experiment.results_figure,
@@ -237,21 +311,29 @@ def main() -> int:
         return 0
     if args.dry_run:
         reference = experiment.verify_lambda_rule()
+        gate_reference = experiment.verify_gate_reference()
         print(
             f"config OK · λ = {experiment.lambda_risk:.6e} matches the rule · "
             f"J_optimal {reference.optimal.objective:.6f} bps · "
             f"ε = {experiment.tolerances.epsilon_gap_fraction:.0%} of a "
             f"{reference.twap_gap:.2%} gap"
         )
+        if gate_reference is not None:
+            print(
+                f"gate OK · median gap ≤ {experiment.gate.median_gap_fraction:g} "
+                f"against {experiment.gate.reference.name} "
+                f"(median {gate_reference:.5f})"
+            )
         return 0
 
     _header(experiment)
-    sweep = run_sweep(
-        experiment,
-        repo_root=REPO_ROOT,
-        on_seed=_on_seed,
-        progress=None if args.quiet else _progress(experiment),
-    )
+    with _KeepAwake():
+        sweep = run_sweep(
+            experiment,
+            repo_root=REPO_ROOT,
+            on_seed=_on_seed,
+            progress=None if args.quiet else _progress(experiment),
+        )
     if sweep.provenance.git_dirty:
         print(
             "  WARNING: the source tree was dirty when this run started, so its "
@@ -287,6 +369,22 @@ def main() -> int:
             f"RED FLAG — {', '.join(verdict['red_flags'])} scored below the "
             "certified optimum. This is a defect, not a result "
             "(ARCHITECTURE.md §1.1)."
+        )
+    if summary.get("reward_variance") is not None:
+        rv = summary["reward_variance"]
+        print(
+            f"reward variance per update, median across seeds: sampled half "
+            f"{rv['sampled_median']:.1f} bps² · averaged {rv['averaged_median']:.3e} "
+            f"bps² · ratio {rv['variance_ratio_median']:.2e}"
+        )
+    gate = document.get("gate")
+    if gate is not None:
+        print(
+            f"gate: median gap {gate['median_gap_fraction']:.5f} against "
+            f"≤ {gate['median_gap_fraction_max']:g} (reference "
+            f"{gate['reference']} {gate['reference_regime']}: "
+            f"{gate['reference_median_gap_fraction']:.5f}) · "
+            f"{'MET' if gate['met'] else 'MISSED'}"
         )
     reached = "pass" if verdict["passed"] else "miss"
     print(f"sweep {verdict['sweep_seconds']:.0f}s · verdict: {reached.upper()}")

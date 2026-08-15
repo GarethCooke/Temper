@@ -1,0 +1,7 @@
+# Committed configs are hashed byte-for-byte into every result's provenance
+# (temper/eval/provenance.py: config_digest). Line endings are bytes. The M2
+# results were stamped from a Windows checkout, where core.autocrlf gave the
+# configs CRLF endings, so CRLF is pinned here for every platform: a Linux clone
+# now reproduces the committed digests instead of failing the invariant-1 checks
+# on an invisible byte. Everything else follows the platform default.
+configs/*.yaml text eol=crlf

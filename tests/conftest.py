@@ -289,7 +289,14 @@ POOL_ALLOWANCE: dict[str, frozenset[str]] = {
     "test_m2_grading.py": frozenset({"m2/diagnostic", "eval"}),
     "test_m2_variate.py": frozenset({"m2/diagnostic"}),
     "test_m2_rediscovery.py": frozenset({"m2/diagnostic", "train", "eval"}),
+    "test_m3_antithetic.py": frozenset({"m3/diagnostic"}),
+    "test_m3_validation.py": frozenset({"m3/diagnostic", "train", "eval"}),
 }
+
+#: The modules that regenerate a committed result and so legitimately hold both
+#: reserved pools — one per committed sweep, and `tests/test_seed_pool_discipline.py`
+#: asserts the list is exactly this.
+SWEEP_REGENERATORS: tuple[str, ...] = ("test_m2_rediscovery.py", "test_m3_validation.py")
 
 DEFAULT_POOL_ALLOWANCE = frozenset({"m1/differential"})
 

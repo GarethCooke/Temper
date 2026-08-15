@@ -41,6 +41,7 @@ from .conftest import (
     RESERVED_POOLS,
     RESOLVED_SEED_ADDRESSES,
     SEED_ADDRESS_LEDGER,
+    SWEEP_REGENERATORS,
     build_env,
     case_by_id,
     differential_pairs,
@@ -196,8 +197,8 @@ def test_no_module_is_granted_both_training_and_evaluation_streams_by_accident()
         for module, pools in POOL_ALLOWANCE.items()
         if RESERVED_POOLS <= pools
     )
-    assert holders == ["test_m2_rediscovery.py"], (
-        f"{holders} hold both train and eval; only the sweep regeneration may"
+    assert holders == sorted(SWEEP_REGENERATORS), (
+        f"{holders} hold both train and eval; only the sweep regenerations may"
     )
 
 

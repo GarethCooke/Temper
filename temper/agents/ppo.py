@@ -358,6 +358,12 @@ class TrainResult:
     approx_kls: list[float]
     entropies: list[float]
     value_losses: list[float]
+    #: Variance (ddof = 1) of the finished episodes' training returns, per
+    #: update, in the scaled units the agent optimised. The realised reward
+    #: variance the agent trained on, measured rather than inferred — M3 needs
+    #: it to show that a variance-reduction regime reduced variance. NaN where
+    #: fewer than two episodes finished.
+    return_variances: list[float] = field(default_factory=list)
 
     def as_dict(self) -> dict:
         """A JSON-safe summary. The weights are not in it; the trace is."""
@@ -369,6 +375,7 @@ class TrainResult:
             "timed_out": self.timed_out,
             "final_train_return": self.returns[-1] if self.returns else None,
             "train_returns": self.returns,
+            "train_return_variance": self.return_variances,
             "approx_kl": self.approx_kls,
             "entropy": self.entropies,
             "value_loss": self.value_losses,
@@ -453,6 +460,7 @@ def train(
     tracker.start(config.num_envs)
 
     returns_trace: list[float] = []
+    variance_trace: list[float] = []
     episode_counts: list[int] = []
     kl_trace: list[float] = []
     entropy_trace: list[float] = []
@@ -603,6 +611,9 @@ def train(
         updates_done = update
         finished = tracker.returns[before:]
         returns_trace.append(float(np.mean(finished)) if finished else float("nan"))
+        variance_trace.append(
+            float(np.var(finished, ddof=1)) if len(finished) >= 2 else float("nan")
+        )
         episode_counts.append(len(finished))
         kl_trace.append(float(approx_kl.item()))
         entropy_trace.append(float(entropy_loss.item()))
@@ -648,6 +659,7 @@ def train(
         approx_kls=kl_trace,
         entropies=entropy_trace,
         value_losses=value_loss_trace,
+        return_variances=variance_trace,
     )
 
 
