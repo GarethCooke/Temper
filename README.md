@@ -49,6 +49,39 @@ shocks are iid normal. Alongside it: six exact per-episode identities, an exact 
 count, and a variational certificate that the schedule M2 grades against really is the
 minimiser. M3 (the frontier sweep) is next. See `ROADMAP.md`.
 
+## What this does and does not establish
+
+The honesty ladder, written while the limits are fresh (M3 task 6). Each rung is a claim
+the repo can back with a committed config, a committed result and a green suite — and each
+is deliberately narrower than it might sound.
+
+- **Phase 1 — the pipeline works.** The agent recovers Almgren–Chriss in a world where AC is
+  *provably* optimal. That is a statement about the optimiser, the environment and the
+  grading path agreeing with a closed form, not about trading: the world is arithmetic
+  Brownian motion with linear impact, the observation is `(time left, inventory left)`, and
+  the reward the headline agents train on is variance-reduced (M2's control variate, M3's
+  antithetic pairing) — on the realised reward at this case's ~1:70 per-episode
+  signal-to-noise ratio the same agent misses the bar as a lottery, and that miss is
+  committed beside the pass. The frontier (M3) is nine points of that same world.
+- **Phase 2 — the agent beats AC where AC's formula breaks, inside an AC-shaped market.**
+  When it lands (M4+), the "advantage" is earned against a *mis-specified* closed form —
+  FrontierView's calibrated 0.6-power temporary impact, stochastic liquidity, a weak alpha
+  signal — with the now-wrong AC schedule and TWAP still on every chart. It is still a
+  synthetic, AC-shaped market with realistic impact curvature: it says the agent adapts to
+  a model change the formula cannot, not that it would make money.
+- **Phase 3 — it runs on a wire against synthetic data.** The stretch leg (M6) works a parent
+  order on the live Anvil book. That is plumbing evidence — the policy speaks a versioned
+  venue protocol end to end — and not execution-quality evidence: the flow it trades
+  against is a synthetic feeder, non-adversarial by construction.
+
+**None of this establishes real-market performance.** That would need real fills, or
+historical order-book data to replay against, and neither is in the portfolio. Every number
+here is a statement about a simulator whose dynamics are analytic and whose parameters are
+FrontierView's calibrated synthetic set; the differential tests are what make it a *good*
+simulator, and the honest reading of the results is "the machinery is correct", not "the
+strategy would work". This is also the answer to the obvious interview question, and it is
+better volunteered than extracted.
+
 ## Layout
 
 ```
@@ -77,6 +110,7 @@ make smoke         # M2's PPO convergence check on Pendulum + CartPole
 make reference     # M2's oracle-only table, and the lambda its rule fixes
 make sweep         # M2's 5-seed sweeps, both estimators — hours, unattended
 make validate      # M3 task 1: antithetic pairing at M2's λ, 10 seeds — a night
+make frontier      # M3 tasks 4–5: the nine-λ sweep, then the frontier figure — a day
 ```
 
 `make test` is the per-commit gate and stays evening-sized (~15 s; the brief's ceiling is
@@ -97,8 +131,13 @@ the per-commit loop never waits on them:
   antithetic-pairing regime at M2's λ on ten seeds, everything else identical to M2's
   control-variate config, accepted against that run's committed median rather than
   against ε. A night, unattended, strictly serial with everything else on the box.
-  All three training targets go through one driver, `tools/train.py`, which reads
+  All the training targets go through one driver, `tools/train.py`, which reads
   the milestone, the reward regime and the λ off the config.
+- `make frontier` — M3's sweep, from `configs/m3_frontier.yaml` and the nine point configs
+  it generates under `configs/m3_frontier/` (byte-checked against the generator before
+  anything runs). Each λ is an ordinary experiment through `tools/train.py`; the aggregate
+  `results/m3_frontier.json` and the frontier figure are views of the nine results files
+  and redraw without training (`python tools/m3_frontier.py figure`).
 
 Everything regenerates from a committed config plus one root seed. Every entry in
 `results/` carries the config's SHA-256 and the git revision that produced it, and the

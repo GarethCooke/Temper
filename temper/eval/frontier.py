@@ -231,7 +231,24 @@ def stale_point_configs(manifest: FrontierManifest, repo_root: Path) -> list[Pat
 
 
 def point_experiments(manifest: FrontierManifest) -> list[Experiment]:
+    """Every point, in grid order (ascending lambda) — the reporting order."""
     return [load_experiment(manifest.point_config(lam)) for lam in manifest.lambdas]
+
+
+def run_order(manifest: FrontierManifest) -> list[Experiment]:
+    """Every point in the order a sweep should *run* them: the check point first.
+
+    The rule-selected lambda goes first because it is the one point comparable to
+    two committed results — M2's control-variate sweep and M3's full-budget
+    validation run — so it is where the amended update budget is checked against
+    a known answer. A budget that is wrong is then wrong after one point rather
+    than after nine. Everything else follows in grid order; reporting order is
+    unchanged (:func:`point_experiments`).
+    """
+    points = point_experiments(manifest)
+    selected = points[0].rule_selected().lambda_risk
+    first = [p for p in points if p.lambda_risk == selected]
+    return first + [p for p in points if p.lambda_risk != selected]
 
 
 # ---------------------------------------------------------------------------

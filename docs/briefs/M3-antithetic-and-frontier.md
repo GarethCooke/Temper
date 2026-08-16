@@ -145,6 +145,200 @@ That is why task 1 measures the real multiplier and task 2's grid is sized from 
    - **Below n ≈ 10, draw every trace.** An IQR band cannot display extremes at small n, so
      a band plot at n = 5 is structurally misleading rather than merely incomplete.
 
+## Task 1 — the pairing is validated, and it reproduces the variate bitwise
+
+**Status: green, gate met.** Ten seeds at λ = 10^−3.5, antithetic regime, everything else
+identical to `configs/m2_ppo.yaml` (`tests/test_m3_validation.py` asserts the config identity
+field by field). Graded analytically through the unchanged `GRADED` registry.
+
+| | antithetic pairing, 10 seeds |
+| --- | --- |
+| gap fraction, per seed | 0.000225, 0.000204, 0.000125, 0.000061, 0.000313, **0.001451**, 0.000047, 0.000083, 0.000205, 0.000131 |
+| **median** (gate ≤ **0.002**) | **0.000168** — met, 12× inside; the CV's committed median is 0.000204 |
+| IQR | 0.000126 |
+| worst seed | 0.001451 — inside the gate, and 69× inside the per-seed floor of 0.10 |
+| median excess over `J_optimal` | +0.0094 % |
+| median ‖δ‖₂ (band: 28 797) | **974 shares**; worst 4 168 |
+| red flags | none · **timeouts** none · every seed completed all 1 802 updates |
+| measured per-seed wall clock | 1 743–1 761 s (median **1 752 s**); one seed at 2 513 s under contention (below) |
+| realised reward variance per update, median across seeds | sampled half **3 377 bps²** · averaged **3.40e−08 bps²** · **ratio 1.0e−11** |
+
+The variance row is the direct evidence the brief asked for, and it is measured inside the
+run under the agent's own actions rather than inferred from the outcome: `PairLedger` records
+both halves' episode returns every update, so "what the sampled regime would have paid" and
+"what the agent actually trained on" are the same 512 episodes, differenced. The primary
+half's 3 377 bps² is the full Phase-1 noise — an episode-return standard deviation of ~58 bps
+against a 2.35 bps objective, M2's ~1:70 SNR restated per update. The averaged return's
+variance is eleven orders of magnitude smaller. That is cancellation, not reduction.
+
+### The finding: this is not "close to" the control variate's answer, it *is* it
+
+Seeds 0–4 of this run reproduce M2's control-variate seeds **bitwise** — the graded objective
+to all seventeen digits and the entire 14-point inventory trajectory, for all five seeds they
+share an address with:
+
+| seed | M2 control variate, `J` (bps) | M3 antithetic, `J` (bps) | equal |
+| --- | --- | --- | :---: |
+| 0 | 2.354848190645846 | 2.354848190645846 | bitwise |
+| 1 | 2.354821109991793 | 2.354821109991793 | bitwise |
+| 2 | 2.3547160907352476 | 2.3547160907352476 | bitwise |
+| 3 | 2.354630998039967 | 2.354630998039967 | bitwise |
+| 4 | 2.3549655346658245 | 2.3549655346658245 | bitwise |
+
+This was not designed for and it is worth stating why it happens, because the reason is a
+property of the boundary rather than a coincidence. The two estimators produce rewards that
+differ by a couple of ulps of the noise they remove — ~2e−17 bps on a ~0.013 reward after
+scaling, about 1e−15 relative. PPO's rollout buffers are **float32** (`AGENT_DTYPE`, the
+agent boundary; the env's core stays float64). A 1e−15 relative difference is ~7 orders of
+magnitude below float32's resolution, so both regimes hand the optimiser *the same
+float32 numbers*, and everything downstream — gradients, weights, the eval schedule — is
+identical by construction. Checked directly rather than inferred: over 40 episodes the
+float32-cast reward vectors of the two regimes are `torch.equal` on every one.
+
+So the gate's question — "does antithetic reproduce the answer a zero-variance reward already
+established?" — is answered in the strongest available form at this case. It also bounds the
+claim honestly: the two estimators agreeing bitwise *here* is a statement about this reward
+magnitude and this dtype, not a theorem. In Phase 2, where cost stops being affine in the
+shocks, the pairing's residual is a real quantity rather than an ulp, and this equality will
+break — which is the point of preferring the pairing, and the reason the mechanism is
+asserted per step (below) rather than trusted.
+
+Seeds 5–9 are new addresses with no M2 counterpart. Seed 5 is the worst of the ten at
+0.001451 — still 34× inside the gate — and is the only seed whose training return was still
+more than ε/10 from its final value at update 706. It is drawn individually on the figure.
+
+### The two structural checks are permanent, and live
+
+- **Action identity across the pair.** `AntitheticPair.step` requires, bitwise on every step,
+  that both halves report the same observation and realise the same trade, and raises
+  `PairDiverged` otherwise — in the wrapper, so it guards all 12 M steps of every training
+  run rather than a test fixture. `tests/test_m3_antithetic.py` asserts it for TWAP, both AC
+  schedules, a fraction policy and two freshly-initialised PPO networks, and proves the check
+  is not decorative by leaking 1e−12 of the shock into a mirror observation and requiring the
+  pair to refuse.
+- **Shock negation is exact.** The mirror is an `ExecutionEnv` at the *same seed address*
+  whose generator is wrapped in `NegatedDraws`, so its draws are the elementwise negation of
+  the primary's — checked at the generator over 2 000 draws, and per step through the
+  published cumulative shock (`m_walk == -walk`, bitwise). A mirror that drew fresh numbers
+  from a symmetric distribution fails both. `NegatedDraws` deliberately proxies only
+  `standard_normal`; anything else raises rather than silently returning a non-mirror.
+- **It costs one stream, not two.** The mirror shares the primary's `(root_seed, pool,
+  stream_index)`, so a pair spends exactly the stream the config addressed it to — asserted
+  through the conftest ledger that records every address the env resolves (invariant 5).
+
+### Retraction: the first run of this night is not the committed artefact
+
+The numbers above were produced by a run that started from a **dirty tree** — the M3 frontier
+tooling was being written while the validation trained, so `provenance.git_dirty` is `true`
+and the recorded revision `096f6a2` does not contain everything that ran. Under
+`ARCHITECTURE.md` §9 (*`git_dirty` asks whether the source is uncommitted…*) that is not an
+acceptance artefact, and `tests/test_m3_validation.py` refuses it. It was re-run from a
+committed tree; that run is what `results/m3_antithetic_validation.json` holds, and the
+comparison between the two is reported below. The discarded run is kept out of `results/` and
+is recorded here rather than described, in the same spirit as M2's three discarded attempts.
+
+The mistake is worth naming precisely because the guard that caught it was M2's, and it
+caught it *after* five hours rather than before: the provenance stamp is taken at the start of
+the run, so editing unrelated files while a sweep runs is safe — editing them in the window
+between launching a script and the sweep's own start is not. This run's script trained a
+control seed first, which widened that window to 25 minutes.
+
+## Task 2 — the measured multiplier, and the update budget
+
+**The pairing multiplier is ~1.17×, not 2×.** A pair shares one schedule, one set of network
+forward and backward passes, and one optimiser step; only the env stepping and the reward
+assembly double. Measured three ways, all on the reference box at the committed 512 envs and
+8 threads:
+
+| comparison | control variate | antithetic | multiplier |
+| --- | ---: | ---: | ---: |
+| full-length seed, same session, cold box → warm box | 1 493 s (seed 0, this session) | 1 752 s (median of 9) | **1.17×** |
+| full-length, against M2's committed per-seed median | 1 569 s | 1 752 s | 1.12× |
+| 30-update probe, back to back | 0.84 s/update | 0.93 s/update | 1.10× |
+
+The three disagree by less than the box's own thermal spread (M2 measured +25 % on a loaded
+host), so the honest statement is **1.1×–1.2×, and the sweep is sized at 1.2×**. The mirror is
+carried as a second env inside the same batch, exactly as the brief hoped; it is not a second
+training run.
+
+One seed of the ten took 2 513 s rather than ~1 752 s. That seed ran while this session was
+rendering figures and running the test suite on the same box, and it is the measurement of
+what contention costs rather than of what the pairing costs: the brief's serial-scheduling
+rule covers other sweeps, and this widens it to *anything* that uses the cores, editor tooling
+included. Its result is unaffected — 0.000131, mid-pack — which is the point M2 made about
+wall clock not being a property of the numbers.
+
+### Where the objective actually goes flat
+
+Measured on all ten antithetic traces (25-update moving mean of the training return, against
+each seed's own final value; ε is 5 % of the TWAP gap, 0.001326 in scaled reward units):
+
+| within … of the final return | last update below it, worst seed | 9 of 10 seeds |
+| --- | ---: | ---: |
+| ε | 62 | ≤ 62 |
+| ε/10 | 706 | ≤ 167 |
+| ε/100 | 1 519 | ≤ 1 225 |
+| ε/1000 | 1 754 | ≤ 1 754 |
+
+1 802 updates was M2's blind budget and it is *not* a third of heat: the objective keeps
+improving in ever-smaller amounts right to the end, and reaching the final ε/1000 needs
+essentially all of it. What the table does establish is that ε — the bar the frontier is
+actually judged against — is reached by update ~62, and ε/10 by ~170 on nine seeds of ten.
+The budget question is therefore not "when is it converged" but "how much precision does the
+frontier need", and the answer is that it needs to meet ε at nine λ, with the full-budget run
+at M2's λ committed beside it to show what the last thousand updates buy.
+
+## Amendment 1 — the sweep's update budget is cut to 751 updates (recorded before the sweep)
+
+**Status: invoked. Recorded 2026-08-16, before any frontier point was run**, from the task-1
+and task-2 measurements above and from nothing else.
+
+`configs/m3_frontier.yaml` sets `ppo.total_timesteps: 5000000` for every sweep point — 751
+updates at the committed batch size, against the validation run's 1 802. With
+`anneal_lr: true` this is a **re-anneal, not a truncation**: the learning rate reaches zero at
+update 751 rather than being cut off two-thirds of the way down its ramp. Stating it that way
+matters, because a truncated anneal would be a different experiment wearing the same
+hyperparameters, and M2's own truncation incident is what taught this repo the difference.
+
+*Why.* At 1 802 updates the nine-point sweep costs 9 × 10 × 1 752 s = **43.8 h**, which is
+nearly twice the brief's ~24 h ceiling; the brief's instruction is to thin the grid, never the
+seeds. At 751 updates it costs 9 × 10 × 730 s = **18.3 h**, inside the ceiling with a
+nine-point frontier intact. The alternative — 1 802 updates on a five-point grid — is 24.3 h,
+still over the ceiling, and buys precision the ε bar does not ask for at the cost of the
+frontier's shape, which is the milestone's actual product.
+
+*What it costs.* By the flat-point table, at update 751 every seed's training return is
+already within ε/10 of its own final value (nine within ε/100), so the expected graded gap is
+of order 1e−3 of the TWAP gap rather than the validation run's 1.7e−4 — still ~50× inside ε.
+That prediction is checked rather than assumed: the sweep runs its λ = 10^−3.5 point **first**
+and the point is directly comparable to both the full-budget validation run and to M2's
+committed control-variate result. If it misses, the budget is revisited before the remaining
+eight points run.
+
+*What does not change.* Ten seeds per λ, the seed addressing, the case, the tolerances, the
+estimator, the reward scale and every other hyperparameter — `tests/test_m3_frontier.py`
+asserts a sweep point differs from the validation config in `total_timesteps`, λ, the runtime
+bounds, the trace budget, the results paths and the claim's closing sentence, and in nothing
+else.
+
+## Task 3 — the grid, the seeds and the wall clock (recorded before the sweep)
+
+| item | value | how it was fixed |
+| --- | --- | --- |
+| λ grid | **9 points**, 10^−5 … 10^−1 in half decades: 1e−5, 10^−4.5, 1e−4, **10^−3.5**, 1e−3, 10^−2.5, 1e−2, 10^−1.5, 1e−1 | thinned from M0's 17-point grid by dropping the eight points below 1e−5, where TWAP, AC and the optimum agree to four digits (task 0's table: TWAP gap ≤ 0.44 %) and a frontier point measures nothing. Taken **by index** from `VENDOR_LAMBDA_GRID`, so each λ is the reference table's float exactly, and it contains M2's rule-selected 10^−3.5 |
+| seeds per λ | **10** — not negotiable | M2's IQR of 0.081 against a 0.05 tolerance |
+| updates per seed | 751 (5 M steps) | amendment 1 above |
+| measured per-seed cost | 1 752 s at 1 802 updates ⇒ **730 s** at 751 | task 1's measurement × 751/1802 |
+| **total wall-clock estimate** | **18.3 h** (9 × 10 × 730 s), plus grading and figure time | inside the ~24 h ceiling |
+| scheduling | strictly serial, one fresh process per point, nothing else on the box | M2's discarded concurrent run; and task 2's contended seed |
+| artifact size | 9 points × 10 seeds × 128 trace points ≈ **1.4 MB** of traces total, against M2's 1.2 MB for one 5-seed sweep | the ROADMAP's M3 pre-statement (`results.trace_points: 128`, `temper.eval.sweep.thin`); graded values and trajectories stay whole; full-resolution traces are kept at 10^−3.5 by the validation run |
+| per-λ tolerance | ε = 5 % of *that* λ's `(J_twap − J_optimal)/J_optimal`, median across seeds; per-seed floor 10 % | unchanged from the pre-stated table |
+
+The grid is generated, not hand-written: `configs/m3_frontier.yaml` is the manifest and
+`python tools/m3_frontier.py configs` stamps the nine point configs from the validation
+config; `tests/test_m3_frontier.py` asserts every committed point is byte-identical to what
+the generator writes, so a point cannot drift from the template it claims to be.
+
 ## Pre-stated numbers (invariant 3 — loosen only by amending this brief before work)
 
 | Item | Value |

@@ -15,10 +15,15 @@ byte-identically without training anything.
 
 ``run`` is strictly serial and runs each point in a fresh process — 512 envs at
 8 threads saturates the reference box, and two concurrent sweeps truncate each
-other (M2's first discarded run). It passes ``--expect any``: a lambda point that
-misses its per-lambda epsilon is a *finding* the frontier reports, not a reason
-to abandon the remaining points; a red flag anywhere still stops the run,
-because that is a defect rather than a result.
+other (M2's first discarded run). It runs **M2's rule-selected lambda first**
+(:func:`~temper.eval.frontier.run_order`), because that point is comparable to
+two committed results and is therefore where the amended update budget is
+checked against a known answer; ``--only <lambda>`` runs one point on its own for
+exactly that check, and ``--skip-done`` then continues the rest. It passes
+``--expect any``: a lambda point that misses its per-lambda epsilon is a
+*finding* the frontier reports, not a reason to abandon the remaining points; a
+red flag anywhere still stops the run, because that is a defect rather than a
+result.
 """
 
 from __future__ import annotations
@@ -39,6 +44,7 @@ from temper.eval.frontier import (  # noqa: E402
     aggregate,
     load_manifest,
     point_experiments,
+    run_order,
     stale_point_configs,
     write_point_configs,
 )
@@ -98,11 +104,17 @@ def cmd_status(manifest) -> int:
     return 0
 
 
-def cmd_run(manifest, *, quiet: bool, skip_done: bool) -> int:
+def cmd_run(manifest, *, quiet: bool, skip_done: bool, only: float | None = None) -> int:
     if stale_point_configs(manifest, REPO_ROOT):
         print("point configs are stale; run `configs` and commit before sweeping")
         return 1
-    for experiment in point_experiments(manifest):
+    order = run_order(manifest)
+    if only is not None:
+        order = [p for p in order if p.lambda_risk == only]
+        if not order:
+            print(f"no point at lambda = {only!r} on the {manifest.grid} grid")
+            return 1
+    for experiment in order:
         if skip_done and experiment.results_metrics.exists():
             print(f"  λ = {experiment.lambda_risk:.3e}: results exist, skipping")
             continue
@@ -198,6 +210,12 @@ def main() -> int:
     parser.add_argument(
         "--partial", action="store_true", help="figure: draw whatever points exist"
     )
+    parser.add_argument(
+        "--only",
+        type=float,
+        default=None,
+        help="run: a single lambda point (must be on the grid) — the budget check",
+    )
     args = parser.parse_args()
     manifest = load_manifest(args.manifest)
     if args.command == "configs":
@@ -207,7 +225,9 @@ def main() -> int:
     if args.command == "status":
         return cmd_status(manifest)
     if args.command == "run":
-        return cmd_run(manifest, quiet=args.quiet, skip_done=args.skip_done)
+        return cmd_run(
+            manifest, quiet=args.quiet, skip_done=args.skip_done, only=args.only
+        )
     return cmd_figure(manifest, allow_partial=args.partial)
 
 

@@ -7,8 +7,9 @@ GOLDENS := tests/golden/vendor/frontierview_goldens.json
 M2_CONFIG   ?= configs/m2_ppo.yaml
 M2_SAMPLED  ?= configs/m2_ppo_sampled.yaml
 M3_VALIDATE ?= configs/m3_antithetic_validation.yaml
+M3_FRONTIER ?= configs/m3_frontier.yaml
 
-.PHONY: help test test-verbose differential smoke sweep reference validate goldens clean
+.PHONY: help test test-verbose differential smoke sweep reference validate frontier frontier-check goldens clean
 
 help:
 	@echo "make test          run the pytest suite (the gate); excludes the marked tiers"
@@ -17,6 +18,7 @@ help:
 	@echo "make reference     M2 task 0: the oracle-only table, and the lambda it fixes"
 	@echo "make sweep         M2's 5-seed sweeps, both estimators - hours, unattended"
 	@echo "make validate      M3 task 1: antithetic pairing at M2's lambda, 10 seeds - a night"
+	@echo "make frontier      M3 tasks 4-5: the nine-lambda sweep, then the frontier figure - a day"
 	@echo "make goldens       re-export the FrontierView fixtures (read-only there)"
 	@echo "                   override the checkout with FRONTIERVIEW=/path/to/FrontierView"
 	@echo "make clean         remove caches and scratch results"
@@ -72,6 +74,23 @@ sweep:
 # the reference box, and two concurrent sweeps truncate each other (M2).
 validate:
 	$(PYTHON) tools/train.py --config $(M3_VALIDATE) --quiet --expect pass
+
+# M3 tasks 4-5 — the frontier sweep. `check` refuses to start if a committed
+# point config is not what the generator writes from the manifest; `run` takes
+# each of the nine lambda points through tools/train.py in a fresh process,
+# strictly serially, with `--expect any` (a per-lambda epsilon miss is a finding
+# the frontier reports; a red flag still stops it); `figure` aggregates the nine
+# results files into results/m3_frontier.json and draws results/m3_frontier.png
+# — and redraws it byte-identically from the committed JSON without training.
+frontier:
+	$(PYTHON) tools/m3_frontier.py check
+	$(PYTHON) tools/m3_frontier.py run --quiet
+	$(PYTHON) tools/m3_frontier.py figure
+
+# The amended update budget, checked at the one lambda two committed results
+# already answer, before the other eight points spend sixteen hours on it.
+frontier-check:
+	$(PYTHON) tools/m3_frontier.py run --quiet --only 3.1622776601683794e-04
 
 # Regenerates $(GOLDENS) from a FrontierView checkout. Writes nothing into that
 # repo — the export imports its `api` package and nothing more (constitution §7).
