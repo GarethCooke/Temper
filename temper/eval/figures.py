@@ -629,17 +629,25 @@ def degradation_figure(
     axes.set_yscale("log")
     axes.set_xlabel(r"$\lambda$ (risk aversion)")
     axes.set_ylabel(r"excess over the certified power-law optimum, $(J - J^*_{pow})\,/\,J^*_{pow}$")
-    axes.set_title(
-        "M4a — the Almgren-Chriss schedule in the world it was linearised from",
-        fontsize=11.5,
-        pad=10.0,
-    )
     axes.grid(True, which="both", alpha=0.25, linewidth=0.6)
     axes.legend(frameon=False, fontsize=8.5, loc="upper left")
 
+    # Headline and caption as one text block rather than a title plus a caption.
+    # A three-line wrapped caption and an axes title occupy the same strip of
+    # canvas, and matplotlib will happily draw them on top of each other without
+    # a word of complaint — which is how a figure ends up illegible in the one
+    # place nobody re-reads it, the committed artefact.
     figure.text(
         0.012,
-        0.965,
+        0.985,
+        "M4a — the Almgren-Chriss schedule in the world it was linearised from",
+        fontsize=11.5,
+        color="#111111",
+        va="top",
+    )
+    figure.text(
+        0.012,
+        0.945,
         caption,
         fontsize=8.0,
         color="#333333",
@@ -654,7 +662,7 @@ def degradation_figure(
         color="#666666",
         family="monospace",
     )
-    figure.subplots_adjust(left=0.105, right=0.985, top=0.845, bottom=0.105)
+    figure.subplots_adjust(left=0.105, right=0.985, top=0.800, bottom=0.105)
 
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)

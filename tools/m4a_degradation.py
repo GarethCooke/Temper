@@ -80,21 +80,25 @@ def caption(experiment, document: dict, curves: dict) -> str:
     summary = document["summary"]
     verdict = document["verdict"]
     capture = summary["capture_fraction"]
+    optimum = document["reference"]["schedules"]["optimal"]
+    advantage = curves["available_advantage_bps"]
     return (
         f"Excess over the certified optimum of FrontierView's 0.6-power world, "
         f"{experiment.case.symbol} X={experiment.case.order_size:,.0f} "
         f"T={experiment.case.market.horizon_hours}h N={experiment.case.market.n_bins}. "
         f"The closed form is derived at the tangent to this world's impact "
-        f"function, so it does not solve it: at "
-        f"$\\lambda=10^{{-3.5}}$ that costs "
-        f"{curves['available_advantage_bps']:.4f} bps "
-        f"({100 * curves['available_advantage_bps'] / (document['reference']['schedules']['optimal']['objective_bps']):.2f}% "
-        f"of expected cost). The agent captured a median "
-        f"{capture['median']:.1%} of it (IQR {capture['iqr']:.1%}, worst seed "
-        f"{capture['worst']:.1%}), a median absolute excess of "
-        f"{verdict['median_excess_bps']:+.5f} bps. "
+        f"function, so it does not solve it: at $\\lambda=10^{{-3.5}}$ that costs "
+        f"{advantage:.4f} bps — "
+        f"{100 * advantage / optimum['objective_bps']:.2f}% of the objective "
+        f"$E+\\lambda V$, {100 * advantage / optimum['expected_bps']:.2f}% of "
+        f"expected cost alone. The agent captured a median {capture['median']:.1%} "
+        f"of it (IQR {capture['iqr']:.1%}, worst seed {capture['worst']:.1%}), a "
+        f"median absolute excess of {verdict['median_excess_bps']:+.5f} bps. "
         f"{len(document['seeds'])} seeds, each drawn. Graded analytically — the "
-        f"dispersion here is across seeds, not a sampling interval."
+        f"dispersion here is across seeds, not a sampling interval. Curves are "
+        f"clipped at 1e-7: below $\\lambda\\approx10^{{-7}}$ all three schedules "
+        f"and the optimum agree to four decimal places in bps, so the flat left "
+        f"end is the clip, not a floor in the objective."
     )
 
 
