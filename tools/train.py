@@ -274,6 +274,38 @@ def write_figure(experiment: Experiment, document: dict) -> None:
     # characters runs off the canvas, and matplotlib will not tell you. The
     # no-gate form is M2's, character for character, so M2's committed figures
     # still redraw byte-identically; a gated run gets a fourth line.
+    capture = summary.get("capture_fraction")
+    if capture is not None:
+        # M4a is not a rediscovery run and its caption must not say it is: the
+        # agent is beating a closed form, not reproducing one, and the number it
+        # leads with is the capture fraction with the absolute excess beside it.
+        caption = (
+            f"{experiment.milestone} — {experiment.case.symbol}, "
+            f"X = {experiment.case.order_size:,.0f} shares, "
+            f"λ = {experiment.lambda_risk:.3e}, {len(document['seeds'])} seeds\n"
+            f"{experiment.cost_encoding} world · estimator: {estimator}\n"
+            f"captured {capture['median']:.1%} of the "
+            f"{verdict['denominator_bps']:.4f} bps the tangent left on the table "
+            f"(worst seed {capture['worst']:.1%}); median excess over the "
+            f"certified optimum {verdict['median_excess_bps']:+.5f} bps"
+        )
+        written = trajectory_overlay(
+            experiment.results_figure,
+            hours=experiment.case.market.times,
+            agent_trajectories=[
+                record["grade"]["trajectory"] for record in document["seeds"]
+            ],
+            reference=experiment.reference(),
+            order_size=experiment.case.order_size,
+            band=experiment.band(),
+            provenance=Provenance(**document["provenance"]),
+            caption=caption,
+            formats=experiment.figure_formats,
+        )
+        for path in written:
+            print(f"  wrote {path.relative_to(REPO_ROOT)}")
+        return
+
     caption = (
         f"{experiment.milestone} rediscovery — {experiment.case.symbol}, "
         f"X = {experiment.case.order_size:,.0f} shares, "

@@ -36,6 +36,12 @@ STYLE: dict[str, dict] = {
     "twap": {"color": "#8c8c8c", "linestyle": (0, (6, 3)), "linewidth": 1.6},
     "ac": {"color": "#c1663c", "linestyle": (0, (2, 2)), "linewidth": 1.6},
     "optimal": {"color": "#1f4e79", "linestyle": "-", "linewidth": 2.0},
+    # M4a. In the power-law world `optimal` is the *certified* optimum of that
+    # world and this is the sinh the closed form actually produces — a schedule
+    # like any other there, and the one the agent's advantage is measured over.
+    # Given its own hue rather than sharing the optimum's, because the whole
+    # point of the figure is that they are not the same curve.
+    "tangent": {"color": "#7b5ea7", "linestyle": (0, (5, 2, 1, 2)), "linewidth": 1.8},
     "agent": {"color": "#227a4b", "linestyle": "-", "linewidth": 2.0},
 }
 
@@ -49,6 +55,7 @@ LABELS = {
     "twap": "TWAP",
     "ac": "AC (vendored $\\kappa$)",
     "optimal": "optimal (exact discrete)",
+    "tangent": "AC at the tangent — the closed form's answer",
     "agent": "PPO agent, median",
 }
 
@@ -99,7 +106,13 @@ def trajectory_overlay(
         gridspec_kw={"height_ratios": (2.2, 1.0), "hspace": 0.12},
     )
 
-    for name in ("twap", "ac", "optimal"):
+    # `tangent` only exists in a world where the closed form is not the optimum
+    # (M4a). Drawn when it is there, because the distance from it to `optimal` is
+    # the milestone; absent from the Phase-1 figures, which stay byte-identical.
+    drawn = ("twap", "ac", "optimal")
+    if "tangent" in reference.schedules:
+        drawn = ("twap", "ac", "tangent", "optimal")
+    for name in drawn:
         top.plot(
             times,
             reference.schedules[name].trajectory / order_size,
@@ -164,6 +177,15 @@ def trajectory_overlay(
         label="TWAP $-$ optimal",
         **STYLE["twap"],
     )
+    if reference.tangent is not None:
+        # The residual panel is where M4a's claim is legible: the agent sits on
+        # zero and the schedule the vendored library would have run does not.
+        bottom.plot(
+            times,
+            reference.tangent.trajectory - optimum,
+            label="AC at the tangent $-$ optimal",
+            **STYLE["tangent"],
+        )
 
     # The band is a bound on the L2 norm of the whole interior deviation vector,
     # not on any one bin, so it is drawn as a horizontal reference rather than as
