@@ -298,8 +298,9 @@ def write_figure(experiment: Experiment, document: dict) -> None:
             f"{experiment.cost_encoding} world · estimator: {estimator}\n"
             f"captured {capture['median']:.1%} of the "
             f"{verdict['denominator_bps']:.4f} bps the tangent left on the table "
-            f"(worst seed {capture['worst']:.1%}); median excess over the "
-            f"certified optimum {verdict['median_excess_bps']:+.5f} bps"
+            f"(worst seed {capture['worst']:.1%})\n"
+            f"median excess over the certified optimum "
+            f"{verdict['median_excess_bps']:+.5f} bps"
         )
         written = trajectory_overlay(
             experiment.results_figure,

@@ -358,6 +358,7 @@ def build_document(sweep: SweepResult) -> dict:
     # Which fraction the pre-stated bars are read on. The denominator is the
     # committed decision (`tolerances.denominator`); this is the field it names.
     graded_on = summary[tolerances.graded_attribute]
+    red_flags = [g.name for g in sweep.grades if g.red_flag]
     verdict = {
         "tolerance_denominator": tolerances.denominator,
         "graded_attribute": tolerances.graded_attribute,
