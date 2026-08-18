@@ -1,0 +1,4435 @@
+{
+  "milestone": "M3",
+  "claim": "PPO trained on the antithetic-averaged reward: each episode is run as (\u03be, \u2212\u03be) \u2014 the same actions against the shock path and its exact negation \u2014 and the two realised rewards are averaged. The observation carries no price, so both halves take identical actions, and because Phase-1 cost is affine in the shocks the noise cancels exactly on the average; the agent optimises the expected objective without the analytic noise form ever being subtracted. Under Phase-1 certainty equivalence the optimal policy is unchanged, so what is rediscovered does not move. This is NOT a claim about learning under noise: it is a claim about a variance-reduction estimator that needs only the ability to replay with negated draws, validated at M2's lambda against the control variate's committed answer (results/m3_antithetic_validation.json against results/m2_rediscovery.json) and against the sampled regime's recorded miss (results/m2_rediscovery_sampled.json). This file is one point of the M3 frontier sweep at the lambda it names, on the update budget the brief's amendment 1 fixed.",
+  "provenance": {
+    "config": "m3_frontier.yaml",
+    "config_sha256": "cbe5f3ae36856dae43c881e3b2f97cb08076f8ddbfaa23fa5fa07af71cef0c9b",
+    "git_rev": "508edff06c6199bd3264614a57cd6806f8e5db12",
+    "git_dirty": true,
+    "python": "3.12.2"
+  },
+  "grid": {
+    "name": "m3",
+    "lambdas": [
+      1e-05,
+      3.1622776601683795e-05,
+      0.0001,
+      0.00031622776601683794,
+      0.001,
+      0.0031622776601683794,
+      0.01,
+      0.03162277660168379,
+      0.1
+    ]
+  },
+  "template": "m3_antithetic_validation.yaml",
+  "overrides": {
+    "estimator": {
+      "regime": "antithetic",
+      "claim": "PPO trained on the antithetic-averaged reward: each episode is run as (\u03be, \u2212\u03be) \u2014 the same actions against the shock path and its exact negation \u2014 and the two realised rewards are averaged. The observation carries no price, so both halves take identical actions, and because Phase-1 cost is affine in the shocks the noise cancels exactly on the average; the agent optimises the expected objective without the analytic noise form ever being subtracted. Under Phase-1 certainty equivalence the optimal policy is unchanged, so what is rediscovered does not move. This is NOT a claim about learning under noise: it is a claim about a variance-reduction estimator that needs only the ability to replay with negated draws, validated at M2's lambda against the control variate's committed answer (results/m3_antithetic_validation.json against results/m2_rediscovery.json) and against the sampled regime's recorded miss (results/m2_rediscovery_sampled.json). This file is one point of the M3 frontier sweep at the lambda it names, on the update budget the brief's amendment 1 fixed."
+    },
+    "ppo": {
+      "total_timesteps": 5000000
+    },
+    "runtime": {
+      "seconds_per_seed": 1200,
+      "sweep_seconds": 12000
+    },
+    "results": {
+      "trace_points": 128
+    }
+  },
+  "case": {
+    "case_id": "frontier",
+    "params_from": "core:AAPL:X100000:T6.5:lam1e-05",
+    "symbol": "AAPL",
+    "order_size": 100000.0,
+    "horizon_hours": 6.5,
+    "n_bins": 13,
+    "params": {
+      "adv": 60000000,
+      "sigma": 0.0155,
+      "half_spread": 0.3,
+      "eta": 0.142,
+      "gamma": 0.314
+    }
+  },
+  "estimator": {
+    "regime": "antithetic",
+    "control_variate": false,
+    "claim": "PPO trained on the antithetic-averaged reward: each episode is run as (\u03be, \u2212\u03be) \u2014 the same actions against the shock path and its exact negation \u2014 and the two realised rewards are averaged. The observation carries no price, so both halves take identical actions, and because Phase-1 cost is affine in the shocks the noise cancels exactly on the average; the agent optimises the expected objective without the analytic noise form ever being subtracted. Under Phase-1 certainty equivalence the optimal policy is unchanged, so what is rediscovered does not move. This is NOT a claim about learning under noise: it is a claim about a variance-reduction estimator that needs only the ability to replay with negated draws, validated at M2's lambda against the control variate's committed answer (results/m3_antithetic_validation.json against results/m2_rediscovery.json) and against the sampled regime's recorded miss (results/m2_rediscovery_sampled.json). This file is one point of the M3 frontier sweep at the lambda it names, on the update budget the brief's amendment 1 fixed."
+  },
+  "variance_floor_bps2": 1848.0769230769229,
+  "curves": {
+    "lambda": [
+      1e-05,
+      1.1547819846894581e-05,
+      1.333521432163324e-05,
+      1.539926526059492e-05,
+      1.778279410038923e-05,
+      2.0535250264571462e-05,
+      2.3713737056616554e-05,
+      2.7384196342643615e-05,
+      3.1622776601683795e-05,
+      3.651741272548377e-05,
+      4.216965034285822e-05,
+      4.869675251658631e-05,
+      5.623413251903491e-05,
+      6.493816315762113e-05,
+      7.498942093324559e-05,
+      8.659643233600654e-05,
+      0.0001,
+      0.00011547819846894582,
+      0.0001333521432163324,
+      0.0001539926526059492,
+      0.00017782794100389227,
+      0.0002053525026457146,
+      0.00023713737056616554,
+      0.0002738419634264361,
+      0.00031622776601683794,
+      0.0003651741272548377,
+      0.00042169650342858224,
+      0.0004869675251658631,
+      0.0005623413251903491,
+      0.0006493816315762113,
+      0.0007498942093324559,
+      0.0008659643233600654,
+      0.001,
+      0.0011547819846894581,
+      0.001333521432163324,
+      0.001539926526059492,
+      0.0017782794100389228,
+      0.002053525026457146,
+      0.0023713737056616554,
+      0.0027384196342643613,
+      0.0031622776601683794,
+      0.003651741272548377,
+      0.004216965034285823,
+      0.004869675251658631,
+      0.005623413251903491,
+      0.006493816315762113,
+      0.007498942093324558,
+      0.008659643233600654,
+      0.01,
+      0.011547819846894581,
+      0.01333521432163324,
+      0.01539926526059492,
+      0.01778279410038923,
+      0.02053525026457146,
+      0.023713737056616554,
+      0.027384196342643614,
+      0.03162277660168379,
+      0.03651741272548377,
+      0.042169650342858224,
+      0.04869675251658631,
+      0.05623413251903491,
+      0.06493816315762113,
+      0.07498942093324558,
+      0.08659643233600653,
+      0.1
+    ],
+    "twap": [
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 0.9375576991454757
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 0.9514200744399341
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 0.9674280956949789
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 0.9859138702508305
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 1.0072609096809588
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 1.0319120862413262
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 1.0603788208346379
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 1.0932516931059302
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 1.1312126937898164
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 1.175049373500352
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 1.2256711814986807
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 1.2841283334075593
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 1.3516335993081872
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 1.4295874642419042
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 1.5196071831042754
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 1.6235603327133519
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 1.7436035571336412
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 1.8822273100782252
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 2.042307522628673
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 2.227165268187189
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 2.440635662488471
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 2.687147428092147
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 2.9718147740252627
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 3.300543496738186
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 3.6801535035770465
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 4.1185203006824045
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 4.624738380665691
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 5.209309899754477
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 5.884362558760757
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 6.663901208097926
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 7.56409839672164
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 8.603629892812403
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 9.804062137015299
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 11.190299666461135
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 12.791101791965612
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 14.639679247550774
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 16.774383190563594
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 19.239500846600354
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 22.08617430593151
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 25.373461533060745
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 29.16956160144935
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 33.55322957250293
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 38.615410372335795
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 44.46112556322365
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 51.21165215328646
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 59.00703864665813
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 68.00901053289527
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 78.40432549380292
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 90.40864793583185
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 104.27102323029023
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 120.27904448533499
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 138.7648190411866
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 160.11185847131486
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 184.76303503168242
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 213.22976962499396
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 246.10264189628631
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 284.06364258017237
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 327.9003222907082
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 378.5221302890368
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 436.97928219791544
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 504.4845480985435
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 582.4384130322602
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 672.4581318946316
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 776.411281503708
+      },
+      {
+        "expected_bps": 0.8479970482579018,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 896.4545059239974
+      }
+    ],
+    "ac": [
+      {
+        "expected_bps": 0.905781799876803,
+        "excess_variance_bps2": 4351.299403118286,
+        "objective_bps": 0.967775563138755
+      },
+      {
+        "expected_bps": 0.9189463042306292,
+        "excess_variance_bps2": 4107.1169023043885,
+        "objective_bps": 0.9877158096794716
+      },
+      {
+        "expected_bps": 0.9344241156272546,
+        "excess_variance_bps2": 3858.560204387015,
+        "objective_bps": 1.0105233447777757
+      },
+      {
+        "expected_bps": 0.9524251229382138,
+        "excess_variance_bps2": 3608.2977020866256,
+        "objective_bps": 1.0364492831522865
+      },
+      {
+        "expected_bps": 0.9731348746015049,
+        "excess_variance_bps2": 3359.0509626136,
+        "objective_bps": 1.0657321576471346
+      },
+      {
+        "expected_bps": 0.9967091965759332,
+        "excess_variance_bps2": 3113.4575222199155,
+        "objective_bps": 1.0985955481063954
+      },
+      {
+        "expected_bps": 1.0232721355251075,
+        "excess_variance_bps2": 2873.9395628887396,
+        "objective_bps": 1.1352487928503057
+      },
+      {
+        "expected_bps": 1.0529177910707568,
+        "excess_variance_bps2": 2642.593396750738,
+        "objective_bps": 1.1758911888189996
+      },
+      {
+        "expected_bps": 1.0857159461591497,
+        "excess_variance_bps2": 2421.111837792466,
+        "objective_bps": 1.2207195486145417
+      },
+      {
+        "expected_bps": 1.1217206959937618,
+        "excess_variance_bps2": 2210.746357208343,
+        "objective_bps": 1.2699384208997406
+      },
+      {
+        "expected_bps": 1.1609806910435077,
+        "excess_variance_bps2": 2012.309546491308,
+        "objective_bps": 1.323771838653501
+      },
+      {
+        "expected_bps": 1.203549306391399,
+        "excess_variance_bps2": 1826.2123316908778,
+        "objective_bps": 1.382475260905179
+      },
+      {
+        "expected_bps": 1.2494931110879575,
+        "excess_variance_bps2": 1652.5259461386008,
+        "objective_bps": 1.4463464767319372
+      },
+      {
+        "expected_bps": 1.298897413107293,
+        "excess_variance_bps2": 1491.0566952414742,
+        "objective_bps": 1.5157346168187509
+      },
+      {
+        "expected_bps": 1.3518682733306426,
+        "excess_variance_bps2": 1341.422119141494,
+        "objective_bps": 1.591046959573743
+      },
+      {
+        "expected_bps": 1.4085310341019321,
+        "excess_variance_bps2": 1203.1196929117168,
+        "objective_bps": 1.6727537754022446
+      },
+      {
+        "expected_bps": 1.4690259190928192,
+        "excess_variance_bps2": 1075.5827244296897,
+        "objective_bps": 1.7613918838434806
+      },
+      {
+        "expected_bps": 1.533501520273108,
+        "excess_variance_bps2": 958.2216072557981,
+        "objective_bps": 1.8575678189219809
+      },
+      {
+        "expected_bps": 1.6021069770606238,
+        "excess_variance_bps2": 850.4513110457374,
+        "objective_bps": 1.9619615006106654
+      },
+      {
+        "expected_bps": 1.6749834401471102,
+        "excess_variance_bps2": 751.7076035416544,
+        "objective_bps": 2.075331155605007
+      },
+      {
+        "expected_bps": 1.7522551133212787,
+        "excess_variance_bps2": 661.455041543144,
+        "objective_bps": 2.1985200154731177
+      },
+      {
+        "expected_bps": 1.8340198948003392,
+        "excess_variance_bps2": 579.189540131204,
+        "objective_bps": 2.3324651376081404
+      },
+      {
+        "expected_bps": 1.9203394707849872,
+        "excess_variance_bps2": 504.4377052516247,
+        "objective_bps": 2.478208603965259
+      },
+      {
+        "expected_bps": 2.01122867314203,
+        "excess_variance_bps2": 436.7544115843002,
+        "objective_bps": 2.636911371923904
+      },
+      {
+        "expected_bps": 2.10664398570132,
+        "excess_variance_bps2": 375.7195181942393,
+        "objective_bps": 2.809870166400694
+      },
+      {
+        "expected_bps": 2.2064712379067393,
+        "excess_variance_bps2": 320.93420905469065,
+        "objective_bps": 2.9985379850889284
+      },
+      {
+        "expected_bps": 2.310512731183345,
+        "excess_variance_bps2": 272.01721243428256,
+        "objective_bps": 3.2045490150678635
+      },
+      {
+        "expected_bps": 2.418474283890742,
+        "excess_variance_bps2": 228.60104550572032,
+        "objective_bps": 3.4297490148179035
+      },
+      {
+        "expected_bps": 2.529952944714445,
+        "excess_variance_bps2": 190.3283993766861,
+        "objective_bps": 3.6762324950180685
+      },
+      {
+        "expected_bps": 2.644426400727628,
+        "excess_variance_bps2": 156.84878831746505,
+        "objective_bps": 3.946388330382012
+      },
+      {
+        "expected_bps": 2.7612453743007572,
+        "excess_variance_bps2": 127.81561183104168,
+        "objective_bps": 4.242955744491467
+      },
+      {
+        "expected_bps": 2.8796305259372454,
+        "excess_variance_bps2": 102.88380469322055,
+        "objective_bps": 4.569092912462779
+      },
+      {
+        "expected_bps": 2.998675504088559,
+        "excess_variance_bps2": 81.70826743964244,
+        "objective_bps": 4.928460694605124
+      },
+      {
+        "expected_bps": 3.117357740726043,
+        "excess_variance_bps2": 63.94326841572024,
+        "objective_bps": 5.325324212224235
+      },
+      {
+        "expected_bps": 3.2345583122667194,
+        "excess_variance_bps2": 49.24297954859139,
+        "objective_bps": 5.764675066087873
+      },
+      {
+        "expected_bps": 3.3490916124275496,
+        "excess_variance_bps2": 37.2632446038283,
+        "objective_bps": 6.2523769472845885
+      },
+      {
+        "expected_bps": 3.459744696339407,
+        "excess_variance_bps2": 27.66457856920215,
+        "objective_bps": 6.795337187272201
+      },
+      {
+        "expected_bps": 3.5653249943271375,
+        "excess_variance_bps2": 20.116265076226455,
+        "objective_bps": 7.401706460456394
+      },
+      {
+        "expected_bps": 3.664713778493755,
+        "excess_variance_bps2": 14.301269980294137,
+        "objective_bps": 8.081108455507305
+      },
+      {
+        "expected_bps": 3.756921494933513,
+        "excess_variance_bps2": 9.921547298183668,
+        "objective_bps": 8.844900986641855
+      },
+      {
+        "expected_bps": 3.8411401039313833,
+        "excess_variance_bps2": 6.703208699079596,
+        "objective_bps": 9.706469879170799
+      },
+      {
+        "expected_bps": 3.916787158416522,
+        "excess_variance_bps2": 4.400989215294885,
+        "objective_bps": 10.681557207218265
+      },
+      {
+        "expected_bps": 3.9835366889684365,
+        "excess_variance_bps2": 2.801490080573103,
+        "objective_bps": 11.788626239968027
+      },
+      {
+        "expected_bps": 4.041333108513783,
+        "excess_variance_bps2": 1.7248174695359921,
+        "objective_bps": 13.049266864927933
+      },
+      {
+        "expected_bps": 4.0903861831062045,
+        "excess_variance_bps2": 1.0244445471678318,
+        "objective_bps": 14.488647317916385
+      },
+      {
+        "expected_bps": 4.131147352034144,
+        "excess_variance_bps2": 0.5853653262067837,
+        "objective_bps": 16.136020682800513
+      },
+      {
+        "expected_bps": 4.1642699306864985,
+        "excess_variance_bps2": 0.3208336616771703,
+        "objective_bps": 18.025297673900273
+      },
+      {
+        "expected_bps": 4.190557593290877,
+        "excess_variance_bps2": 0.16814352800838606,
+        "objective_bps": 20.19570047835206
+      },
+      {
+        "expected_bps": 4.210906698938507,
+        "excess_variance_bps2": 0.08397774720629059,
+        "objective_bps": 22.6925157071798
+      },
+      {
+        "expected_bps": 4.22624833952595,
+        "excess_variance_bps2": 0.03982572705899656,
+        "objective_bps": 25.56796761074286
+      },
+      {
+        "expected_bps": 4.23749547475481,
+        "excess_variance_bps2": 0.017864720276975277,
+        "objective_bps": 28.882235556723774
+      },
+      {
+        "expected_bps": 4.245499346605987,
+        "excess_variance_bps2": 0.007548416040890515,
+        "objective_bps": 32.704642347112504
+      },
+      {
+        "expected_bps": 4.251017791618193,
+        "excess_variance_bps2": 0.0029909087913893018,
+        "objective_bps": 37.115042383091186
+      },
+      {
+        "expected_bps": 4.254696375558415,
+        "excess_variance_bps2": 0.0011059995285904733,
+        "objective_bps": 42.20544121109932
+      },
+      {
+        "expected_bps": 4.257061715132299,
+        "excess_variance_bps2": 0.00037972819063725183,
+        "objective_bps": 48.081880934153894
+      },
+      {
+        "expected_bps": 4.258525118193138,
+        "excess_variance_bps2": 0.000120379290819983,
+        "objective_bps": 54.86662973253041
+      },
+      {
+        "expected_bps": 4.259393885219619,
+        "excess_variance_bps2": 3.502735580696026e-05,
+        "objective_bps": 62.70071867407056
+      },
+      {
+        "expected_bps": 4.25988730997682,
+        "excess_variance_bps2": 9.295277322962647e-06,
+        "objective_bps": 71.7468753978584
+      },
+      {
+        "expected_bps": 4.260154561141641,
+        "excess_variance_bps2": 2.234253543065279e-06,
+        "objective_bps": 82.19291230821847
+      },
+      {
+        "expected_bps": 4.260292120680013,
+        "excess_variance_bps2": 4.828480086871423e-07,
+        "objective_bps": 94.25563669888439
+      },
+      {
+        "expected_bps": 4.260359156748919,
+        "excess_variance_bps2": 9.307882464781869e-08,
+        "objective_bps": 108.18536175966109
+      },
+      {
+        "expected_bps": 4.260389961936755,
+        "excess_variance_bps2": 1.5868863556534052e-08,
+        "objective_bps": 124.2711107215709
+      },
+      {
+        "expected_bps": 4.260403252902355,
+        "excess_variance_bps2": 2.371052687522024e-09,
+        "objective_bps": 142.84662155471284
+      },
+      {
+        "expected_bps": 4.260408611944194,
+        "excess_variance_bps2": 3.0740920919924974e-10,
+        "objective_bps": 164.29727683293672
+      },
+      {
+        "expected_bps": 4.260410621257713,
+        "excess_variance_bps2": 3.410605131648481e-11,
+        "objective_bps": 189.0681029289534
+      }
+    ],
+    "optimal": [
+      {
+        "expected_bps": 0.8518313852192635,
+        "excess_variance_bps2": 6310.281045642859,
+        "objective_bps": 0.9334149649064614
+      },
+      {
+        "expected_bps": 0.8529949395191176,
+        "excess_variance_bps2": 6202.239597749985,
+        "objective_bps": 0.9459585444121059
+      },
+      {
+        "expected_bps": 0.854491025427065,
+        "excess_variance_bps2": 6081.934323647362,
+        "objective_bps": 0.9602394249750954
+      },
+      {
+        "expected_bps": 0.8564051352511493,
+        "excess_variance_bps2": 5948.636745218603,
+        "objective_bps": 0.9764687971901381
+      },
+      {
+        "expected_bps": 0.8588405280200001,
+        "excess_variance_bps2": 5801.759415481033,
+        "objective_bps": 0.9948759925302517
+      },
+      {
+        "expected_bps": 0.8619201626953004,
+        "excess_variance_bps2": 5640.9103471245435,
+        "objective_bps": 1.0157083905170774
+      },
+      {
+        "expected_bps": 0.8657881182262419,
+        "excess_variance_bps2": 5465.950745080401,
+        "objective_bps": 1.039231047173743
+      },
+      {
+        "expected_bps": 0.8706101733391858,
+        "excess_variance_bps2": 5277.0520876760775,
+        "objective_bps": 1.065726105136312
+      },
+      {
+        "expected_bps": 0.8765731880981323,
+        "excess_variance_bps2": 5074.7471933810575,
+        "objective_bps": 1.0954921085856322
+      },
+      {
+        "expected_bps": 0.8838829474011151,
+        "excess_variance_bps2": 4859.968756009238,
+        "objective_bps": 1.1288434200457025
+      },
+      {
+        "expected_bps": 0.8927602166136117,
+        "excess_variance_bps2": 4634.068283620796,
+        "objective_bps": 1.1661100134516889
+      },
+      {
+        "expected_bps": 0.9034349378987132,
+        "excess_variance_bps2": 4398.808816253806,
+        "objective_bps": 1.207637986746294
+      },
+      {
+        "expected_bps": 0.9161387627246143,
+        "excess_variance_bps2": 4156.326532396343,
+        "objective_bps": 1.253791182337449
+      },
+      {
+        "expected_bps": 0.9310964458770671,
+        "excess_variance_bps2": 3909.0594840943777,
+        "objective_bps": 1.3049543092066376
+      },
+      {
+        "expected_bps": 0.948516962286915,
+        "excess_variance_bps2": 3659.6459914917605,
+        "objective_bps": 1.361537914311188
+      },
+      {
+        "expected_bps": 0.968585466542275,
+        "excess_variance_bps2": 3410.8000474664495,
+        "objective_bps": 1.423985450285317
+      },
+      {
+        "expected_bps": 0.9914573033308373,
+        "excess_variance_bps2": 3165.1754627904556,
+        "objective_bps": 1.492782541917575
+      },
+      {
+        "expected_bps": 1.017255122613465,
+        "excess_variance_bps2": 2925.233326582973,
+        "objective_bps": 1.5684683909775439
+      },
+      {
+        "expected_bps": 1.0460697363422213,
+        "excess_variance_bps2": 2693.127768744401,
+        "objective_bps": 1.6516491147806591
+      },
+      {
+        "expected_bps": 1.077964729696994,
+        "excess_variance_bps2": 2470.622624114859,
+        "objective_bps": 1.7430127287771682
+      },
+      {
+        "expected_bps": 1.1129841388371273,
+        "excess_variance_bps2": 2259.0467755739855,
+        "objective_bps": 1.843345489616509
+      },
+      {
+        "expected_bps": 1.1511619016751529,
+        "excess_variance_bps2": 2059.2897456059814,
+        "objective_bps": 1.9535494258436361
+      },
+      {
+        "expected_bps": 1.1925314402744547,
+        "excess_variance_bps2": 1871.8329539984124,
+        "objective_bps": 2.0746610872672075
+      },
+      {
+        "expected_bps": 1.2371337383861014,
+        "excess_variance_bps2": 1696.807347991526,
+        "objective_bps": 2.207871807294976
+      },
+      {
+        "expected_bps": 1.2850226279841521,
+        "excess_variance_bps2": 1534.065746971804,
+        "objective_bps": 2.354550048883884
+      },
+      {
+        "expected_bps": 1.336266585451921,
+        "excess_variance_bps2": 1383.2584217149392,
+        "objective_bps": 2.516266649853999
+      },
+      {
+        "expected_bps": 1.3909469893483255,
+        "excess_variance_bps2": 1243.9026601638038,
+        "objective_bps": 2.694823968273505
+      },
+      {
+        "expected_bps": 1.449153333252411,
+        "excess_variance_bps2": 1115.4404366106123,
+        "objective_bps": 2.892290047685523
+      },
+      {
+        "expected_bps": 1.5109762008336491,
+        "excess_variance_bps2": 997.2817929392163,
+        "objective_bps": 3.1110389918400747
+      },
+      {
+        "expected_bps": 1.5764988665924853,
+        "excess_variance_bps2": 888.8343743823766,
+        "objective_bps": 3.3537987904159707
+      },
+      {
+        "expected_bps": 1.6457882405030242,
+        "excess_variance_bps2": 789.5213402549489,
+        "objective_bps": 3.623707904720937
+      },
+      {
+        "expected_bps": 1.7188856348268704,
+        "excess_variance_bps2": 698.7905830475934,
+        "objective_bps": 3.9243820314557243
+      },
+      {
+        "expected_bps": 1.795797607369902,
+        "excess_variance_bps2": 616.1180953759999,
+        "objective_bps": 4.259992625822825
+      },
+      {
+        "expected_bps": 1.876487003842651,
+        "excess_variance_bps2": 541.007782792864,
+        "objective_bps": 4.635358982078194
+      },
+      {
+        "expected_bps": 1.9608643089581284,
+        "excess_variance_bps2": 472.98935139442665,
+        "objective_bps": 5.056055931437154
+      },
+      {
+        "expected_bps": 2.048779504241212,
+        "excess_variance_bps2": 411.61530923844794,
+        "objective_bps": 5.5285395135142394
+      },
+      {
+        "expected_bps": 2.1400147788975348,
+        "excess_variance_bps2": 356.45769603991585,
+        "objective_bps": 6.060293300791008
+      },
+      {
+        "expected_bps": 2.234278601992246,
+        "excess_variance_bps2": 307.104896178269,
+        "objective_bps": 6.659998404398224
+      },
+      {
+        "expected_bps": 2.33120179870122,
+        "excess_variance_bps2": 263.1587535934286,
+        "objective_bps": 7.337730568812084
+      },
+      {
+        "expected_bps": 2.430336347491526,
+        "excess_variance_bps2": 224.23214378538069,
+        "objective_bps": 8.105188184451315
+      },
+      {
+        "expected_bps": 2.5311576021719167,
+        "excess_variance_bps2": 189.9471276178765,
+        "objective_bps": 8.97595552856995
+      },
+      {
+        "expected_bps": 2.633070522544032,
+        "excess_variance_bps2": 159.9337876581751,
+        "objective_bps": 9.96580611065459
+      },
+      {
+        "expected_bps": 2.73542025949093,
+        "excess_variance_bps2": 133.82981599583013,
+        "objective_bps": 11.093051679376165
+      },
+      {
+        "expected_bps": 2.837507090648047,
+        "excess_variance_bps2": 111.2808772088656,
+        "objective_bps": 12.378943279844044
+      },
+      {
+        "expected_bps": 2.9386052695343783,
+        "excess_variance_bps2": 91.94171205959515,
+        "objective_bps": 13.848131771300796
+      },
+      {
+        "expected_bps": 3.0379848867008716,
+        "excess_variance_bps2": 75.477882144364,
+        "objective_bps": 15.529196465109479
+      },
+      {
+        "expected_bps": 3.1349354178824944,
+        "excess_variance_bps2": 61.56799212965484,
+        "objective_bps": 17.455252055828307
+      },
+      {
+        "expected_bps": 3.228789329665922,
+        "excess_variance_bps2": 49.90617504830425,
+        "objective_bps": 19.66464582283445
+      },
+      {
+        "expected_bps": 3.3189439945454837,
+        "excess_variance_bps2": 40.2045972437395,
+        "objective_bps": 22.20175919775211
+      },
+      {
+        "expected_bps": 3.404880271125624,
+        "excess_variance_bps2": 32.19573938737608,
+        "objective_bps": 25.117930240304172
+      },
+      {
+        "expected_bps": 3.486176425911726,
+        "excess_variance_bps2": 25.634239713304623,
+        "objective_bps": 28.47251635855604
+      },
+      {
+        "expected_bps": 3.562516561184495,
+        "excess_variance_bps2": 20.2981405376147,
+        "objective_bps": 32.33411977206566
+      },
+      {
+        "expected_bps": 3.633693286802426,
+        "excess_variance_bps2": 15.989449810941096,
+        "objective_bps": 36.782001785326685
+      },
+      {
+        "expected_bps": 3.699604937749677,
+        "excess_variance_bps2": 12.534004031454515,
+        "objective_bps": 41.907715970916534
+      },
+      {
+        "expected_bps": 3.7602481089733377,
+        "excess_variance_bps2": 9.780685894200815,
+        "objective_bps": 47.8169949367489
+      },
+      {
+        "expected_bps": 3.8157065971236843,
+        "excess_variance_bps2": 7.600101007090643,
+        "objective_bps": 54.631930573172916
+      },
+      {
+        "expected_bps": 3.8661379834996605,
+        "excess_variance_bps2": 5.882848512892224,
+        "objective_bps": 62.493493668993096
+      },
+      {
+        "expected_bps": 3.9117590757633405,
+        "excess_variance_bps2": 4.537530455670776,
+        "objective_bps": 71.56444569660964
+      },
+      {
+        "expected_bps": 3.9528312838690023,
+        "excess_variance_bps2": 3.488637492309408,
+        "objective_bps": 82.03270355995181
+      },
+      {
+        "expected_bps": 3.989646785527432,
+        "excess_variance_bps2": 2.6744292210476033,
+        "objective_bps": 94.11522735811914
+      },
+      {
+        "expected_bps": 4.022516085304323,
+        "excess_variance_bps2": 2.04490153753909,
+        "objective_bps": 108.06251194703263
+      },
+      {
+        "expected_bps": 4.051757327391825,
+        "excess_variance_bps2": 1.5599059065291385,
+        "objective_bps": 124.1637755102642
+      },
+      {
+        "expected_bps": 4.077687510987393,
+        "excess_variance_bps2": 1.187459839676876,
+        "objective_bps": 142.75295273837892
+      },
+      {
+        "expected_bps": 4.100615592288631,
+        "excess_variance_bps2": 0.9022663548498713,
+        "objective_bps": 164.21561686060133
+      },
+      {
+        "expected_bps": 4.120837341288605,
+        "excess_variance_bps2": 0.6844436618623604,
+        "objective_bps": 188.99697401516713
+      }
+    ],
+    "variance_floor_bps2": 1848.0769230769229
+  },
+  "points": [
+    {
+      "role": "sweep",
+      "lambda": 1e-05,
+      "log10_lambda": -5.0,
+      "name": "lambda_1e-5.0",
+      "config": "lambda_1e-5.0.yaml",
+      "metrics": "lambda_1e-5.0.json",
+      "provenance": {
+        "config": "lambda_1e-5.0.yaml",
+        "config_sha256": "172ca945bdd0f9329cf26f98a29ddb2c658117817d9393eda75a366c24eb9456",
+        "git_rev": "fa304d1d4231c553b806590127a92241191ae8b7",
+        "git_dirty": false,
+        "python": "3.12.2"
+      },
+      "updates": 751,
+      "n_seeds": 10,
+      "twap_gap": 0.0044382556470256435,
+      "kappa_horizon": 0.9189693051954362,
+      "variance_floor_bps2": 1848.0769230769229,
+      "baselines": {
+        "twap": {
+          "expected_bps": 0.8479970482579018,
+          "variance_bps2": 8956.065088757396,
+          "excess_variance_bps2": 7107.988165680473,
+          "objective_bps": 0.9375576991454757,
+          "gap_fraction": 1.0
+        },
+        "ac": {
+          "expected_bps": 0.905781799876803,
+          "variance_bps2": 6199.376326195209,
+          "excess_variance_bps2": 4351.299403118286,
+          "objective_bps": 0.967775563138755,
+          "gap_fraction": 8.294183563285694
+        },
+        "optimal": {
+          "expected_bps": 0.8518313852192635,
+          "variance_bps2": 8158.357968719782,
+          "excess_variance_bps2": 6310.281045642859,
+          "objective_bps": 0.9334149649064614,
+          "gap_fraction": 0.0
+        }
+      },
+      "tolerances": {
+        "epsilon_gap_fraction": 0.05,
+        "per_seed_gap_fraction": 0.1,
+        "red_flag_rtol": 1e-09
+      },
+      "band": {
+        "delta_objective_bps": 0.00020713671195071726,
+        "curvature_floor_bps_per_share2": 4.666486571766747e-11,
+        "bound_shares": 2979.535242020966,
+        "bound_fraction_of_X": 0.02979535242020966
+      },
+      "seeds": [
+        {
+          "ordinal": 0,
+          "expected_bps": 0.8518126619199655,
+          "variance_bps2": 8185.564257988017,
+          "excess_variance_bps2": 6337.487334911094,
+          "objective_bps": 0.9336683044998457,
+          "relative_excess": 0.0002714115403214563,
+          "gap_fraction": 0.06115275051885449,
+          "deviation_shares": 741.4203174400513,
+          "red_flag": false,
+          "seconds": 693.0415008999989,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 1,
+          "expected_bps": 0.8518954089272988,
+          "variance_bps2": 8168.917549754107,
+          "excess_variance_bps2": 6320.840626677184,
+          "objective_bps": 0.9335845844248398,
+          "relative_excess": 0.0001817193046561652,
+          "gap_fraction": 0.040943857025889624,
+          "deviation_shares": 774.5273066965257,
+          "red_flag": false,
+          "seconds": 694.635177600001,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 2,
+          "expected_bps": 0.8520446442110206,
+          "variance_bps2": 8145.99880981716,
+          "excess_variance_bps2": 6297.921886740237,
+          "objective_bps": 0.9335046323091921,
+          "relative_excess": 9.606381523970832e-05,
+          "gap_fraction": 0.021644497946864953,
+          "deviation_shares": 543.8016135388036,
+          "red_flag": false,
+          "seconds": 691.6102663999991,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 3,
+          "expected_bps": 0.8523552689491579,
+          "variance_bps2": 8138.323339489335,
+          "excess_variance_bps2": 6290.246416412412,
+          "objective_bps": 0.9337385023440513,
+          "relative_excess": 0.0003466169386114044,
+          "gap_fraction": 0.07809756043316127,
+          "deviation_shares": 662.8315258463252,
+          "red_flag": false,
+          "seconds": 689.273751700006,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 4,
+          "expected_bps": 0.8522387627289956,
+          "variance_bps2": 8157.509514307229,
+          "excess_variance_bps2": 6309.432591230307,
+          "objective_bps": 0.9338138578720678,
+          "relative_excess": 0.0004273479434159717,
+          "gap_fraction": 0.09628736544330534,
+          "deviation_shares": 760.7078043625854,
+          "red_flag": false,
+          "seconds": 698.4358264000039,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 5,
+          "expected_bps": 0.8519651855264438,
+          "variance_bps2": 8155.991347885766,
+          "excess_variance_bps2": 6307.914424808843,
+          "objective_bps": 0.9335250990053016,
+          "relative_excess": 0.00011799050045360525,
+          "gap_fraction": 0.026584881502415968,
+          "deviation_shares": 371.3100863402324,
+          "red_flag": false,
+          "seconds": 691.0781384000074,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 6,
+          "expected_bps": 0.8548240786261596,
+          "variance_bps2": 8081.190845279984,
+          "excess_variance_bps2": 6233.1139222030615,
+          "objective_bps": 0.9356359870789595,
+          "relative_excess": 0.002379458500240201,
+          "gap_fraction": 0.5361247051721383,
+          "deviation_shares": 2821.9014988056674,
+          "red_flag": false,
+          "seconds": 690.2431573000067,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 7,
+          "expected_bps": 0.8518609418749534,
+          "variance_bps2": 8161.28609424751,
+          "excess_variance_bps2": 6313.209171170587,
+          "objective_bps": 0.9334738028174285,
+          "relative_excess": 6.303510569178099e-05,
+          "gap_fraction": 0.01420267571428086,
+          "deviation_shares": 335.3348541985264,
+          "red_flag": false,
+          "seconds": 692.0055201000068,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 8,
+          "expected_bps": 0.851929895308984,
+          "variance_bps2": 8183.94156797947,
+          "excess_variance_bps2": 6335.864644902547,
+          "objective_bps": 0.9337693109887787,
+          "relative_excess": 0.0003796233140025074,
+          "gap_fraction": 0.08553435047323538,
+          "deviation_shares": 790.0679952933449,
+          "red_flag": false,
+          "seconds": 691.9265624999971,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 9,
+          "expected_bps": 0.8528022854348243,
+          "variance_bps2": 8146.815844089517,
+          "excess_variance_bps2": 6298.738921012594,
+          "objective_bps": 0.9342704438757194,
+          "relative_excess": 0.0009165044502407478,
+          "gap_fraction": 0.20650104976601688,
+          "deviation_shares": 1137.3290591145355,
+          "red_flag": false,
+          "seconds": 700.1746218999906,
+          "updates": 751,
+          "timed_out": false
+        }
+      ],
+      "summary": {
+        "gap_fraction": {
+          "name": "gap_fraction",
+          "values": [
+            0.06115275051885449,
+            0.040943857025889624,
+            0.021644497946864953,
+            0.07809756043316127,
+            0.09628736544330534,
+            0.026584881502415968,
+            0.5361247051721383,
+            0.01420267571428086,
+            0.08553435047323538,
+            0.20650104976601688
+          ],
+          "median": 0.06962515547600788,
+          "q1": 0.03017462538328438,
+          "q3": 0.09359911170078784,
+          "iqr": 0.06342448631750347,
+          "worst": 0.5361247051721383
+        },
+        "relative_excess": {
+          "name": "relative_excess",
+          "values": [
+            0.0002714115403214563,
+            0.0001817193046561652,
+            9.606381523970832e-05,
+            0.0003466169386114044,
+            0.0004273479434159717,
+            0.00011799050045360525,
+            0.002379458500240201,
+            6.303510569178099e-05,
+            0.0003796233140025074,
+            0.0009165044502407478
+          ],
+          "median": 0.00030901423946643033,
+          "q1": 0.00013392270150424523,
+          "q3": 0.0004154167860626056,
+          "iqr": 0.0002814940845583604,
+          "worst": 0.002379458500240201
+        },
+        "expected_bps": {
+          "name": "expected_bps",
+          "values": [
+            0.8518126619199655,
+            0.8518954089272988,
+            0.8520446442110206,
+            0.8523552689491579,
+            0.8522387627289956,
+            0.8519651855264438,
+            0.8548240786261596,
+            0.8518609418749534,
+            0.851929895308984,
+            0.8528022854348243
+          ],
+          "median": 0.8520049148687322,
+          "q1": 0.8519040305227201,
+          "q3": 0.8523261423941173,
+          "iqr": 0.00042211187139717943,
+          "worst": 0.8548240786261596
+        },
+        "excess_variance_bps2": {
+          "name": "excess_variance_bps2",
+          "values": [
+            6337.487334911094,
+            6320.840626677184,
+            6297.921886740237,
+            6290.246416412412,
+            6309.432591230307,
+            6307.914424808843,
+            6233.1139222030615,
+            6313.209171170587,
+            6335.864644902547,
+            6298.738921012594
+          ],
+          "median": 6308.673508019575,
+          "q1": 6298.126145308326,
+          "q3": 6318.932762800535,
+          "iqr": 20.806617492208716,
+          "worst": 6337.487334911094
+        },
+        "objective_bps": {
+          "name": "objective_bps",
+          "values": [
+            0.9336683044998457,
+            0.9335845844248398,
+            0.9335046323091921,
+            0.9337385023440513,
+            0.9338138578720678,
+            0.9335250990053016,
+            0.9356359870789595,
+            0.9334738028174285,
+            0.9337693109887787,
+            0.9342704438757194
+          ],
+          "median": 0.9337034034219485,
+          "q1": 0.9335399703601861,
+          "q3": 0.9338027211512455,
+          "iqr": 0.00026275079105941845,
+          "worst": 0.9356359870789595
+        },
+        "deviation_shares": {
+          "name": "deviation_shares",
+          "values": [
+            741.4203174400513,
+            774.5273066965257,
+            543.8016135388036,
+            662.8315258463252,
+            760.7078043625854,
+            371.3100863402324,
+            2821.9014988056674,
+            335.3348541985264,
+            790.0679952933449,
+            1137.3290591145355
+          ],
+          "median": 751.0640609013184,
+          "q1": 573.559091615684,
+          "q3": 786.1828231441401,
+          "iqr": 212.62373152845612,
+          "worst": 2821.9014988056674
+        }
+      },
+      "epsilon_met": false,
+      "per_seed_met": false,
+      "red_flags": [],
+      "timed_out": [],
+      "sweep_seconds": 6935.667912800003,
+      "reward_variance": {
+        "unit": "bps^2 of episode return, unscaled",
+        "sampled_median": 8066.1827047872675,
+        "averaged_median": 9.704773942202224e-08,
+        "variance_ratio_median": 1.2111112677629716e-11
+      }
+    },
+    {
+      "role": "sweep",
+      "lambda": 3.1622776601683795e-05,
+      "log10_lambda": -4.5,
+      "name": "lambda_1e-4.5",
+      "config": "lambda_1e-4.5.yaml",
+      "metrics": "lambda_1e-4.5.json",
+      "provenance": {
+        "config": "lambda_1e-4.5.yaml",
+        "config_sha256": "6a01676094f60b80e5eba7c067e43bfcdc0a50b266ca0d8865cf7fa93d9d012c",
+        "git_rev": "640008b3c22b042850bd092c9686885e206f8583",
+        "git_dirty": false,
+        "python": "3.12.2"
+      },
+      "updates": 751,
+      "n_seeds": 10,
+      "twap_gap": 0.03260688500102692,
+      "kappa_horizon": 1.633449726454002,
+      "variance_floor_bps2": 1848.0769230769229,
+      "baselines": {
+        "twap": {
+          "expected_bps": 0.8479970482579018,
+          "variance_bps2": 8956.065088757396,
+          "excess_variance_bps2": 7107.988165680473,
+          "objective_bps": 1.1312126937898164,
+          "gap_fraction": 1.0
+        },
+        "ac": {
+          "expected_bps": 1.0857159461591497,
+          "variance_bps2": 4269.188760869389,
+          "excess_variance_bps2": 2421.111837792466,
+          "objective_bps": 1.2207195486145417,
+          "gap_fraction": 3.5057499565891983
+        },
+        "optimal": {
+          "expected_bps": 0.8765731880981323,
+          "variance_bps2": 6922.82411645798,
+          "excess_variance_bps2": 5074.7471933810575,
+          "objective_bps": 1.0954921085856322,
+          "gap_fraction": 0.0
+        }
+      },
+      "tolerances": {
+        "epsilon_gap_fraction": 0.05,
+        "per_seed_gap_fraction": 0.1,
+        "red_flag_rtol": 1e-09
+      },
+      "band": {
+        "delta_objective_bps": 0.0017860292602092098,
+        "curvature_floor_bps_per_share2": 5.465697660775136e-11,
+        "bound_shares": 8084.189408747974,
+        "bound_fraction_of_X": 0.08084189408747974
+      },
+      "seeds": [
+        {
+          "ordinal": 0,
+          "expected_bps": 0.8782734685396636,
+          "variance_bps2": 6901.5057560179675,
+          "excess_variance_bps2": 5053.428832941045,
+          "objective_bps": 1.0965182432774547,
+          "relative_excess": 0.0009366883465252684,
+          "gap_fraction": 0.028726704390676032,
+          "deviation_shares": 1595.1514563225332,
+          "red_flag": false,
+          "seconds": 828.1681927,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 1,
+          "expected_bps": 0.8776430367026855,
+          "variance_bps2": 6920.50031848853,
+          "excess_variance_bps2": 5072.423395411607,
+          "objective_bps": 1.0964884722461299,
+          "relative_excess": 0.0009095124033199082,
+          "gap_fraction": 0.02789326252082234,
+          "deviation_shares": 1555.2060578437188,
+          "red_flag": false,
+          "seconds": 832.1510973000004,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 2,
+          "expected_bps": 0.8775941418735941,
+          "variance_bps2": 6905.643714241596,
+          "excess_variance_bps2": 5057.566791164673,
+          "objective_bps": 1.095969770339878,
+          "relative_excess": 0.0004360248243710359,
+          "gap_fraction": 0.013372170459009004,
+          "deviation_shares": 1112.6582589961922,
+          "red_flag": false,
+          "seconds": 813.4635245999998,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 3,
+          "expected_bps": 0.8795584877302751,
+          "variance_bps2": 6897.9382382750055,
+          "excess_variance_bps2": 5049.861315198083,
+          "objective_bps": 1.097690447651458,
+          "relative_excess": 0.002006713739512021,
+          "gap_fraction": 0.06154263860067657,
+          "deviation_shares": 1958.889983761925,
+          "red_flag": false,
+          "seconds": 807.2231159999997,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 4,
+          "expected_bps": 0.8802218226219504,
+          "variance_bps2": 6865.962945626622,
+          "excess_variance_bps2": 5017.886022549699,
+          "objective_bps": 1.0973426350069397,
+          "relative_excess": 0.0016892193077472195,
+          "gap_fraction": 0.05180560202834522,
+          "deviation_shares": 2134.7990593987165,
+          "red_flag": false,
+          "seconds": 799.2258436000002,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 5,
+          "expected_bps": 0.8832244724898087,
+          "variance_bps2": 6788.1986648452885,
+          "excess_variance_bps2": 4940.121741768366,
+          "objective_bps": 1.0978861623960594,
+          "relative_excess": 0.0021853683761521086,
+          "gap_fraction": 0.06702168502398444,
+          "deviation_shares": 3925.7247288904496,
+          "red_flag": false,
+          "seconds": 826.0169332999994,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 6,
+          "expected_bps": 0.8798135383542747,
+          "variance_bps2": 6872.419612398236,
+          "excess_variance_bps2": 5024.342689321313,
+          "objective_bps": 1.0971385284701745,
+          "relative_excess": 0.0015029043766165897,
+          "gap_fraction": 0.04609162686252481,
+          "deviation_shares": 2581.2517807599515,
+          "red_flag": false,
+          "seconds": 798.8030706,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 7,
+          "expected_bps": 0.8765184557096426,
+          "variance_bps2": 6927.80025958775,
+          "excess_variance_bps2": 5079.723336510827,
+          "objective_bps": 1.095594735659673,
+          "relative_excess": 9.368125359957137e-05,
+          "gap_fraction": 0.002873051307925335,
+          "deviation_shares": 381.574285842119,
+          "red_flag": false,
+          "seconds": 808.7753650999994,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 8,
+          "expected_bps": 0.8781682835511326,
+          "variance_bps2": 6909.91040788534,
+          "excess_variance_bps2": 5061.833484808417,
+          "objective_bps": 1.0966788367173406,
+          "relative_excess": 0.0010832831404331638,
+          "gap_fraction": 0.033222527708459335,
+          "deviation_shares": 1370.3335477481326,
+          "red_flag": false,
+          "seconds": 812.5105460000004,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 9,
+          "expected_bps": 0.8798399094464084,
+          "variance_bps2": 6924.267505071549,
+          "excess_variance_bps2": 5076.190581994626,
+          "objective_bps": 1.0988044738895844,
+          "relative_excess": 0.003023632281777647,
+          "gap_fraction": 0.09272987228563602,
+          "deviation_shares": 2558.9666617617736,
+          "red_flag": false,
+          "seconds": 841.5201635000012,
+          "updates": 751,
+          "timed_out": false
+        }
+      ],
+      "summary": {
+        "gap_fraction": {
+          "name": "gap_fraction",
+          "values": [
+            0.028726704390676032,
+            0.02789326252082234,
+            0.013372170459009004,
+            0.06154263860067657,
+            0.05180560202834522,
+            0.06702168502398444,
+            0.04609162686252481,
+            0.002873051307925335,
+            0.033222527708459335,
+            0.09272987228563602
+          ],
+          "median": 0.03965707728549207,
+          "q1": 0.028101622988285762,
+          "q3": 0.05910837945759373,
+          "iqr": 0.031006756469307967,
+          "worst": 0.09272987228563602
+        },
+        "relative_excess": {
+          "name": "relative_excess",
+          "values": [
+            0.0009366883465252684,
+            0.0009095124033199082,
+            0.0004360248243710359,
+            0.002006713739512021,
+            0.0016892193077472195,
+            0.0021853683761521086,
+            0.0015029043766165897,
+            9.368125359957137e-05,
+            0.0010832831404331638,
+            0.003023632281777647
+          ],
+          "median": 0.0012930937585248767,
+          "q1": 0.0009163063891212482,
+          "q3": 0.0019273401315708205,
+          "iqr": 0.0010110337424495722,
+          "worst": 0.003023632281777647
+        },
+        "expected_bps": {
+          "name": "expected_bps",
+          "values": [
+            0.8782734685396636,
+            0.8776430367026855,
+            0.8775941418735941,
+            0.8795584877302751,
+            0.8802218226219504,
+            0.8832244724898087,
+            0.8798135383542747,
+            0.8765184557096426,
+            0.8781682835511326,
+            0.8798399094464084
+          ],
+          "median": 0.8789159781349694,
+          "q1": 0.8777743484147973,
+          "q3": 0.8798333166733749,
+          "iqr": 0.0020589682585776536,
+          "worst": 0.8832244724898087
+        },
+        "excess_variance_bps2": {
+          "name": "excess_variance_bps2",
+          "values": [
+            5053.428832941045,
+            5072.423395411607,
+            5057.566791164673,
+            5049.861315198083,
+            5017.886022549699,
+            4940.121741768366,
+            5024.342689321313,
+            5079.723336510827,
+            5061.833484808417,
+            5076.190581994626
+          ],
+          "median": 5055.497812052859,
+          "q1": 5030.722345790506,
+          "q3": 5069.7759177608095,
+          "iqr": 39.05357197030389,
+          "worst": 5079.723336510827
+        },
+        "objective_bps": {
+          "name": "objective_bps",
+          "values": [
+            1.0965182432774547,
+            1.0964884722461299,
+            1.095969770339878,
+            1.097690447651458,
+            1.0973426350069397,
+            1.0978861623960594,
+            1.0971385284701745,
+            1.095594735659673,
+            1.0966788367173406,
+            1.0988044738895844
+          ],
+          "median": 1.0969086825937575,
+          "q1": 1.096495915003961,
+          "q3": 1.0976034944903283,
+          "iqr": 0.001107579486367305,
+          "worst": 1.0988044738895844
+        },
+        "deviation_shares": {
+          "name": "deviation_shares",
+          "values": [
+            1595.1514563225332,
+            1555.2060578437188,
+            1112.6582589961922,
+            1958.889983761925,
+            2134.7990593987165,
+            3925.7247288904496,
+            2581.2517807599515,
+            381.574285842119,
+            1370.3335477481326,
+            2558.9666617617736
+          ],
+          "median": 1777.0207200422292,
+          "q1": 1416.5516752720291,
+          "q3": 2452.9247611710093,
+          "iqr": 1036.3730858989802,
+          "worst": 3925.7247288904496
+        }
+      },
+      "epsilon_met": true,
+      "per_seed_met": true,
+      "red_flags": [],
+      "timed_out": [],
+      "sweep_seconds": 8172.399118899999,
+      "reward_variance": {
+        "unit": "bps^2 of episode return, unscaled",
+        "sampled_median": 6844.758032274365,
+        "averaged_median": 3.6063813875849746e-07,
+        "variance_ratio_median": 5.3367772611295454e-11
+      }
+    },
+    {
+      "role": "sweep",
+      "lambda": 0.0001,
+      "log10_lambda": -4.0,
+      "name": "lambda_1e-4.0",
+      "config": "lambda_1e-4.0.yaml",
+      "metrics": "lambda_1e-4.0.json",
+      "provenance": {
+        "config": "lambda_1e-4.0.yaml",
+        "config_sha256": "4377fa68c3eb03f1b1907a95533d918caac4322f63d9b3d1a35733b0e37fb0bd",
+        "git_rev": "7ad5dd935edd7bd842f34eaba1f316c5c252999c",
+        "git_dirty": false,
+        "python": "3.12.2"
+      },
+      "updates": 751,
+      "n_seeds": 10,
+      "twap_gap": 0.16802247358404288,
+      "kappa_horizon": 2.900620537849542,
+      "variance_floor_bps2": 1848.0769230769229,
+      "baselines": {
+        "twap": {
+          "expected_bps": 0.8479970482579018,
+          "variance_bps2": 8956.065088757396,
+          "excess_variance_bps2": 7107.988165680473,
+          "objective_bps": 1.7436035571336412,
+          "gap_fraction": 1.0
+        },
+        "ac": {
+          "expected_bps": 1.4690259190928192,
+          "variance_bps2": 2923.6596475066126,
+          "excess_variance_bps2": 1075.5827244296897,
+          "objective_bps": 1.7613918838434806,
+          "gap_fraction": 1.070920399929471
+        },
+        "optimal": {
+          "expected_bps": 0.9914573033308373,
+          "variance_bps2": 5013.2523858673785,
+          "excess_variance_bps2": 3165.1754627904556,
+          "objective_bps": 1.492782541917575,
+          "gap_fraction": 0.0
+        }
+      },
+      "tolerances": {
+        "epsilon_gap_fraction": 0.05,
+        "per_seed_gap_fraction": 0.1,
+        "red_flag_rtol": 1e-09
+      },
+      "band": {
+        "delta_objective_bps": 0.012541050760803307,
+        "curvature_floor_bps_per_share2": 7.993025033305208e-11,
+        "bound_shares": 17714.39702525435,
+        "bound_fraction_of_X": 0.17714397025254353
+      },
+      "seeds": [
+        {
+          "ordinal": 0,
+          "expected_bps": 0.9922196900601838,
+          "variance_bps2": 5015.9251043157365,
+          "excess_variance_bps2": 3167.8481812388136,
+          "objective_bps": 1.4938122004917576,
+          "relative_excess": 0.0006897579153490136,
+          "gap_fraction": 0.004105152725322811,
+          "deviation_shares": 1460.9691537469296,
+          "red_flag": false,
+          "seconds": 916.8751635999997,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 1,
+          "expected_bps": 0.990233833131273,
+          "variance_bps2": 5035.739944214064,
+          "excess_variance_bps2": 3187.663021137141,
+          "objective_bps": 1.4938078275526794,
+          "relative_excess": 0.0006868285274740983,
+          "gap_fraction": 0.004087718224970392,
+          "deviation_shares": 1665.9774423180806,
+          "red_flag": false,
+          "seconds": 916.8766713999994,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 2,
+          "expected_bps": 0.9898854231273608,
+          "variance_bps2": 5035.622856920075,
+          "excess_variance_bps2": 3187.545933843152,
+          "objective_bps": 1.4934477088193683,
+          "relative_excess": 0.0004455886126178438,
+          "gap_fraction": 0.0026519584143306018,
+          "deviation_shares": 1179.5017202388096,
+          "red_flag": false,
+          "seconds": 810.7469913000004,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 3,
+          "expected_bps": 0.9910095547695463,
+          "variance_bps2": 5030.919293305991,
+          "excess_variance_bps2": 3182.8423702290684,
+          "objective_bps": 1.4941014841001454,
+          "relative_excess": 0.0008835460929735093,
+          "gap_fraction": 0.005258499497875622,
+          "deviation_shares": 1933.9840318338051,
+          "red_flag": false,
+          "seconds": 864.529170400001,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 4,
+          "expected_bps": 0.9947273009444952,
+          "variance_bps2": 4989.230654475778,
+          "excess_variance_bps2": 3141.1537313988547,
+          "objective_bps": 1.493650366392073,
+          "relative_excess": 0.0005813468808277873,
+          "gap_fraction": 0.0034599352600115387,
+          "deviation_shares": 1870.1781180809037,
+          "red_flag": false,
+          "seconds": 860.7302574999994,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 5,
+          "expected_bps": 0.9931995057935803,
+          "variance_bps2": 4999.9781743445155,
+          "excess_variance_bps2": 3151.9012512675927,
+          "objective_bps": 1.4931973232280318,
+          "relative_excess": 0.0002778578251081888,
+          "gap_fraction": 0.0016536944087375764,
+          "deviation_shares": 1361.4169852126333,
+          "red_flag": false,
+          "seconds": 856.087012,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 6,
+          "expected_bps": 0.9957066990375234,
+          "variance_bps2": 4978.225411192372,
+          "excess_variance_bps2": 3130.1484881154493,
+          "objective_bps": 1.4935292401567606,
+          "relative_excess": 0.0005002056349254413,
+          "gap_fraction": 0.0029770162541693825,
+          "deviation_shares": 1316.301538760185,
+          "red_flag": false,
+          "seconds": 820.3437610000001,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 7,
+          "expected_bps": 0.9913566123403592,
+          "variance_bps2": 5022.632975514815,
+          "excess_variance_bps2": 3174.5560524378925,
+          "objective_bps": 1.4936199098918408,
+          "relative_excess": 0.0005609443778663492,
+          "gap_fraction": 0.003338508033485005,
+          "deviation_shares": 1804.0106517072895,
+          "red_flag": false,
+          "seconds": 851.6917151000016,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 8,
+          "expected_bps": 1.0055056822119852,
+          "variance_bps2": 4886.948101323895,
+          "excess_variance_bps2": 3038.871178246972,
+          "objective_bps": 1.4942004923443748,
+          "relative_excess": 0.000949870719266491,
+          "gap_fraction": 0.005653236135649299,
+          "deviation_shares": 5105.340355027894,
+          "red_flag": false,
+          "seconds": 835.497626299999,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 9,
+          "expected_bps": 0.9929850293508176,
+          "variance_bps2": 5005.3339149815565,
+          "excess_variance_bps2": 3157.2569919046337,
+          "objective_bps": 1.4935184208489733,
+          "relative_excess": 0.000492957889534919,
+          "gap_fraction": 0.002933880682862029,
+          "deviation_shares": 1169.2981207698479,
+          "red_flag": false,
+          "seconds": 848.7319155000005,
+          "updates": 751,
+          "timed_out": false
+        }
+      ],
+      "summary": {
+        "gap_fraction": {
+          "name": "gap_fraction",
+          "values": [
+            0.004105152725322811,
+            0.004087718224970392,
+            0.0026519584143306018,
+            0.005258499497875622,
+            0.0034599352600115387,
+            0.0016536944087375764,
+            0.0029770162541693825,
+            0.003338508033485005,
+            0.005653236135649299,
+            0.002933880682862029
+          ],
+          "median": 0.003399221646748272,
+          "q1": 0.0029446645756888673,
+          "q3": 0.0041007941002347064,
+          "iqr": 0.0011561295245458392,
+          "worst": 0.005653236135649299
+        },
+        "relative_excess": {
+          "name": "relative_excess",
+          "values": [
+            0.0006897579153490136,
+            0.0006868285274740983,
+            0.0004455886126178438,
+            0.0008835460929735093,
+            0.0005813468808277873,
+            0.0002778578251081888,
+            0.0005002056349254413,
+            0.0005609443778663492,
+            0.000949870719266491,
+            0.000492957889534919
+          ],
+          "median": 0.0005711456293470683,
+          "q1": 0.0004947698258825496,
+          "q3": 0.0006890255683802848,
+          "iqr": 0.00019425574249773523,
+          "worst": 0.000949870719266491
+        },
+        "expected_bps": {
+          "name": "expected_bps",
+          "values": [
+            0.9922196900601838,
+            0.990233833131273,
+            0.9898854231273608,
+            0.9910095547695463,
+            0.9947273009444952,
+            0.9931995057935803,
+            0.9957066990375234,
+            0.9913566123403592,
+            1.0055056822119852,
+            0.9929850293508176
+          ],
+          "median": 0.9926023597055007,
+          "q1": 0.9910963191622495,
+          "q3": 0.9943453521567664,
+          "iqr": 0.003249032994516954,
+          "worst": 1.0055056822119852
+        },
+        "excess_variance_bps2": {
+          "name": "excess_variance_bps2",
+          "values": [
+            3167.8481812388136,
+            3187.663021137141,
+            3187.545933843152,
+            3182.8423702290684,
+            3141.1537313988547,
+            3151.9012512675927,
+            3130.1484881154493,
+            3174.5560524378925,
+            3038.871178246972,
+            3157.2569919046337
+          ],
+          "median": 3162.5525865717236,
+          "q1": 3143.8406113660394,
+          "q3": 3180.7707907812746,
+          "iqr": 36.930179415235216,
+          "worst": 3187.663021137141
+        },
+        "objective_bps": {
+          "name": "objective_bps",
+          "values": [
+            1.4938122004917576,
+            1.4938078275526794,
+            1.4934477088193683,
+            1.4941014841001454,
+            1.493650366392073,
+            1.4931973232280318,
+            1.4935292401567606,
+            1.4936199098918408,
+            1.4942004923443748,
+            1.4935184208489733
+          ],
+          "median": 1.4936351381419568,
+          "q1": 1.4935211256759202,
+          "q3": 1.493811107256988,
+          "iqr": 0.0002899815810677442,
+          "worst": 1.4942004923443748
+        },
+        "deviation_shares": {
+          "name": "deviation_shares",
+          "values": [
+            1460.9691537469296,
+            1665.9774423180806,
+            1179.5017202388096,
+            1933.9840318338051,
+            1870.1781180809037,
+            1361.4169852126333,
+            1316.301538760185,
+            1804.0106517072895,
+            5105.340355027894,
+            1169.2981207698479
+          ],
+          "median": 1563.4732980325052,
+          "q1": 1327.580400373297,
+          "q3": 1853.6362514875002,
+          "iqr": 526.0558511142033,
+          "worst": 5105.340355027894
+        }
+      },
+      "epsilon_met": true,
+      "per_seed_met": true,
+      "red_flags": [],
+      "timed_out": [],
+      "sweep_seconds": 8586.843598000001,
+      "reward_variance": {
+        "unit": "bps^2 of episode return, unscaled",
+        "sampled_median": 4964.852827306764,
+        "averaged_median": 2.246197362481231e-07,
+        "variance_ratio_median": 4.5562669816927035e-11
+      }
+    },
+    {
+      "role": "sweep",
+      "lambda": 0.00031622776601683794,
+      "log10_lambda": -3.5,
+      "name": "lambda_1e-3.5",
+      "config": "lambda_1e-3.5.yaml",
+      "metrics": "lambda_1e-3.5.json",
+      "provenance": {
+        "config": "lambda_1e-3.5.yaml",
+        "config_sha256": "51109020553fab07c3f3f9b296559025bc582176624a56fcf0e52a06d7206064",
+        "git_rev": "8bf6953dd8709d12ed6bed82570bebe1f7448f10",
+        "git_dirty": false,
+        "python": "3.12.2"
+      },
+      "updates": 751,
+      "n_seeds": 10,
+      "twap_gap": 0.562996507685845,
+      "kappa_horizon": 5.135365058392617,
+      "variance_floor_bps2": 1848.0769230769229,
+      "baselines": {
+        "twap": {
+          "expected_bps": 0.8479970482579018,
+          "variance_bps2": 8956.065088757396,
+          "excess_variance_bps2": 7107.988165680473,
+          "objective_bps": 3.6801535035770465,
+          "gap_fraction": 1.0
+        },
+        "ac": {
+          "expected_bps": 2.10664398570132,
+          "variance_bps2": 2223.796441271162,
+          "excess_variance_bps2": 375.7195181942393,
+          "objective_bps": 2.809870166400694,
+          "gap_fraction": 0.3434813902338562
+        },
+        "optimal": {
+          "expected_bps": 1.2850226279841521,
+          "variance_bps2": 3382.142670048727,
+          "excess_variance_bps2": 1534.065746971804,
+          "objective_bps": 2.354550048883884,
+          "gap_fraction": 0.0
+        }
+      },
+      "tolerances": {
+        "epsilon_gap_fraction": 0.05,
+        "per_seed_gap_fraction": 0.1,
+        "red_flag_rtol": 1e-09
+      },
+      "band": {
+        "delta_objective_bps": 0.06628017273465812,
+        "curvature_floor_bps_per_share2": 1.59851359233891e-10,
+        "bound_shares": 28797.092862990892,
+        "bound_fraction_of_X": 0.2879709286299089
+      },
+      "seeds": [
+        {
+          "ordinal": 0,
+          "expected_bps": 1.2866587669492857,
+          "variance_bps2": 3377.1872289535154,
+          "excess_variance_bps2": 1529.1103058765925,
+          "objective_bps": 2.3546191397818514,
+          "relative_excess": 2.9343567362265588e-05,
+          "gap_fraction": 5.212033638162362e-05,
+          "deviation_shares": 490.1937502690254,
+          "red_flag": false,
+          "seconds": 691.2271248000034,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 1,
+          "expected_bps": 1.2804706612585188,
+          "variance_bps2": 3396.9810681282984,
+          "excess_variance_bps2": 1548.9041450513755,
+          "objective_bps": 2.354690395634223,
+          "relative_excess": 5.960661163487324e-05,
+          "gap_fraction": 0.00010587385680220604,
+          "deviation_shares": 853.7596343508809,
+          "red_flag": false,
+          "seconds": 691.8245906000011,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 2,
+          "expected_bps": 1.284735057616872,
+          "variance_bps2": 3383.5268974393316,
+          "excess_variance_bps2": 1535.4499743624087,
+          "objective_bps": 2.3547002096519947,
+          "relative_excess": 6.37747191577662e-05,
+          "gap_fraction": 0.00011327729086616792,
+          "deviation_shares": 659.1101950037786,
+          "red_flag": false,
+          "seconds": 689.1208610999965,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 3,
+          "expected_bps": 1.280144929077663,
+          "variance_bps2": 3398.30355619562,
+          "excess_variance_bps2": 1550.226633118697,
+          "objective_bps": 2.35478287090048,
+          "relative_excess": 9.888174460596162e-05,
+          "gap_fraction": 0.00017563473885905196,
+          "deviation_shares": 948.2446402866794,
+          "red_flag": false,
+          "seconds": 690.549431200001,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 4,
+          "expected_bps": 1.2834828360361294,
+          "variance_bps2": 3387.3848966959167,
+          "excess_variance_bps2": 1539.3079736189939,
+          "objective_bps": 2.3546679945574565,
+          "relative_excess": 5.009265937165826e-05,
+          "gap_fraction": 8.897508010761983e-05,
+          "deviation_shares": 645.4187251722875,
+          "red_flag": false,
+          "seconds": 697.7176895000011,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 5,
+          "expected_bps": 1.2890243291594248,
+          "variance_bps2": 3369.924715943734,
+          "excess_variance_bps2": 1521.8477928668112,
+          "objective_bps": 2.3546880937272388,
+          "relative_excess": 5.862896964963366e-05,
+          "gap_fraction": 0.00010413735937834438,
+          "deviation_shares": 760.0128136295838,
+          "red_flag": false,
+          "seconds": 690.1562014999945,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 6,
+          "expected_bps": 1.2845271882281382,
+          "variance_bps2": 3384.114200934943,
+          "excess_variance_bps2": 1536.03727785802,
+          "objective_bps": 2.354678061935652,
+          "relative_excess": 5.436837149776283e-05,
+          "gap_fraction": 9.656964253870765e-05,
+          "deviation_shares": 602.5562648178936,
+          "red_flag": false,
+          "seconds": 690.5324241999988,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 7,
+          "expected_bps": 1.2853191098876156,
+          "variance_bps2": 3381.5084505088485,
+          "excess_variance_bps2": 1533.4315274319256,
+          "objective_bps": 2.354645972959088,
+          "relative_excess": 4.073987522556106e-05,
+          "gap_fraction": 7.236257182663401e-05,
+          "deviation_shares": 527.1597235365945,
+          "red_flag": false,
+          "seconds": 692.2178391999987,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 8,
+          "expected_bps": 1.2938185178469803,
+          "variance_bps2": 3354.9680759229177,
+          "excess_variance_bps2": 1506.8911528459948,
+          "objective_bps": 2.354752577553894,
+          "relative_excess": 8.601586961628132e-05,
+          "gap_fraction": 0.0001527822436587451,
+          "deviation_shares": 1269.4119729090048,
+          "red_flag": false,
+          "seconds": 692.1523135000025,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 9,
+          "expected_bps": 1.2819294425729357,
+          "variance_bps2": 3392.2571164433293,
+          "excess_variance_bps2": 1544.1801933664065,
+          "objective_bps": 2.3546553322605304,
+          "relative_excess": 4.471486035987098e-05,
+          "gap_fraction": 7.942297998200391e-05,
+          "deviation_shares": 690.7194584623402,
+          "red_flag": false,
+          "seconds": 699.8315693999975,
+          "updates": 751,
+          "timed_out": false
+        }
+      ],
+      "summary": {
+        "gap_fraction": {
+          "name": "gap_fraction",
+          "values": [
+            5.212033638162362e-05,
+            0.00010587385680220604,
+            0.00011327729086616792,
+            0.00017563473885905196,
+            8.897508010761983e-05,
+            0.00010413735937834438,
+            9.656964253870765e-05,
+            7.236257182663401e-05,
+            0.0001527822436587451,
+            7.942297998200391e-05
+          ],
+          "median": 0.00010035350095852601,
+          "q1": 8.18110050134079e-05,
+          "q3": 0.00011142643235017746,
+          "iqr": 2.961542733676956e-05,
+          "worst": 0.00017563473885905196
+        },
+        "relative_excess": {
+          "name": "relative_excess",
+          "values": [
+            2.9343567362265588e-05,
+            5.960661163487324e-05,
+            6.37747191577662e-05,
+            9.888174460596162e-05,
+            5.009265937165826e-05,
+            5.862896964963366e-05,
+            5.436837149776283e-05,
+            4.073987522556106e-05,
+            8.601586961628132e-05,
+            4.471486035987098e-05
+          ],
+          "median": 5.649867057369824e-05,
+          "q1": 4.60593101128178e-05,
+          "q3": 6.273269227704296e-05,
+          "iqr": 1.6673382164225166e-05,
+          "worst": 9.888174460596162e-05
+        },
+        "expected_bps": {
+          "name": "expected_bps",
+          "values": [
+            1.2866587669492857,
+            1.2804706612585188,
+            1.284735057616872,
+            1.280144929077663,
+            1.2834828360361294,
+            1.2890243291594248,
+            1.2845271882281382,
+            1.2853191098876156,
+            1.2938185178469803,
+            1.2819294425729357
+          ],
+          "median": 1.2846311229225051,
+          "q1": 1.2823177909387342,
+          "q3": 1.2863238526838683,
+          "iqr": 0.004006061745134071,
+          "worst": 1.2938185178469803
+        },
+        "excess_variance_bps2": {
+          "name": "excess_variance_bps2",
+          "values": [
+            1529.1103058765925,
+            1548.9041450513755,
+            1535.4499743624087,
+            1550.226633118697,
+            1539.3079736189939,
+            1521.8477928668112,
+            1536.03727785802,
+            1533.4315274319256,
+            1506.8911528459948,
+            1544.1801933664065
+          ],
+          "median": 1535.7436261102143,
+          "q1": 1530.1906112654258,
+          "q3": 1542.9621384295533,
+          "iqr": 12.77152716412752,
+          "worst": 1550.226633118697
+        },
+        "objective_bps": {
+          "name": "objective_bps",
+          "values": [
+            2.3546191397818514,
+            2.354690395634223,
+            2.3547002096519947,
+            2.35478287090048,
+            2.3546679945574565,
+            2.3546880937272388,
+            2.354678061935652,
+            2.354645972959088,
+            2.354752577553894,
+            2.3546553322605304
+          ],
+          "median": 2.3546830778314454,
+          "q1": 2.354658497834762,
+          "q3": 2.3546977561475515,
+          "iqr": 3.925831278950298e-05,
+          "worst": 2.35478287090048
+        },
+        "deviation_shares": {
+          "name": "deviation_shares",
+          "values": [
+            490.1937502690254,
+            853.7596343508809,
+            659.1101950037786,
+            948.2446402866794,
+            645.4187251722875,
+            760.0128136295838,
+            602.5562648178936,
+            527.1597235365945,
+            1269.4119729090048,
+            690.7194584623402
+          ],
+          "median": 674.9148267330594,
+          "q1": 613.2718799064921,
+          "q3": 830.3229291705566,
+          "iqr": 217.05104926406443,
+          "worst": 1269.4119729090048
+        }
+      },
+      "epsilon_met": true,
+      "per_seed_met": true,
+      "red_flags": [],
+      "timed_out": [],
+      "sweep_seconds": 6928.5861382,
+      "reward_variance": {
+        "unit": "bps^2 of episode return, unscaled",
+        "sampled_median": 3378.494337266314,
+        "averaged_median": 7.205757524118398e-07,
+        "variance_ratio_median": 2.1642492788436063e-10
+      }
+    },
+    {
+      "role": "sweep",
+      "lambda": 0.001,
+      "log10_lambda": -3.0,
+      "name": "lambda_1e-3.0",
+      "config": "lambda_1e-3.0.yaml",
+      "metrics": "lambda_1e-3.0.json",
+      "provenance": {
+        "config": "lambda_1e-3.0.yaml",
+        "config_sha256": "235c33ff6423ec01c1c27b43148ad051f2560f2ca6676f327c16cdf5bb1621aa",
+        "git_rev": "80bc82909c93c9c73b7c23479fd5009a89bdea30",
+        "git_dirty": false,
+        "python": "3.12.2"
+      },
+      "updates": 751,
+      "n_seeds": 10,
+      "twap_gap": 1.3014270206915268,
+      "kappa_horizon": 9.010176456479758,
+      "variance_floor_bps2": 1848.0769230769229,
+      "baselines": {
+        "twap": {
+          "expected_bps": 0.8479970482579018,
+          "variance_bps2": 8956.065088757396,
+          "excess_variance_bps2": 7107.988165680473,
+          "objective_bps": 9.804062137015299,
+          "gap_fraction": 1.0
+        },
+        "ac": {
+          "expected_bps": 2.998675504088559,
+          "variance_bps2": 1929.7851905165653,
+          "excess_variance_bps2": 81.70826743964244,
+          "objective_bps": 4.928460694605124,
+          "gap_fraction": 0.12057353671933274
+        },
+        "optimal": {
+          "expected_bps": 1.795797607369902,
+          "variance_bps2": 2464.195018452923,
+          "excess_variance_bps2": 616.1180953759999,
+          "objective_bps": 4.259992625822825,
+          "gap_fraction": 0.0
+        }
+      },
+      "tolerances": {
+        "epsilon_gap_fraction": 0.05,
+        "per_seed_gap_fraction": 0.1,
+        "red_flag_rtol": 1e-09
+      },
+      "band": {
+        "delta_objective_bps": 0.2772034755596237,
+        "curvature_floor_bps_per_share2": 4.125840964868982e-10,
+        "bound_shares": 36657.09893006041,
+        "bound_fraction_of_X": 0.3665709893006041
+      },
+      "seeds": [
+        {
+          "ordinal": 0,
+          "expected_bps": 1.7991512138525132,
+          "variance_bps2": 2461.0213366825037,
+          "excess_variance_bps2": 612.9444136055808,
+          "objective_bps": 4.260172550535017,
+          "relative_excess": 4.223592104400658e-05,
+          "gap_fraction": 3.245354551003873e-05,
+          "deviation_shares": 796.558636609973,
+          "red_flag": false,
+          "seconds": 873.455154299998,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 1,
+          "expected_bps": 1.7891555605723148,
+          "variance_bps2": 2470.9394826284374,
+          "excess_variance_bps2": 622.8625595515146,
+          "objective_bps": 4.260095043200753,
+          "relative_excess": 2.4041679628034418e-05,
+          "gap_fraction": 1.8473321397045853e-05,
+          "deviation_shares": 454.6541959040143,
+          "red_flag": false,
+          "seconds": 866.1713917000015,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 2,
+          "expected_bps": 1.7959334571832573,
+          "variance_bps2": 2464.1010924824964,
+          "excess_variance_bps2": 616.0241694055735,
+          "objective_bps": 4.260034549665754,
+          "relative_excess": 9.841294718364431e-06,
+          "gap_fraction": 7.561925918162631e-06,
+          "deviation_shares": 378.35053537992263,
+          "red_flag": false,
+          "seconds": 836.9667766999992,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 3,
+          "expected_bps": 1.7898688115560084,
+          "variance_bps2": 2470.6621504751556,
+          "excess_variance_bps2": 622.5852273982327,
+          "objective_bps": 4.260530962031164,
+          "relative_excess": 0.00012637022070786233,
+          "gap_fraction": 9.710127321677569e-05,
+          "deviation_shares": 1573.492971339901,
+          "red_flag": false,
+          "seconds": 825.0488009000001,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 4,
+          "expected_bps": 1.794479601495131,
+          "variance_bps2": 2465.530105255942,
+          "excess_variance_bps2": 617.4531821790192,
+          "objective_bps": 4.260009706751073,
+          "relative_excess": 4.009614510662536e-06,
+          "gap_fraction": 3.0809368845991725e-06,
+          "deviation_shares": 199.70234597356597,
+          "red_flag": false,
+          "seconds": 886.2131555000014,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 5,
+          "expected_bps": 1.793007303050152,
+          "variance_bps2": 2467.2051080508686,
+          "excess_variance_bps2": 619.1281849739457,
+          "objective_bps": 4.260212411101021,
+          "relative_excess": 5.159287761755695e-05,
+          "gap_fraction": 3.964331214680216e-05,
+          "deviation_shares": 901.858010131891,
+          "red_flag": false,
+          "seconds": 926.7254119000027,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 6,
+          "expected_bps": 1.8000003703272764,
+          "variance_bps2": 2460.026749429472,
+          "excess_variance_bps2": 611.9498263525493,
+          "objective_bps": 4.2600271197567485,
+          "relative_excess": 8.097181604098391e-06,
+          "gap_fraction": 6.221771544128436e-06,
+          "deviation_shares": 349.86686463272395,
+          "red_flag": false,
+          "seconds": 921.5221550999995,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 7,
+          "expected_bps": 1.7958901517873695,
+          "variance_bps2": 2464.29967465413,
+          "excess_variance_bps2": 616.222751577207,
+          "objective_bps": 4.2601898264415,
+          "relative_excess": 4.629130517250012e-05,
+          "gap_fraction": 3.556965118789585e-05,
+          "deviation_shares": 879.8052529046047,
+          "red_flag": false,
+          "seconds": 941.0120721999992,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 8,
+          "expected_bps": 1.806374914711637,
+          "variance_bps2": 2454.0787013907857,
+          "excess_variance_bps2": 606.0017783138628,
+          "objective_bps": 4.2604536161024225,
+          "relative_excess": 0.0001082138679778345,
+          "gap_fraction": 8.315016228903403e-05,
+          "deviation_shares": 1204.0344334362308,
+          "red_flag": false,
+          "seconds": 958.9890102999998,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 9,
+          "expected_bps": 1.786812854685255,
+          "variance_bps2": 2473.630625534805,
+          "excess_variance_bps2": 625.5537024578821,
+          "objective_bps": 4.26044348022006,
+          "relative_excess": 0.00010583454875053822,
+          "gap_fraction": 8.132192360221777e-05,
+          "deviation_shares": 1445.4859588246266,
+          "red_flag": false,
+          "seconds": 900.0062610000023,
+          "updates": 751,
+          "timed_out": false
+        }
+      ],
+      "summary": {
+        "gap_fraction": {
+          "name": "gap_fraction",
+          "values": [
+            3.245354551003873e-05,
+            1.8473321397045853e-05,
+            7.561925918162631e-06,
+            9.710127321677569e-05,
+            3.0809368845991725e-06,
+            3.964331214680216e-05,
+            6.221771544128436e-06,
+            3.556965118789585e-05,
+            8.315016228903403e-05,
+            8.132192360221777e-05
+          ],
+          "median": 3.401159834896729e-05,
+          "q1": 1.0289774787883437e-05,
+          "q3": 7.090227073836386e-05,
+          "iqr": 6.0612495950480426e-05,
+          "worst": 9.710127321677569e-05
+        },
+        "relative_excess": {
+          "name": "relative_excess",
+          "values": [
+            4.223592104400658e-05,
+            2.4041679628034418e-05,
+            9.841294718364431e-06,
+            0.00012637022070786233,
+            4.009614510662536e-06,
+            5.159287761755695e-05,
+            8.097181604098391e-06,
+            4.629130517250012e-05,
+            0.0001082138679778345,
+            0.00010583454875053822
+          ],
+          "median": 4.426361310825335e-05,
+          "q1": 1.3391390945781928e-05,
+          "q3": 9.22741309672929e-05,
+          "iqr": 7.888274002151097e-05,
+          "worst": 0.00012637022070786233
+        },
+        "expected_bps": {
+          "name": "expected_bps",
+          "values": [
+            1.7991512138525132,
+            1.7891555605723148,
+            1.7959334571832573,
+            1.7898688115560084,
+            1.794479601495131,
+            1.793007303050152,
+            1.8000003703272764,
+            1.7958901517873695,
+            1.806374914711637,
+            1.786812854685255
+          ],
+          "median": 1.7951848766412501,
+          "q1": 1.7906534344295444,
+          "q3": 1.798346774685199,
+          "iqr": 0.007693340255654713,
+          "worst": 1.806374914711637
+        },
+        "excess_variance_bps2": {
+          "name": "excess_variance_bps2",
+          "values": [
+            612.9444136055808,
+            622.8625595515146,
+            616.0241694055735,
+            622.5852273982327,
+            617.4531821790192,
+            619.1281849739457,
+            611.9498263525493,
+            616.222751577207,
+            606.0017783138628,
+            625.5537024578821
+          ],
+          "median": 616.8379668781131,
+          "q1": 613.714352555579,
+          "q3": 621.720966792161,
+          "iqr": 8.006614236581981,
+          "worst": 625.5537024578821
+        },
+        "objective_bps": {
+          "name": "objective_bps",
+          "values": [
+            4.260172550535017,
+            4.260095043200753,
+            4.260034549665754,
+            4.260530962031164,
+            4.260009706751073,
+            4.260212411101021,
+            4.2600271197567485,
+            4.2601898264415,
+            4.2604536161024225,
+            4.26044348022006
+          ],
+          "median": 4.260181188488259,
+          "q1": 4.260049673049504,
+          "q3": 4.2603857129403,
+          "iqr": 0.0003360398907963358,
+          "worst": 4.260530962031164
+        },
+        "deviation_shares": {
+          "name": "deviation_shares",
+          "values": [
+            796.558636609973,
+            454.6541959040143,
+            378.35053537992263,
+            1573.492971339901,
+            199.70234597356597,
+            901.858010131891,
+            349.86686463272395,
+            879.8052529046047,
+            1204.0344334362308,
+            1445.4859588246266
+          ],
+          "median": 838.1819447572889,
+          "q1": 397.42645051094553,
+          "q3": 1128.4903276101459,
+          "iqr": 731.0638770992003,
+          "worst": 1573.492971339901
+        }
+      },
+      "epsilon_met": true,
+      "per_seed_met": true,
+      "red_flags": [],
+      "timed_out": [],
+      "sweep_seconds": 8940.862409999998,
+      "reward_variance": {
+        "unit": "bps^2 of episode return, unscaled",
+        "sampled_median": 2463.7312285785456,
+        "averaged_median": 9.399758450697932e-07,
+        "variance_ratio_median": 3.797798773264291e-10
+      }
+    },
+    {
+      "role": "sweep",
+      "lambda": 0.0031622776601683794,
+      "log10_lambda": -2.5,
+      "name": "lambda_1e-2.5",
+      "config": "lambda_1e-2.5.yaml",
+      "metrics": "lambda_1e-2.5.json",
+      "provenance": {
+        "config": "lambda_1e-2.5.yaml",
+        "config_sha256": "5a1f3172fdab46db07248d0d4829cffb6ee46758d4e16842a98203a250852a17",
+        "git_rev": "2dfa02675ff382e94fc9a341850e377fc515a36e",
+        "git_dirty": false,
+        "python": "3.12.2"
+      },
+      "updates": 751,
+      "n_seeds": 10,
+      "twap_gap": 2.249744443207669,
+      "kappa_horizon": 15.424436671091794,
+      "variance_floor_bps2": 1848.0769230769229,
+      "baselines": {
+        "twap": {
+          "expected_bps": 0.8479970482579018,
+          "variance_bps2": 8956.065088757396,
+          "excess_variance_bps2": 7107.988165680473,
+          "objective_bps": 29.16956160144935,
+          "gap_fraction": 1.0
+        },
+        "ac": {
+          "expected_bps": 3.8411401039313833,
+          "variance_bps2": 1854.7801317760025,
+          "excess_variance_bps2": 6.703208699079596,
+          "objective_bps": 9.706469879170799,
+          "gap_fraction": 0.03617552743994304
+        },
+        "optimal": {
+          "expected_bps": 2.5311576021719167,
+          "variance_bps2": 2038.0240506947994,
+          "excess_variance_bps2": 189.9471276178765,
+          "objective_bps": 8.97595552856995,
+          "gap_fraction": 0.0
+        }
+      },
+      "tolerances": {
+        "epsilon_gap_fraction": 0.05,
+        "per_seed_gap_fraction": 0.1,
+        "red_flag_rtol": 1e-09
+      },
+      "band": {
+        "delta_objective_bps": 1.0096803036439699,
+        "curvature_floor_bps_per_share2": 1.2117951854952877e-09,
+        "bound_shares": 40821.81673408024,
+        "bound_fraction_of_X": 0.4082181673408024
+      },
+      "seeds": [
+        {
+          "ordinal": 0,
+          "expected_bps": 2.53315844631718,
+          "variance_bps2": 2037.4882155913522,
+          "excess_variance_bps2": 189.4112925144293,
+          "objective_bps": 8.976261913338048,
+          "relative_excess": 3.413394452804562e-05,
+          "gap_fraction": 1.5172365301801878e-05,
+          "deviation_shares": 658.3120281739472,
+          "red_flag": false,
+          "seconds": 995.5440760999991,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 1,
+          "expected_bps": 2.523525351677705,
+          "variance_bps2": 2040.559040118207,
+          "excess_variance_bps2": 192.48211704128403,
+          "objective_bps": 8.976339618498143,
+          "relative_excess": 4.279097940834714e-05,
+          "gap_fraction": 1.9020373419540966e-05,
+          "deviation_shares": 730.59648905827,
+          "red_flag": false,
+          "seconds": 998.093944100001,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 2,
+          "expected_bps": 2.5281838883129066,
+          "variance_bps2": 2039.1679000926445,
+          "excess_variance_bps2": 191.0909770157216,
+          "objective_bps": 8.976598984108342,
+          "relative_excess": 7.168657825285279e-05,
+          "gap_fraction": 3.1864320620631293e-05,
+          "deviation_shares": 940.2578026893602,
+          "red_flag": false,
+          "seconds": 942.6302799000005,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 3,
+          "expected_bps": 2.5345662550648553,
+          "variance_bps2": 2036.9872421734556,
+          "excess_variance_bps2": 188.9103190965327,
+          "objective_bps": 8.97608550503797,
+          "relative_excess": 1.44805160416381e-05,
+          "gap_fraction": 6.436515972006086e-06,
+          "deviation_shares": 365.14386134577126,
+          "red_flag": false,
+          "seconds": 876.5475617000011,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 4,
+          "expected_bps": 2.532750881852206,
+          "variance_bps2": 2037.5535291385438,
+          "excess_variance_bps2": 189.47660606162094,
+          "objective_bps": 8.976060888444264,
+          "relative_excess": 1.1738012067847249e-05,
+          "gap_fraction": 5.217486858690171e-06,
+          "deviation_shares": 339.88720823808234,
+          "red_flag": false,
+          "seconds": 948.3608036000005,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 5,
+          "expected_bps": 2.5308096159803397,
+          "variance_bps2": 2038.1825515878206,
+          "excess_variance_bps2": 190.10562851089776,
+          "objective_bps": 8.97610876621149,
+          "relative_excess": 1.7072014344705164e-05,
+          "gap_fraction": 7.588423830203582e-06,
+          "deviation_shares": 473.02887542084414,
+          "red_flag": false,
+          "seconds": 959.3379542000039,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 6,
+          "expected_bps": 2.53036345148993,
+          "variance_bps2": 2038.567810379008,
+          "excess_variance_bps2": 190.49088730208518,
+          "objective_bps": 8.976880896989837,
+          "relative_excess": 0.00010309414044462594,
+          "gap_fraction": 4.5824822795266063e-05,
+          "deviation_shares": 1116.4493692665126,
+          "red_flag": false,
+          "seconds": 874.918706299999,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 7,
+          "expected_bps": 2.528154644586405,
+          "variance_bps2": 2039.6031653225655,
+          "excess_variance_bps2": 191.5262422456426,
+          "objective_bps": 8.977946169894668,
+          "relative_excess": 0.00022177486490243027,
+          "gap_fraction": 9.857780316871249e-05,
+          "deviation_shares": 1725.837575142041,
+          "red_flag": false,
+          "seconds": 817.6047892999995,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 8,
+          "expected_bps": 2.5369762861896783,
+          "variance_bps2": 2036.4216924932966,
+          "excess_variance_bps2": 188.34476941637377,
+          "objective_bps": 8.976707111043511,
+          "relative_excess": 8.373286511611517e-05,
+          "gap_fraction": 3.7218834063094505e-05,
+          "deviation_shares": 978.3242776733506,
+          "red_flag": false,
+          "seconds": 768.8935005000021,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 9,
+          "expected_bps": 2.531001617698049,
+          "variance_bps2": 2038.2127899386176,
+          "excess_variance_bps2": 190.1358668616947,
+          "objective_bps": 8.976396389990406,
+          "relative_excess": 4.911582048873092e-05,
+          "gap_fraction": 2.1831733216196744e-05,
+          "deviation_shares": 816.6100670083875,
+          "red_flag": false,
+          "seconds": 743.7960728000035,
+          "updates": 751,
+          "timed_out": false
+        }
+      ],
+      "summary": {
+        "gap_fraction": {
+          "name": "gap_fraction",
+          "values": [
+            1.5172365301801878e-05,
+            1.9020373419540966e-05,
+            3.1864320620631293e-05,
+            6.436515972006086e-06,
+            5.217486858690171e-06,
+            7.588423830203582e-06,
+            4.5824822795266063e-05,
+            9.857780316871249e-05,
+            3.7218834063094505e-05,
+            2.1831733216196744e-05
+          ],
+          "median": 2.0426053317868855e-05,
+          "q1": 9.484409198103156e-06,
+          "q3": 3.58802057024787e-05,
+          "iqr": 2.6395796504375545e-05,
+          "worst": 9.857780316871249e-05
+        },
+        "relative_excess": {
+          "name": "relative_excess",
+          "values": [
+            3.413394452804562e-05,
+            4.279097940834714e-05,
+            7.168657825285279e-05,
+            1.44805160416381e-05,
+            1.1738012067847249e-05,
+            1.7072014344705164e-05,
+            0.00010309414044462594,
+            0.00022177486490243027,
+            8.373286511611517e-05,
+            4.911582048873092e-05
+          ],
+          "median": 4.595339994853903e-05,
+          "q1": 2.133749689054028e-05,
+          "q3": 8.072129340029957e-05,
+          "iqr": 5.938379650975929e-05,
+          "worst": 0.00022177486490243027
+        },
+        "expected_bps": {
+          "name": "expected_bps",
+          "values": [
+            2.53315844631718,
+            2.523525351677705,
+            2.5281838883129066,
+            2.5345662550648553,
+            2.532750881852206,
+            2.5308096159803397,
+            2.53036345148993,
+            2.528154644586405,
+            2.5369762861896783,
+            2.531001617698049
+          ],
+          "median": 2.5309056168391946,
+          "q1": 2.5287287791071624,
+          "q3": 2.5330565552009365,
+          "iqr": 0.004327776093774105,
+          "worst": 2.5369762861896783
+        },
+        "excess_variance_bps2": {
+          "name": "excess_variance_bps2",
+          "values": [
+            189.4112925144293,
+            192.48211704128403,
+            191.0909770157216,
+            188.9103190965327,
+            189.47660606162094,
+            190.10562851089776,
+            190.49088730208518,
+            191.5262422456426,
+            188.34476941637377,
+            190.1358668616947
+          ],
+          "median": 190.12074768629623,
+          "q1": 189.42762090122721,
+          "q3": 190.9409545873125,
+          "iqr": 1.513333686085275,
+          "worst": 192.48211704128403
+        },
+        "objective_bps": {
+          "name": "objective_bps",
+          "values": [
+            8.976261913338048,
+            8.976339618498143,
+            8.976598984108342,
+            8.97608550503797,
+            8.976060888444264,
+            8.97610876621149,
+            8.976880896989837,
+            8.977946169894668,
+            8.976707111043511,
+            8.976396389990406
+          ],
+          "median": 8.976368004244275,
+          "q1": 8.97614705299313,
+          "q3": 8.97668007930972,
+          "iqr": 0.0005330263165888027,
+          "worst": 8.977946169894668
+        },
+        "deviation_shares": {
+          "name": "deviation_shares",
+          "values": [
+            658.3120281739472,
+            730.59648905827,
+            940.2578026893602,
+            365.14386134577126,
+            339.88720823808234,
+            473.02887542084414,
+            1116.4493692665126,
+            1725.837575142041,
+            978.3242776733506,
+            816.6100670083875
+          ],
+          "median": 773.6032780333287,
+          "q1": 519.34966360912,
+          "q3": 968.807658927353,
+          "iqr": 449.4579953182331,
+          "worst": 1725.837575142041
+        }
+      },
+      "epsilon_met": true,
+      "per_seed_met": true,
+      "red_flags": [],
+      "timed_out": [],
+      "sweep_seconds": 8930.478583300002,
+      "reward_variance": {
+        "unit": "bps^2 of episode return, unscaled",
+        "sampled_median": 2038.3554399903815,
+        "averaged_median": 3.0625020474891533e-06,
+        "variance_ratio_median": 1.5312329045321412e-09
+      }
+    },
+    {
+      "role": "sweep",
+      "lambda": 0.01,
+      "log10_lambda": -2.0,
+      "name": "lambda_1e-2.0",
+      "config": "lambda_1e-2.0.yaml",
+      "metrics": "lambda_1e-2.0.json",
+      "provenance": {
+        "config": "lambda_1e-2.0.yaml",
+        "config_sha256": "a6765eeef8d5cd032cb416d89874f5f72bbc3af4cef49392fafe77380cb89bbf",
+        "git_rev": "00c9cd51f1b21f6b915d29ee8caae6b9fc347502",
+        "git_dirty": false,
+        "python": "3.12.2"
+      },
+      "updates": 751,
+      "n_seeds": 10,
+      "twap_gap": 3.072138929647772,
+      "kappa_horizon": 25.021367134045637,
+      "variance_floor_bps2": 1848.0769230769229,
+      "baselines": {
+        "twap": {
+          "expected_bps": 0.8479970482579018,
+          "variance_bps2": 8956.065088757396,
+          "excess_variance_bps2": 7107.988165680473,
+          "objective_bps": 90.40864793583185,
+          "gap_fraction": 1.0
+        },
+        "ac": {
+          "expected_bps": 4.210906698938507,
+          "variance_bps2": 1848.1609008241292,
+          "excess_variance_bps2": 0.08397774720629059,
+          "objective_bps": 22.6925157071798,
+          "gap_fraction": 0.007195116483207981
+        },
+        "optimal": {
+          "expected_bps": 3.3189439945454837,
+          "variance_bps2": 1888.2815203206624,
+          "excess_variance_bps2": 40.2045972437395,
+          "objective_bps": 22.20175919775211,
+          "gap_fraction": 0.0
+        }
+      },
+      "tolerances": {
+        "epsilon_gap_fraction": 0.05,
+        "per_seed_gap_fraction": 0.1,
+        "red_flag_rtol": 1e-09
+      },
+      "band": {
+        "delta_objective_bps": 3.410344436903987,
+        "curvature_floor_bps_per_share2": 3.73912255802536e-09,
+        "bound_shares": 42709.97032023359,
+        "bound_fraction_of_X": 0.42709970320233587
+      },
+      "seeds": [
+        {
+          "ordinal": 0,
+          "expected_bps": 3.322668722890861,
+          "variance_bps2": 1888.0121655127402,
+          "excess_variance_bps2": 39.93524243581737,
+          "objective_bps": 22.202790378018264,
+          "relative_excess": 4.644588102089438e-05,
+          "gap_fraction": 1.5118418171999635e-05,
+          "deviation_shares": 682.2725372623902,
+          "red_flag": false,
+          "seconds": 918.7290414999952,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 1,
+          "expected_bps": 3.315089928832879,
+          "variance_bps2": 1888.7766306255976,
+          "excess_variance_bps2": 40.69970754867472,
+          "objective_bps": 22.202856235088856,
+          "relative_excess": 4.941218067332276e-05,
+          "gap_fraction": 1.6083966840323847e-05,
+          "deviation_shares": 714.7348107045066,
+          "red_flag": false,
+          "seconds": 867.6605791000038,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 2,
+          "expected_bps": 3.318750877304672,
+          "variance_bps2": 1888.4196362176515,
+          "excess_variance_bps2": 40.34271314072862,
+          "objective_bps": 22.202947239481187,
+          "relative_excess": 5.35111528097489e-05,
+          "gap_fraction": 1.741820732563162e-05,
+          "deviation_shares": 748.4481923054369,
+          "red_flag": false,
+          "seconds": 761.7692737000034,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 3,
+          "expected_bps": 3.3260033023609994,
+          "variance_bps2": 1887.6347888956418,
+          "excess_variance_bps2": 39.55786581871894,
+          "objective_bps": 22.202351191317415,
+          "relative_excess": 2.6664263855480566e-05,
+          "gap_fraction": 8.679380869841616e-06,
+          "deviation_shares": 500.16706783952077,
+          "red_flag": false,
+          "seconds": 729.8180041000014,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 4,
+          "expected_bps": 3.3136810570223787,
+          "variance_bps2": 1889.0747915909851,
+          "excess_variance_bps2": 40.99786851406225,
+          "objective_bps": 22.20442897293223,
+          "relative_excess": 0.0001202506142121583,
+          "gap_fraction": 3.914230995599711e-05,
+          "deviation_shares": 1142.2636362025899,
+          "red_flag": false,
+          "seconds": 728.7192234999966,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 5,
+          "expected_bps": 3.3182253776574804,
+          "variance_bps2": 1888.364016713632,
+          "excess_variance_bps2": 40.28709363670919,
+          "objective_bps": 22.2018655447938,
+          "relative_excess": 4.790027706497281e-06,
+          "gap_fraction": 1.5591832974319522e-06,
+          "deviation_shares": 213.60038046886717,
+          "red_flag": false,
+          "seconds": 752.9035118999964,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 6,
+          "expected_bps": 3.3213857371686983,
+          "variance_bps2": 1888.1250129865534,
+          "excess_variance_bps2": 40.04808990963056,
+          "objective_bps": 22.202635867034232,
+          "relative_excess": 3.9486478270150664e-05,
+          "gap_fraction": 1.2853090037395503e-05,
+          "deviation_shares": 606.223993993097,
+          "red_flag": false,
+          "seconds": 931.7833788999997,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 7,
+          "expected_bps": 3.320789633050559,
+          "variance_bps2": 1888.1046905812334,
+          "excess_variance_bps2": 40.02776750431053,
+          "objective_bps": 22.201836538862892,
+          "relative_excess": 3.483557770923589e-06,
+          "gap_fraction": 1.1339193476263091e-06,
+          "deviation_shares": 179.25776825492443,
+          "red_flag": false,
+          "seconds": 771.834757699995,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 8,
+          "expected_bps": 3.316764701465414,
+          "variance_bps2": 1888.6369880300717,
+          "excess_variance_bps2": 40.56006495314887,
+          "objective_bps": 22.20313458176613,
+          "relative_excess": 6.194932580646678e-05,
+          "gap_fraction": 2.0164884214259613e-05,
+          "deviation_shares": 824.991424508909,
+          "red_flag": false,
+          "seconds": 777.5972825999997,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 9,
+          "expected_bps": 3.316304141138014,
+          "variance_bps2": 1888.7639379401708,
+          "excess_variance_bps2": 40.687014863247896,
+          "objective_bps": 22.203943520539724,
+          "relative_excess": 9.838512201476483e-05,
+          "gap_fraction": 3.20249585932772e-05,
+          "deviation_shares": 1043.615382267009,
+          "red_flag": false,
+          "seconds": 696.050951600002,
+          "updates": 751,
+          "timed_out": false
+        }
+      ],
+      "summary": {
+        "gap_fraction": {
+          "name": "gap_fraction",
+          "values": [
+            1.5118418171999635e-05,
+            1.6083966840323847e-05,
+            1.741820732563162e-05,
+            8.679380869841616e-06,
+            3.914230995599711e-05,
+            1.5591832974319522e-06,
+            1.2853090037395503e-05,
+            1.1339193476263091e-06,
+            2.0164884214259613e-05,
+            3.20249585932772e-05
+          ],
+          "median": 1.5601192506161743e-05,
+          "q1": 9.722808161730087e-06,
+          "q3": 1.9478214992102614e-05,
+          "iqr": 9.755406830372527e-06,
+          "worst": 3.914230995599711e-05
+        },
+        "relative_excess": {
+          "name": "relative_excess",
+          "values": [
+            4.644588102089438e-05,
+            4.941218067332276e-05,
+            5.35111528097489e-05,
+            2.6664263855480566e-05,
+            0.0001202506142121583,
+            4.790027706497281e-06,
+            3.9486478270150664e-05,
+            3.483557770923589e-06,
+            6.194932580646678e-05,
+            9.838512201476483e-05
+          ],
+          "median": 4.792903084710857e-05,
+          "q1": 2.986981745914809e-05,
+          "q3": 5.983978255728731e-05,
+          "iqr": 2.996996509813922e-05,
+          "worst": 0.0001202506142121583
+        },
+        "expected_bps": {
+          "name": "expected_bps",
+          "values": [
+            3.322668722890861,
+            3.315089928832879,
+            3.318750877304672,
+            3.3260033023609994,
+            3.3136810570223787,
+            3.3182253776574804,
+            3.3213857371686983,
+            3.320789633050559,
+            3.316764701465414,
+            3.316304141138014
+          ],
+          "median": 3.3184881274810762,
+          "q1": 3.316419281219864,
+          "q3": 3.3212367111391634,
+          "iqr": 0.004817429919299343,
+          "worst": 3.3260033023609994
+        },
+        "excess_variance_bps2": {
+          "name": "excess_variance_bps2",
+          "values": [
+            39.93524243581737,
+            40.69970754867472,
+            40.34271314072862,
+            39.55786581871894,
+            40.99786851406225,
+            40.28709363670919,
+            40.04808990963056,
+            40.02776750431053,
+            40.56006495314887,
+            40.687014863247896
+          ],
+          "median": 40.3149033887189,
+          "q1": 40.03284810564054,
+          "q3": 40.65527738572314,
+          "iqr": 0.6224292800825992,
+          "worst": 40.99786851406225
+        },
+        "objective_bps": {
+          "name": "objective_bps",
+          "values": [
+            22.202790378018264,
+            22.202856235088856,
+            22.202947239481187,
+            22.202351191317415,
+            22.20442897293223,
+            22.2018655447938,
+            22.202635867034232,
+            22.201836538862892,
+            22.20313458176613,
+            22.203943520539724
+          ],
+          "median": 22.20282330655356,
+          "q1": 22.20242236024662,
+          "q3": 22.203087746194893,
+          "iqr": 0.0006653859482739222,
+          "worst": 22.20442897293223
+        },
+        "deviation_shares": {
+          "name": "deviation_shares",
+          "values": [
+            682.2725372623902,
+            714.7348107045066,
+            748.4481923054369,
+            500.16706783952077,
+            1142.2636362025899,
+            213.60038046886717,
+            606.223993993097,
+            179.25776825492443,
+            824.991424508909,
+            1043.615382267009
+          ],
+          "median": 698.5036739834484,
+          "q1": 526.6812993779148,
+          "q3": 805.8556164580409,
+          "iqr": 279.1743170801261,
+          "worst": 1142.2636362025899
+        }
+      },
+      "epsilon_met": true,
+      "per_seed_met": true,
+      "red_flags": [],
+      "timed_out": [],
+      "sweep_seconds": 7942.0219278,
+      "reward_variance": {
+        "unit": "bps^2 of episode return, unscaled",
+        "sampled_median": 1887.9369311638648,
+        "averaged_median": 1.348528857738942e-05,
+        "variance_ratio_median": 7.186948744957165e-09
+      }
+    },
+    {
+      "role": "sweep",
+      "lambda": 0.03162277660168379,
+      "log10_lambda": -1.5,
+      "name": "lambda_1e-1.5",
+      "config": "lambda_1e-1.5.yaml",
+      "metrics": "lambda_1e-1.5.json",
+      "provenance": {
+        "config": "lambda_1e-1.5.yaml",
+        "config_sha256": "5893158253c22b28b4dabfc3fcc5dcb45f0a5cad30c57009d608b6c8e5e2e1ad",
+        "git_rev": "a7cbb4e41309701965130ff9ed24921702a2fdcc",
+        "git_dirty": false,
+        "python": "3.12.2"
+      },
+      "updates": 751,
+      "n_seeds": 10,
+      "twap_gap": 3.5454914728365394,
+      "kappa_horizon": 37.39474675393448,
+      "variance_floor_bps2": 1848.0769230769229,
+      "baselines": {
+        "twap": {
+          "expected_bps": 0.8479970482579018,
+          "variance_bps2": 8956.065088757396,
+          "excess_variance_bps2": 7107.988165680473,
+          "objective_bps": 284.06364258017237,
+          "gap_fraction": 1.0
+        },
+        "ac": {
+          "expected_bps": 4.259393885219619,
+          "variance_bps2": 1848.0769581042787,
+          "excess_variance_bps2": 3.502735580696026e-05,
+          "objective_bps": 62.70071867407056,
+          "gap_fraction": 0.0009352568750609611
+        },
+        "optimal": {
+          "expected_bps": 3.8661379834996605,
+          "variance_bps2": 1853.959771589815,
+          "excess_variance_bps2": 5.882848512892224,
+          "objective_bps": 62.493493668993096,
+          "gap_fraction": 0.0
+        }
+      },
+      "tolerances": {
+        "epsilon_gap_fraction": 0.05,
+        "per_seed_gap_fraction": 0.1,
+        "red_flag_rtol": 1e-09
+      },
+      "band": {
+        "delta_objective_bps": 11.078507445558964,
+        "curvature_floor_bps_per_share2": 1.1731233448109252e-08,
+        "bound_shares": 43459.406006309735,
+        "bound_fraction_of_X": 0.43459406006309736
+      },
+      "seeds": [
+        {
+          "ordinal": 0,
+          "expected_bps": 4.0135586354294865,
+          "variance_bps2": 1851.9453080892483,
+          "excess_variance_bps2": 3.8683850123254615,
+          "objective_bps": 62.57721139167225,
+          "relative_excess": 0.001339623019359077,
+          "gap_fraction": 0.00037783845473116404,
+          "deviation_shares": 3597.3886729983087,
+          "red_flag": false,
+          "seconds": 747.5364929000061,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 1,
+          "expected_bps": 4.260411627352721,
+          "variance_bps2": 1848.0769230769229,
+          "excess_variance_bps2": 0.0,
+          "objective_bps": 62.701735308541416,
+          "relative_excess": 0.003332213120477867,
+          "gap_fraction": 0.0009398451938207481,
+          "deviation_shares": 5642.009467325196,
+          "red_flag": false,
+          "seconds": 734.3216787999991,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 2,
+          "expected_bps": 4.260411627352721,
+          "variance_bps2": 1848.0769230769229,
+          "excess_variance_bps2": 0.0,
+          "objective_bps": 62.701735308541416,
+          "relative_excess": 0.003332213120477867,
+          "gap_fraction": 0.0009398451938207481,
+          "deviation_shares": 5642.009467325196,
+          "red_flag": false,
+          "seconds": 710.4353229999979,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 3,
+          "expected_bps": 4.260411627352721,
+          "variance_bps2": 1848.0769230769229,
+          "excess_variance_bps2": 0.0,
+          "objective_bps": 62.701735308541416,
+          "relative_excess": 0.003332213120477867,
+          "gap_fraction": 0.0009398451938207481,
+          "deviation_shares": 5642.009467325196,
+          "red_flag": false,
+          "seconds": 743.6672667000021,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 4,
+          "expected_bps": 4.260411627352721,
+          "variance_bps2": 1848.0769230769229,
+          "excess_variance_bps2": 0.0,
+          "objective_bps": 62.701735308541416,
+          "relative_excess": 0.003332213120477867,
+          "gap_fraction": 0.0009398451938207481,
+          "deviation_shares": 5642.009467325196,
+          "red_flag": false,
+          "seconds": 730.0706785000002,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 5,
+          "expected_bps": 4.260411627352721,
+          "variance_bps2": 1848.0769230769229,
+          "excess_variance_bps2": 0.0,
+          "objective_bps": 62.701735308541416,
+          "relative_excess": 0.003332213120477867,
+          "gap_fraction": 0.0009398451938207481,
+          "deviation_shares": 5642.009467325196,
+          "red_flag": false,
+          "seconds": 729.8735254999992,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 6,
+          "expected_bps": 4.260411627352721,
+          "variance_bps2": 1848.0769230769229,
+          "excess_variance_bps2": 0.0,
+          "objective_bps": 62.701735308541416,
+          "relative_excess": 0.003332213120477867,
+          "gap_fraction": 0.0009398451938207481,
+          "deviation_shares": 5642.009467325196,
+          "red_flag": false,
+          "seconds": 698.9929344000047,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 7,
+          "expected_bps": 4.260411627352721,
+          "variance_bps2": 1848.0769230769229,
+          "excess_variance_bps2": 0.0,
+          "objective_bps": 62.701735308541416,
+          "relative_excess": 0.003332213120477867,
+          "gap_fraction": 0.0009398451938207481,
+          "deviation_shares": 5642.009467325196,
+          "red_flag": false,
+          "seconds": 698.6545351999957,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 8,
+          "expected_bps": 4.260411627352721,
+          "variance_bps2": 1848.0769230769229,
+          "excess_variance_bps2": 0.0,
+          "objective_bps": 62.701735308541416,
+          "relative_excess": 0.003332213120477867,
+          "gap_fraction": 0.0009398451938207481,
+          "deviation_shares": 5642.009467325196,
+          "red_flag": false,
+          "seconds": 699.6544477999996,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 9,
+          "expected_bps": 3.871842182254858,
+          "variance_bps2": 1853.8007391132571,
+          "excess_variance_bps2": 5.723816036334256,
+          "objective_bps": 62.49416881926968,
+          "relative_excess": 1.0803529086743008e-05,
+          "gap_fraction": 3.0471174925996196e-06,
+          "deviation_shares": 324.9738899631799,
+          "red_flag": false,
+          "seconds": 716.2729007000016,
+          "updates": 751,
+          "timed_out": false
+        }
+      ],
+      "summary": {
+        "gap_fraction": {
+          "name": "gap_fraction",
+          "values": [
+            0.00037783845473116404,
+            0.0009398451938207481,
+            0.0009398451938207481,
+            0.0009398451938207481,
+            0.0009398451938207481,
+            0.0009398451938207481,
+            0.0009398451938207481,
+            0.0009398451938207481,
+            0.0009398451938207481,
+            3.0471174925996196e-06
+          ],
+          "median": 0.0009398451938207481,
+          "q1": 0.0009398451938207481,
+          "q3": 0.0009398451938207481,
+          "iqr": 0.0,
+          "worst": 0.0009398451938207481
+        },
+        "relative_excess": {
+          "name": "relative_excess",
+          "values": [
+            0.001339623019359077,
+            0.003332213120477867,
+            0.003332213120477867,
+            0.003332213120477867,
+            0.003332213120477867,
+            0.003332213120477867,
+            0.003332213120477867,
+            0.003332213120477867,
+            0.003332213120477867,
+            1.0803529086743008e-05
+          ],
+          "median": 0.003332213120477867,
+          "q1": 0.003332213120477867,
+          "q3": 0.003332213120477867,
+          "iqr": 0.0,
+          "worst": 0.003332213120477867
+        },
+        "expected_bps": {
+          "name": "expected_bps",
+          "values": [
+            4.0135586354294865,
+            4.260411627352721,
+            4.260411627352721,
+            4.260411627352721,
+            4.260411627352721,
+            4.260411627352721,
+            4.260411627352721,
+            4.260411627352721,
+            4.260411627352721,
+            3.871842182254858
+          ],
+          "median": 4.260411627352721,
+          "q1": 4.260411627352721,
+          "q3": 4.260411627352721,
+          "iqr": 0.0,
+          "worst": 4.260411627352721
+        },
+        "excess_variance_bps2": {
+          "name": "excess_variance_bps2",
+          "values": [
+            3.8683850123254615,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            5.723816036334256
+          ],
+          "median": 0.0,
+          "q1": 0.0,
+          "q3": 0.0,
+          "iqr": 0.0,
+          "worst": 5.723816036334256
+        },
+        "objective_bps": {
+          "name": "objective_bps",
+          "values": [
+            62.57721139167225,
+            62.701735308541416,
+            62.701735308541416,
+            62.701735308541416,
+            62.701735308541416,
+            62.701735308541416,
+            62.701735308541416,
+            62.701735308541416,
+            62.701735308541416,
+            62.49416881926968
+          ],
+          "median": 62.701735308541416,
+          "q1": 62.701735308541416,
+          "q3": 62.701735308541416,
+          "iqr": 0.0,
+          "worst": 62.701735308541416
+        },
+        "deviation_shares": {
+          "name": "deviation_shares",
+          "values": [
+            3597.3886729983087,
+            5642.009467325196,
+            5642.009467325196,
+            5642.009467325196,
+            5642.009467325196,
+            5642.009467325196,
+            5642.009467325196,
+            5642.009467325196,
+            5642.009467325196,
+            324.9738899631799
+          ],
+          "median": 5642.009467325196,
+          "q1": 5642.009467325196,
+          "q3": 5642.009467325196,
+          "iqr": 0.0,
+          "worst": 5642.009467325196
+        }
+      },
+      "epsilon_met": true,
+      "per_seed_met": true,
+      "red_flags": [],
+      "timed_out": [],
+      "sweep_seconds": 7213.299570699994,
+      "reward_variance": {
+        "unit": "bps^2 of episode return, unscaled",
+        "sampled_median": 1849.6563941425043,
+        "averaged_median": 1.3649300547166532e-28,
+        "variance_ratio_median": 7.4739689785835e-32
+      }
+    },
+    {
+      "role": "sweep",
+      "lambda": 0.1,
+      "log10_lambda": -1.0,
+      "name": "lambda_1e-1.0",
+      "config": "lambda_1e-1.0.yaml",
+      "metrics": "lambda_1e-1.0.json",
+      "provenance": {
+        "config": "lambda_1e-1.0.yaml",
+        "config_sha256": "04ceb8baf8e7ef89dd193d7d464a7ec53341f79b4530169e14644eb2874dc664",
+        "git_rev": "508edff06c6199bd3264614a57cd6806f8e5db12",
+        "git_dirty": false,
+        "python": "3.12.2"
+      },
+      "updates": 751,
+      "n_seeds": 10,
+      "twap_gap": 3.7432214753451896,
+      "kappa_horizon": 51.359230685869505,
+      "variance_floor_bps2": 1848.0769230769229,
+      "baselines": {
+        "twap": {
+          "expected_bps": 0.8479970482579018,
+          "variance_bps2": 8956.065088757396,
+          "excess_variance_bps2": 7107.988165680473,
+          "objective_bps": 896.4545059239974,
+          "gap_fraction": 1.0
+        },
+        "ac": {
+          "expected_bps": 4.260410621257713,
+          "variance_bps2": 1848.076923076957,
+          "excess_variance_bps2": 3.410605131648481e-11,
+          "objective_bps": 189.0681029289534,
+          "gap_fraction": 0.00010054160225613147
+        },
+        "optimal": {
+          "expected_bps": 4.120837341288605,
+          "variance_bps2": 1848.7613667387852,
+          "excess_variance_bps2": 0.6844436618623604,
+          "objective_bps": 188.99697401516713,
+          "gap_fraction": 0.0
+        }
+      },
+      "tolerances": {
+        "epsilon_gap_fraction": 0.05,
+        "per_seed_gap_fraction": 0.1,
+        "red_flag_rtol": 1e-09
+      },
+      "band": {
+        "delta_objective_bps": 35.37287659544152,
+        "curvature_floor_bps_per_share2": 3.7004507173409976e-08,
+        "bound_shares": 43724.30096529191,
+        "bound_fraction_of_X": 0.4372430096529191
+      },
+      "seeds": [
+        {
+          "ordinal": 0,
+          "expected_bps": 4.260411627352721,
+          "variance_bps2": 1848.0769230769229,
+          "excess_variance_bps2": 0.0,
+          "objective_bps": 189.068103935045,
+          "relative_excess": 0.000376354808051942,
+          "gap_fraction": 0.00010054302437908396,
+          "deviation_shares": 1924.459744635532,
+          "red_flag": false,
+          "seconds": 766.8965113999948,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 1,
+          "expected_bps": 4.260411627352721,
+          "variance_bps2": 1848.0769230769229,
+          "excess_variance_bps2": 0.0,
+          "objective_bps": 189.068103935045,
+          "relative_excess": 0.000376354808051942,
+          "gap_fraction": 0.00010054302437908396,
+          "deviation_shares": 1924.459744635532,
+          "red_flag": false,
+          "seconds": 763.1397698000001,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 2,
+          "expected_bps": 4.260411627352721,
+          "variance_bps2": 1848.0769230769229,
+          "excess_variance_bps2": 0.0,
+          "objective_bps": 189.068103935045,
+          "relative_excess": 0.000376354808051942,
+          "gap_fraction": 0.00010054302437908396,
+          "deviation_shares": 1924.459744635532,
+          "red_flag": false,
+          "seconds": 717.4089066000015,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 3,
+          "expected_bps": 4.260411627352721,
+          "variance_bps2": 1848.0769230769229,
+          "excess_variance_bps2": 0.0,
+          "objective_bps": 189.068103935045,
+          "relative_excess": 0.000376354808051942,
+          "gap_fraction": 0.00010054302437908396,
+          "deviation_shares": 1924.459744635532,
+          "red_flag": false,
+          "seconds": 691.2708510000011,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 4,
+          "expected_bps": 4.260411627352721,
+          "variance_bps2": 1848.0769230769229,
+          "excess_variance_bps2": 0.0,
+          "objective_bps": 189.068103935045,
+          "relative_excess": 0.000376354808051942,
+          "gap_fraction": 0.00010054302437908396,
+          "deviation_shares": 1924.459744635532,
+          "red_flag": false,
+          "seconds": 697.4754942,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 5,
+          "expected_bps": 4.260411627352721,
+          "variance_bps2": 1848.0769230769229,
+          "excess_variance_bps2": 0.0,
+          "objective_bps": 189.068103935045,
+          "relative_excess": 0.000376354808051942,
+          "gap_fraction": 0.00010054302437908396,
+          "deviation_shares": 1924.459744635532,
+          "red_flag": false,
+          "seconds": 691.6831012999974,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 6,
+          "expected_bps": 4.260411627352721,
+          "variance_bps2": 1848.0769230769229,
+          "excess_variance_bps2": 0.0,
+          "objective_bps": 189.068103935045,
+          "relative_excess": 0.000376354808051942,
+          "gap_fraction": 0.00010054302437908396,
+          "deviation_shares": 1924.459744635532,
+          "red_flag": false,
+          "seconds": 690.0469382999945,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 7,
+          "expected_bps": 4.260411627352721,
+          "variance_bps2": 1848.0769230769229,
+          "excess_variance_bps2": 0.0,
+          "objective_bps": 189.068103935045,
+          "relative_excess": 0.000376354808051942,
+          "gap_fraction": 0.00010054302437908396,
+          "deviation_shares": 1924.459744635532,
+          "red_flag": false,
+          "seconds": 690.8585059000034,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 8,
+          "expected_bps": 4.260411627352721,
+          "variance_bps2": 1848.0769230769229,
+          "excess_variance_bps2": 0.0,
+          "objective_bps": 189.068103935045,
+          "relative_excess": 0.000376354808051942,
+          "gap_fraction": 0.00010054302437908396,
+          "deviation_shares": 1924.459744635532,
+          "red_flag": false,
+          "seconds": 688.4876497000005,
+          "updates": 751,
+          "timed_out": false
+        },
+        {
+          "ordinal": 9,
+          "expected_bps": 4.260411627352721,
+          "variance_bps2": 1848.0769230769229,
+          "excess_variance_bps2": 0.0,
+          "objective_bps": 189.068103935045,
+          "relative_excess": 0.000376354808051942,
+          "gap_fraction": 0.00010054302437908396,
+          "deviation_shares": 1924.459744635532,
+          "red_flag": false,
+          "seconds": 697.6762081999987,
+          "updates": 751,
+          "timed_out": false
+        }
+      ],
+      "summary": {
+        "gap_fraction": {
+          "name": "gap_fraction",
+          "values": [
+            0.00010054302437908396,
+            0.00010054302437908396,
+            0.00010054302437908396,
+            0.00010054302437908396,
+            0.00010054302437908396,
+            0.00010054302437908396,
+            0.00010054302437908396,
+            0.00010054302437908396,
+            0.00010054302437908396,
+            0.00010054302437908396
+          ],
+          "median": 0.00010054302437908396,
+          "q1": 0.00010054302437908396,
+          "q3": 0.00010054302437908396,
+          "iqr": 0.0,
+          "worst": 0.00010054302437908396
+        },
+        "relative_excess": {
+          "name": "relative_excess",
+          "values": [
+            0.000376354808051942,
+            0.000376354808051942,
+            0.000376354808051942,
+            0.000376354808051942,
+            0.000376354808051942,
+            0.000376354808051942,
+            0.000376354808051942,
+            0.000376354808051942,
+            0.000376354808051942,
+            0.000376354808051942
+          ],
+          "median": 0.000376354808051942,
+          "q1": 0.000376354808051942,
+          "q3": 0.000376354808051942,
+          "iqr": 0.0,
+          "worst": 0.000376354808051942
+        },
+        "expected_bps": {
+          "name": "expected_bps",
+          "values": [
+            4.260411627352721,
+            4.260411627352721,
+            4.260411627352721,
+            4.260411627352721,
+            4.260411627352721,
+            4.260411627352721,
+            4.260411627352721,
+            4.260411627352721,
+            4.260411627352721,
+            4.260411627352721
+          ],
+          "median": 4.260411627352721,
+          "q1": 4.260411627352721,
+          "q3": 4.260411627352721,
+          "iqr": 0.0,
+          "worst": 4.260411627352721
+        },
+        "excess_variance_bps2": {
+          "name": "excess_variance_bps2",
+          "values": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "median": 0.0,
+          "q1": 0.0,
+          "q3": 0.0,
+          "iqr": 0.0,
+          "worst": 0.0
+        },
+        "objective_bps": {
+          "name": "objective_bps",
+          "values": [
+            189.068103935045,
+            189.068103935045,
+            189.068103935045,
+            189.068103935045,
+            189.068103935045,
+            189.068103935045,
+            189.068103935045,
+            189.068103935045,
+            189.068103935045,
+            189.068103935045
+          ],
+          "median": 189.068103935045,
+          "q1": 189.068103935045,
+          "q3": 189.068103935045,
+          "iqr": 0.0,
+          "worst": 189.068103935045
+        },
+        "deviation_shares": {
+          "name": "deviation_shares",
+          "values": [
+            1924.459744635532,
+            1924.459744635532,
+            1924.459744635532,
+            1924.459744635532,
+            1924.459744635532,
+            1924.459744635532,
+            1924.459744635532,
+            1924.459744635532,
+            1924.459744635532,
+            1924.459744635532
+          ],
+          "median": 1924.459744635532,
+          "q1": 1924.459744635532,
+          "q3": 1924.459744635532,
+          "iqr": 0.0,
+          "worst": 1924.459744635532
+        }
+      },
+      "epsilon_met": true,
+      "per_seed_met": true,
+      "red_flags": [],
+      "timed_out": [],
+      "sweep_seconds": 7098.647689000005,
+      "reward_variance": {
+        "unit": "bps^2 of episode return, unscaled",
+        "sampled_median": 1850.6051888815705,
+        "averaged_median": 3.272275310330478e-28,
+        "variance_ratio_median": 1.7630585626359316e-31
+      }
+    }
+  ],
+  "missing_points": [],
+  "full_budget_point": {
+    "role": "full_budget",
+    "lambda": 0.00031622776601683794,
+    "log10_lambda": -3.5,
+    "name": "lambda_1e-3.5",
+    "config": "m3_antithetic_validation.yaml",
+    "metrics": "m3_antithetic_validation.json",
+    "provenance": {
+      "config": "m3_antithetic_validation.yaml",
+      "config_sha256": "1d04878af0fbd7bf3564357fa69907dbec16157bb93c8cd58e47c6e136f8c832",
+      "git_rev": "8bf6953dd8709d12ed6bed82570bebe1f7448f10",
+      "git_dirty": false,
+      "python": "3.12.2"
+    },
+    "updates": 1802,
+    "n_seeds": 10,
+    "twap_gap": 0.562996507685845,
+    "kappa_horizon": 5.135365058392617,
+    "variance_floor_bps2": 1848.0769230769229,
+    "baselines": {
+      "twap": {
+        "expected_bps": 0.8479970482579018,
+        "variance_bps2": 8956.065088757396,
+        "excess_variance_bps2": 7107.988165680473,
+        "objective_bps": 3.6801535035770465,
+        "gap_fraction": 1.0
+      },
+      "ac": {
+        "expected_bps": 2.10664398570132,
+        "variance_bps2": 2223.796441271162,
+        "excess_variance_bps2": 375.7195181942393,
+        "objective_bps": 2.809870166400694,
+        "gap_fraction": 0.3434813902338562
+      },
+      "optimal": {
+        "expected_bps": 1.2850226279841521,
+        "variance_bps2": 3382.142670048727,
+        "excess_variance_bps2": 1534.065746971804,
+        "objective_bps": 2.354550048883884,
+        "gap_fraction": 0.0
+      }
+    },
+    "tolerances": {
+      "epsilon_gap_fraction": 0.05,
+      "per_seed_gap_fraction": 0.1,
+      "red_flag_rtol": 1e-09
+    },
+    "band": {
+      "delta_objective_bps": 0.06628017273465812,
+      "curvature_floor_bps_per_share2": 1.59851359233891e-10,
+      "bound_shares": 28797.092862990892,
+      "bound_fraction_of_X": 0.2879709286299089
+    },
+    "seeds": [
+      {
+        "ordinal": 0,
+        "expected_bps": 1.2841646381730774,
+        "variance_bps2": 3385.798679094354,
+        "excess_variance_bps2": 1537.7217560174313,
+        "objective_bps": 2.354848190645846,
+        "relative_excess": 0.00012662366727050932,
+        "gap_fraction": 0.0002249102179887162,
+        "deviation_shares": 1336.2084777496837,
+        "red_flag": false,
+        "seconds": 1931.7632520999978,
+        "updates": 1802,
+        "timed_out": false
+      },
+      {
+        "ordinal": 1,
+        "expected_bps": 1.2804530203810505,
+        "variance_bps2": 3397.4502085738304,
+        "excess_variance_bps2": 1549.3732854969076,
+        "objective_bps": 2.354821109991793,
+        "relative_excess": 0.00011512225362851519,
+        "gap_fraction": 0.00020448129261354853,
+        "deviation_shares": 1422.948671148616,
+        "red_flag": false,
+        "seconds": 1839.1432834000007,
+        "updates": 1802,
+        "timed_out": false
+      },
+      {
+        "ordinal": 2,
+        "expected_bps": 1.286872235404559,
+        "variance_bps2": 3376.8187682603116,
+        "excess_variance_bps2": 1528.7418451833887,
+        "objective_bps": 2.3547160907352476,
+        "relative_excess": 7.051956760999086e-05,
+        "gap_fraction": 0.00012525755781302492,
+        "deviation_shares": 777.2760619637302,
+        "red_flag": false,
+        "seconds": 1997.3820024000015,
+        "updates": 1802,
+        "timed_out": false
+      },
+      {
+        "ordinal": 3,
+        "expected_bps": 1.2891265674589267,
+        "variance_bps2": 3369.4208576368533,
+        "excess_variance_bps2": 1521.3439345599304,
+        "objective_bps": 2.354630998039967,
+        "relative_excess": 3.43798833756246e-05,
+        "gap_fraction": 6.106589100692745e-05,
+        "deviation_shares": 698.9658987970759,
+        "red_flag": false,
+        "seconds": 1932.864866900003,
+        "updates": 1802,
+        "timed_out": false
+      },
+      {
+        "ordinal": 4,
+        "expected_bps": 1.279898227783264,
+        "variance_bps2": 3399.661327732105,
+        "excess_variance_bps2": 1551.584404655182,
+        "objective_bps": 2.3549655346658245,
+        "relative_excess": 0.00017646079858749838,
+        "gap_fraction": 0.00031343142662256874,
+        "deviation_shares": 1877.2368993106604,
+        "red_flag": false,
+        "seconds": 1659.2426984000049,
+        "updates": 1802,
+        "timed_out": false
+      },
+      {
+        "ordinal": 5,
+        "expected_bps": 1.2761318330714462,
+        "variance_bps2": 3416.3407914000272,
+        "excess_variance_bps2": 1568.2638683231044,
+        "objective_bps": 2.356473649488073,
+        "relative_excess": 0.0008169716354513506,
+        "gap_fraction": 0.0014511131495459028,
+        "deviation_shares": 4168.209751867749,
+        "red_flag": false,
+        "seconds": 1664.459415899997,
+        "updates": 1802,
+        "timed_out": false
+      },
+      {
+        "ordinal": 6,
+        "expected_bps": 1.2871019640358894,
+        "variance_bps2": 3375.7623940673634,
+        "excess_variance_bps2": 1527.6854709904405,
+        "objective_bps": 2.3546117645154645,
+        "relative_excess": 2.6211220954746982e-05,
+        "gap_fraction": 4.655663151888143e-05,
+        "deviation_shares": 485.90855914803336,
+        "red_flag": false,
+        "seconds": 1658.4063284000003,
+        "updates": 1802,
+        "timed_out": false
+      },
+      {
+        "ordinal": 7,
+        "expected_bps": 1.2816208993721379,
+        "variance_bps2": 3393.249652929503,
+        "excess_variance_bps2": 1545.1727298525802,
+        "objective_bps": 2.3546606566554455,
+        "relative_excess": 4.697618197319102e-05,
+        "gap_fraction": 8.343956193668607e-05,
+        "deviation_shares": 805.7384230710975,
+        "red_flag": false,
+        "seconds": 1669.2442242999969,
+        "updates": 1802,
+        "timed_out": false
+      },
+      {
+        "ordinal": 8,
+        "expected_bps": 1.2910859859999402,
+        "variance_bps2": 3363.8287917047232,
+        "excess_variance_bps2": 1515.7518686278004,
+        "objective_bps": 2.354822050063844,
+        "relative_excess": 0.00011552151124963045,
+        "gap_fraction": 0.00020519045797366128,
+        "deviation_shares": 1095.9345017871724,
+        "red_flag": false,
+        "seconds": 1657.7601902999959,
+        "updates": 1802,
+        "timed_out": false
+      },
+      {
+        "ordinal": 9,
+        "expected_bps": 1.2883579604185498,
+        "variance_bps2": 3372.144301983146,
+        "excess_variance_bps2": 1524.067378906223,
+        "objective_bps": 2.3547236197210895,
+        "relative_excess": 7.371720014511404e-05,
+        "gap_fraction": 0.00013093722454535832,
+        "deviation_shares": 852.6620041069178,
+        "red_flag": false,
+        "seconds": 1666.4945337999961,
+        "updates": 1802,
+        "timed_out": false
+      }
+    ],
+    "summary": {
+      "gap_fraction": {
+        "name": "gap_fraction",
+        "values": [
+          0.0002249102179887162,
+          0.00020448129261354853,
+          0.00012525755781302492,
+          6.106589100692745e-05,
+          0.00031343142662256874,
+          0.0014511131495459028,
+          4.655663151888143e-05,
+          8.343956193668607e-05,
+          0.00020519045797366128,
+          0.00013093722454535832
+        ],
+        "median": 0.0001677092585794534,
+        "q1": 9.389406090577078e-05,
+        "q3": 0.00021998027798495249,
+        "iqr": 0.0001260862170791817,
+        "worst": 0.0014511131495459028
+      },
+      "relative_excess": {
+        "name": "relative_excess",
+        "values": [
+          0.00012662366727050932,
+          0.00011512225362851519,
+          7.051956760999086e-05,
+          3.43798833756246e-05,
+          0.00017646079858749838,
+          0.0008169716354513506,
+          2.6211220954746982e-05,
+          4.697618197319102e-05,
+          0.00011552151124963045,
+          7.371720014511404e-05
+        ],
+        "median": 9.441972688681462e-05,
+        "q1": 5.286202838239098e-05,
+        "q3": 0.0001238481282652896,
+        "iqr": 7.098609988289862e-05,
+        "worst": 0.0008169716354513506
+      },
+      "expected_bps": {
+        "name": "expected_bps",
+        "values": [
+          1.2841646381730774,
+          1.2804530203810505,
+          1.286872235404559,
+          1.2891265674589267,
+          1.279898227783264,
+          1.2761318330714462,
+          1.2871019640358894,
+          1.2816208993721379,
+          1.2910859859999402,
+          1.2883579604185498
+        ],
+        "median": 1.2855184367888182,
+        "q1": 1.2807449901288224,
+        "q3": 1.2880439613228847,
+        "iqr": 0.007298971194062309,
+        "worst": 1.2910859859999402
+      },
+      "excess_variance_bps2": {
+        "name": "excess_variance_bps2",
+        "values": [
+          1537.7217560174313,
+          1549.3732854969076,
+          1528.7418451833887,
+          1521.3439345599304,
+          1551.584404655182,
+          1568.2638683231044,
+          1527.6854709904405,
+          1545.1727298525802,
+          1515.7518686278004,
+          1524.067378906223
+        ],
+        "median": 1533.23180060041,
+        "q1": 1524.9719019272775,
+        "q3": 1548.3231465858257,
+        "iqr": 23.35124465854824,
+        "worst": 1568.2638683231044
+      },
+      "objective_bps": {
+        "name": "objective_bps",
+        "values": [
+          2.354848190645846,
+          2.354821109991793,
+          2.3547160907352476,
+          2.354630998039967,
+          2.3549655346658245,
+          2.356473649488073,
+          2.3546117645154645,
+          2.3546606566554455,
+          2.354822050063844,
+          2.3547236197210895
+        ],
+        "median": 2.354772364856441,
+        "q1": 2.354674515175396,
+        "q3": 2.3548416555003455,
+        "iqr": 0.00016714032494968833,
+        "worst": 2.356473649488073
+      },
+      "deviation_shares": {
+        "name": "deviation_shares",
+        "values": [
+          1336.2084777496837,
+          1422.948671148616,
+          777.2760619637302,
+          698.9658987970759,
+          1877.2368993106604,
+          4168.209751867749,
+          485.90855914803336,
+          805.7384230710975,
+          1095.9345017871724,
+          852.6620041069178
+        ],
+        "median": 974.2982529470451,
+        "q1": 784.3916522405721,
+        "q3": 1401.263622798883,
+        "iqr": 616.871970558311,
+        "worst": 4168.209751867749
+      }
+    },
+    "epsilon_met": true,
+    "per_seed_met": true,
+    "red_flags": [],
+    "timed_out": [],
+    "sweep_seconds": 17682.2913117,
+    "reward_variance": {
+      "unit": "bps^2 of episode return, unscaled",
+      "sampled_median": 3377.2618838003223,
+      "averaged_median": 3.399896201985896e-08,
+      "variance_ratio_median": 1.010206188651487e-11
+    }
+  },
+  "verdict": {
+    "points": 9,
+    "complete": true,
+    "epsilon_met_at": [
+      3.1622776601683795e-05,
+      0.0001,
+      0.00031622776601683794,
+      0.001,
+      0.0031622776601683794,
+      0.01,
+      0.03162277660168379,
+      0.1
+    ],
+    "epsilon_missed_at": [
+      1e-05
+    ],
+    "per_seed_missed_at": [
+      1e-05
+    ],
+    "red_flags": [],
+    "red_flag_free": true,
+    "timed_out_at": [],
+    "total_sweep_seconds": 70748.8069487,
+    "per_seed_seconds": {
+      "median": 765.0181405999974,
+      "max": 998.093944100001
+    }
+  }
+}
