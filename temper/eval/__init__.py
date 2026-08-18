@@ -3,6 +3,9 @@
 :mod:`~temper.eval.rollout` is the one loop every graded thing goes through;
 :mod:`~temper.eval.metrics` is the pair of registries that decides what "graded"
 is allowed to mean (invariant 7 — read its docstring before adding a metric).
+From M4a both registries are keyed by *world*: a metric grades the world that
+charges it, and :mod:`~temper.eval.grading` refuses the pairing before it
+computes anything.
 
 From M2 there are two ways to reach a number and they are not interchangeable.
 :func:`~temper.eval.rollout.sample_costs` estimates by Monte Carlo, which is what
@@ -28,15 +31,20 @@ from .grading import (
     deterministic_schedule,
     grade_policy,
     grade_trajectory,
+    graded_metrics,
     summarise,
 )
 from .metrics import (
     CONTEXT,
+    CORE_METRICS,
     ENCODINGS,
     GRADED,
     LINEAR,
     POWER_LAW,
     Metric,
+    WorldMismatch,
+    check_grades_world,
+    metrics_for,
     register_context,
     register_graded,
 )
@@ -50,6 +58,8 @@ from .reference import (
     TrajectoryBand,
     reference_row,
     reference_table,
+    reference_trajectories,
+    schedule_moments_for,
     select_lambda,
     trajectory_band,
     trajectory_deviation,
@@ -65,36 +75,43 @@ from .rollout import (
 
 __all__ = [
     "CONTEXT",
+    "CORE_METRICS",
     "DEFAULT_EVAL_STREAMS",
     "ENCODINGS",
-    "GRADED",
-    "LINEAR",
-    "POWER_LAW",
-    "REFERENCE_SCHEDULES",
-    "RED_FLAG_RTOL",
     "EpisodeResult",
+    "GRADED",
     "Grade",
+    "LINEAR",
     "LambdaRule",
     "Metric",
     "NoAdmissibleLambda",
+    "POWER_LAW",
     "Provenance",
+    "RED_FLAG_RTOL",
+    "REFERENCE_SCHEDULES",
     "ReferenceRow",
     "SampleResult",
     "ScheduleNotDeterministic",
     "ScheduleReference",
     "SeedSummary",
     "TrajectoryBand",
+    "WorldMismatch",
+    "check_grades_world",
     "config_digest",
     "deterministic_schedule",
     "git_revision",
     "grade_policy",
     "grade_trajectory",
+    "graded_metrics",
+    "metrics_for",
     "reference_row",
     "reference_table",
+    "reference_trajectories",
     "register_context",
     "register_graded",
     "run_episode",
     "sample_costs",
+    "schedule_moments_for",
     "select_lambda",
     "stamp",
     "standardise",

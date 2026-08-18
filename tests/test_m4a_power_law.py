@@ -38,7 +38,7 @@ import pytest
 from temper.agents import PPOPolicy
 from temper.eval.experiment import AVAILABLE_ADVANTAGE, load_experiment
 from temper.eval.grading import grade_policy
-from temper.eval.metrics import POWER_LAW, WorldMismatch, check_grades_world
+from temper.eval.metrics import LINEAR, POWER_LAW, WorldMismatch, check_grades_world
 from temper.eval.provenance import config_digest
 from temper.eval.reference import trajectory_deviation
 from temper.eval.sweep import train_seed
@@ -465,7 +465,7 @@ def test_the_grader_could_not_have_used_the_other_worlds_metrics():
 
     check_grades_world(REFERENCE.encoding, GRADED[POWER_LAW])
     with pytest.raises(WorldMismatch):
-        check_grades_world(REFERENCE.encoding, GRADED["linear"])
+        check_grades_world(REFERENCE.encoding, GRADED[LINEAR])
 
 
 # ---------------------------------------------------------------------------

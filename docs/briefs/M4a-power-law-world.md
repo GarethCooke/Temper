@@ -380,3 +380,163 @@ dependencies.
   leaving to the reader.
 - Preserve pre-run reasoning verbatim with retractions beneath it. House practice since M2,
   and task 0's gate is exactly the shape of thing that benefits.
+
+
+---
+
+# Results — 2026-08-19
+
+*Everything above this line is the pre-run brief, preserved verbatim (house
+practice since M2). Retractions and corrections are recorded here, beneath it.*
+
+## Task 0 — the gates, regenerated on the reference box
+
+`make m4a-reference` (`tools/m4a_reference_table.py`), oracle only, exit status 0.
+
+| λ | J_twap | J_ac | J_opt(tangent) | J_pow* | TWAP gap | available advantage | avail / gap | max bin, pow* | rule |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |
+| 1.000e-05 | 1.1271 | 1.1443 | 1.1222 | 1.1220 | 0.0046 | 0.018 % | 0.0391 | 10.0 % | i |
+| 3.162e-05 | 1.3208 | 1.3499 | 1.2788 | 1.2772 | 0.0341 | 0.125 % | 0.0367 | 14.5 % | i |
+| 1.000e-04 | 1.9332 | 1.7578 | 1.6479 | 1.6387 | 0.1797 | 0.565 % | 0.0314 | 24.7 % | i |
+| **3.162e-04** | **3.8697** | **2.5144** | **2.4200** | **2.3832** | **0.6237** | **1.542 %** | **0.0247** | **42.3 %** | **✓** |
+| 1.000e-03 | 9.9936 | 4.1533 | 4.1149 | 4.0212 | 1.4852 | 2.330 % | 0.0157 | 63.8 % | ii |
+| 3.162e-03 | 29.3591 | 8.4514 | 8.4588 | 8.3170 | 2.5300 | 1.704 % | 0.0067 | 82.0 % | ii |
+| 1.000e-02 | 90.5982 | 21.2307 | 21.2451 | 21.1284 | 3.2880 | 0.552 % | 0.0017 | 92.7 % | ii |
+
+(The full seventeen-point table is what the tool prints; the seven rows around
+the selection are reproduced here. The low end is uniform — every schedule agrees
+to four decimals below 10^−6.)
+
+**Every number the brief pre-stated reproduced on the reference box**, which is
+worth saying plainly because the brief warned they came from a cloud container on
+unpinned numpy and might not. Nothing here is a retraction.
+
+- **Gate 1 — λ agreement: GREEN.** Both encodings' tables select 10^−3.5. The
+  linear table selects it on a 56.30 % TWAP gap and a 32.6 % largest bin; the
+  power-law table on a 62.37 % gap and a 42.3 % largest bin. `Experiment.
+  verify_lambda_rule` now applies the rule to *every* world and refuses to run
+  unless they agree, so this is checked before every run rather than once here.
+- **Gate 2 — the advantage is worth an evening: GREEN.** `J_opt(tangent) − J_pow*`
+  = **0.03674 bps** = **1.542 %** of `J_pow*`, against a 1 % bar. Stated as a
+  fraction of the *objective* `E + λV`; as a fraction of expected cost alone it is
+  **2.50 %**. Both appear in the figure caption, because "1.5 % of cost" is the
+  looser of the two readings and the brief's own prose used it.
+- **Gate 3 — the band discriminates in trajectory space: GREEN.** λ_min(H(x*)) =
+  1.6362e-10 bps/share² (local), so the median tolerance implies ‖δ‖₂ ≤ **4 739
+  shares** (4.74 % of X) against a tangent-to-optimum separation of **16 878
+  shares** (16.9 % of X) — a factor of **3.56**, against the brief's predicted
+  3.6 and a stated bar of 2.
+
+The reason the denominator moved, in one line: 5 % of this λ's TWAP gap is
+**0.06628 bps** as M3 computed it and **0.07433 bps** re-derived in the power-law
+encoding — **1.8×–2.0× the entire available advantage of 0.03674 bps**.
+
+## Task 1 — the certificate
+
+`tests/test_power_law_certificate.py`, the 3 × 3 golden grid plus the whole
+committed λ grid at the reference case. No scipy.
+
+| part | worst observed | bar |
+| --- | ---: | ---: |
+| (a) Cholesky, smallest pivot | +1.453e-05 | PD |
+| (b) relative KKT residual | 1.184e-15 | ≤ 1e-12 |
+| (c) perturbation, worst ΔJ/\|J\| over 3 600 | +2.067e-12 | ≥ −1e-9 |
+| (d) shooting vs Newton, of X | 3.110e-15 | ≤ 1e-10 |
+| (e) tangent limit vs `optimal_trajectory`, of X | 3.492e-16 | ≤ 1e-12 |
+
+At 10^−3.5: λ_min = 1.636e-10 bps/share², condition number 34.61, smallest bin
+weight 0.0059 — interior at every λ up to 10^−1, so the equal-marginal condition
+is sufficient rather than half of the story.
+
+**The Hessian assembly is cross-checked against Phase 1 two ways.** Handed the
+tangent charge at exponent 1 it reproduces `objective_curvature_floor` to 2.6e-15
+relative, and the band it then implies at 10^−3.5 is **28 797 shares** — M3's
+committed number, to the share.
+
+**The band is local, and validated by evaluation rather than by asserting the
+quadratic inequality.** Random directions at the band radius raise the objective
+by at least 3.19× what the local quadratic predicts (they sample the mean
+eigenvalue, not the smallest). Along the flattest eigenvector, where the bound is
+*attained*, the rise is 0.988 of the prediction at the worst λ — 1.2 % low,
+because the third-order term curves away over a radius that is 4.7 % of the
+parent order. That the deviation is small and downward is what makes the band a
+usable local bound.
+
+Two small things the brief did not predict, both recorded because a later session
+will hit them:
+
+1. **The Newton solve must be allowed to accept a step that does not strictly
+   lower the objective.** The last step lands within rounding of the minimum,
+   where `J` is flat to the last bit; a strict `value < best` halves the step
+   eighty times and reports failure at an iterate whose KKT residual is 1e-15. It
+   also must not stop at the first iterate that fails to *improve the residual* —
+   from TWAP at λ = 1e-3 the first damped step raises it before Newton's
+   quadratic phase takes it to 1e-15, and an "improved or stop" rule returned
+   that first step as the optimum, three orders from stationary.
+2. **The weight floor has to be strict positivity and nothing more.** An absolute
+   floor of 1e-15 rejects the *true* optimum at the top of the λ grid, where the
+   last bins legitimately trade 1e-14 of the order.
+
+And one definition worth inheriting: **the KKT residual's denominator is the size
+of the two terms, not of their difference.** A bin's marginal is `impact − risk`,
+and at high λ those cancel to about four digits; a mean-relative residual reports
+a float-exact solve as a failure. Normalising by `max_i(|impact_i| + |risk_i|)`
+floors at machine precision at every λ.
+
+## Task 4 — the four inherited guarantees, before training
+
+`make m4a-guarantees`, twelve (case, schedule) cells, run and recorded **before**
+task 5 started.
+
+| guarantee | worst observed | bar |
+| --- | ---: | ---: |
+| exact per-episode noise identity | 2.336e-14 relative | ≤ 1e-12 |
+| antithetic cancellation | 1.776e-15 bps per step | ≤ 1e-12 |
+| action identity across the pair | exact | bitwise |
+| schedule is open-loop | exact | bitwise |
+
+**All four green, and §9's antithetic entry was right about the mechanism and
+wrong about the milestone.** The power law replaces the temporary term, which is
+a function of the schedule and carries no shock, so realised cost stays affine in
+the draws and the pairing's cancellation stays *exact*. What ends exactness is a
+second, independent noise source or a price-bearing observation — M4b, not M4a.
+
+**Task 4 earned its place.** All twelve cancellation cells were red on the first
+run, by 0.06 bps per step — four orders outside the band — because `mirror_of`
+rebuilt the antithetic mirror without the primary's temporary-impact model. It
+defaulted, so the *mirror* was a Phase-1 env being averaged against a power-law
+primary: the rewards still looked like rewards and the schedules were still
+identical, and the estimator was silently no longer the one the config named.
+Caught in minutes, before training, which is the entire argument for running
+these first.
+
+## Task 2 — the seam, and the Phase-1 regression
+
+`ExecutionEnv` takes an injected temporary-impact model and there is still one
+`step` loop. The Phase-1 default is built exactly as before, and that is checked
+the only way worth checking it: **seed 0 of `configs/m3_frontier/lambda_1e-3.5.
+yaml` retrained through the new code and reproduced its committed grade bitwise**
+— objective to seventeen digits and every point of the trajectory — in 12 min
+24 s. `results/m3_frontier.png` redraws byte-identically.
+
+## Task 3 — the differential
+
+{DIFFERENTIAL}
+
+## Task 5 — the training point
+
+{TRAINING}
+
+## Task 6 — the figure and the ladder
+
+{FIGURE}
+
+## §9 amendments this milestone yielded
+
+All three the brief predicted, and no others:
+
+1. *A metric grades the world that charges it.*
+2. *The power law's break is in a shock-free term, so the noise identity and the
+   antithetic pairing survive it exactly.*
+3. *The tolerance's denominator is the available advantage, not the TWAP gap,
+   wherever the closed form is the thing being beaten.*
