@@ -497,3 +497,153 @@ def frontier_figure(
         written.append(out)
     plt.close(figure)
     return written
+
+
+# ---------------------------------------------------------------------------
+# M4a — how far the closed form is from the truth, and how much learning recovered
+# ---------------------------------------------------------------------------
+
+
+def degradation_figure(
+    path: str | Path,
+    *,
+    curves: dict,
+    provenance: Provenance,
+    caption: str,
+    formats: Sequence[str] = ("png",),
+) -> list[Path]:
+    """The M4a hero figure: excess over the certified power-law optimum, against lambda.
+
+    Two things in one picture, which is the whole reason the milestone draws it.
+    The curves are oracle-only and therefore free: TWAP, the vendored
+    Almgren-Chriss schedule and the tangent-derived sinh, each priced under
+    FrontierView's power law and expressed as excess over that world's own
+    optimum. They say *how far the closed form is from the truth* across four
+    decades of risk aversion. The markers are the agent's ten seeds at the one
+    lambda that was trained, drawn individually rather than summarised
+    (*below n ~ 10, draw every trace*), and they say *how much of that distance
+    learning recovered*.
+
+    The y axis is relative excess, ``(J - J_pow*) / J_pow*``, on a log scale:
+    TWAP runs from 1e-6 to nearly 4 across the grid, and a linear axis would show
+    one point and a floor. The tangent's curve is the milestone's denominator —
+    the available advantage — so the vertical distance from it down to a seed
+    marker is the capture, read directly off the chart.
+
+    `curves` is the oracle table plus the seeds, assembled by
+    ``tools/m4a_degradation.py``: nothing here computes a cost, so the figure is
+    a *view* of a committed result and redraws byte-identically from it.
+    """
+    lambdas = np.asarray(curves["lambdas"], dtype=float)
+    figure, axes = plt.subplots(figsize=(8.6, 5.4))
+
+    order = ("twap", "ac", "tangent")
+    labels = {
+        "twap": "TWAP",
+        "ac": "AC (vendored $\\kappa$)",
+        "tangent": "AC at the tangent (exact discrete $\\kappa$)",
+    }
+    style = {
+        "twap": STYLE["twap"],
+        "ac": STYLE["ac"],
+        # The tangent-derived sinh is what the closed form actually produces and
+        # what M4a's advantage is measured against, so it gets the optimum's own
+        # colour: in Phase 1 it *was* the optimum, and the point of the figure is
+        # how far that is from being true here.
+        "tangent": STYLE["optimal"],
+    }
+    floor = 1e-7
+    for name in order:
+        excess = np.asarray(curves["excess"][name], dtype=float)
+        axes.plot(
+            lambdas,
+            np.clip(excess, floor, None),
+            marker="o",
+            markersize=3.6,
+            label=labels[name],
+            **style[name],
+        )
+
+    trained = float(curves["trained_lambda"])
+    seeds = np.asarray(curves["seed_excess"], dtype=float)
+    axes.plot(
+        [trained] * len(seeds),
+        np.clip(seeds, floor, None),
+        marker="D",
+        markersize=5.0,
+        markerfacecolor=STYLE["agent"]["color"],
+        markeredgecolor="#123f27",
+        markeredgewidth=0.6,
+        linestyle="none",
+        zorder=4,
+        label=f"PPO agent, {len(seeds)} seeds (each drawn)",
+    )
+
+    # The available advantage at the trained lambda, as a bracket the reader can
+    # measure the capture against.
+    tangent_at_trained = float(curves["tangent_at_trained"])
+    axes.annotate(
+        "",
+        xy=(trained, max(float(np.median(seeds)), floor)),
+        xytext=(trained, tangent_at_trained),
+        arrowprops={
+            "arrowstyle": "<->",
+            "color": "#227a4b",
+            "linewidth": 1.1,
+            "shrinkA": 2.0,
+            "shrinkB": 2.0,
+        },
+    )
+    axes.annotate(
+        f"captured {curves['median_capture']:.1%} of\n"
+        f"{curves['available_advantage_bps']:.4f} bps available",
+        xy=(trained, tangent_at_trained),
+        xytext=(1.9 * trained, tangent_at_trained * 2.2),
+        fontsize=8.5,
+        color="#1c5e3a",
+    )
+
+    axes.set_xscale("log")
+    axes.set_yscale("log")
+    axes.set_xlabel(r"$\lambda$ (risk aversion)")
+    axes.set_ylabel(r"excess over the certified power-law optimum, $(J - J^*_{pow})\,/\,J^*_{pow}$")
+    axes.set_title(
+        "M4a — the Almgren-Chriss schedule in the world it was linearised from",
+        fontsize=11.5,
+        pad=10.0,
+    )
+    axes.grid(True, which="both", alpha=0.25, linewidth=0.6)
+    axes.legend(frameon=False, fontsize=8.5, loc="upper left")
+
+    figure.text(
+        0.012,
+        0.965,
+        caption,
+        fontsize=8.0,
+        color="#333333",
+        va="top",
+        wrap=True,
+    )
+    figure.text(
+        0.01,
+        0.014,
+        provenance.short,
+        fontsize=7.5,
+        color="#666666",
+        family="monospace",
+    )
+    figure.subplots_adjust(left=0.105, right=0.985, top=0.845, bottom=0.105)
+
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+    for suffix in formats:
+        out = target.with_name(f"{target.name}.{suffix.lstrip('.')}")
+        figure.savefig(
+            out,
+            dpi=160,
+            metadata={"Software": None, "Creator": None, "Date": None},
+        )
+        written.append(out)
+    plt.close(figure)
+    return written

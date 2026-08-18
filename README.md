@@ -57,7 +57,7 @@ exact per-episode identity pins the realised noise to the specific draws the env
 the cost assembly holds by construction and the Monte-Carlo tiers certify only that the
 shocks are iid normal. Alongside it: six exact per-episode identities, an exact step
 count, and a variational certificate that the schedule M2 grades against really is the
-minimiser. M3 (the frontier sweep) is next. See `ROADMAP.md`.
+minimiser. M4a (the power-law world) is the current milestone. See `ROADMAP.md`.
 
 ## What this does and does not establish
 
@@ -73,12 +73,24 @@ is deliberately narrower than it might sound.
   antithetic pairing) — on the realised reward at this case's ~1:70 per-episode
   signal-to-noise ratio the same agent misses the bar as a lottery, and that miss is
   committed beside the pass. The frontier (M3) is nine points of that same world.
-- **Phase 2 — the agent beats AC where AC's formula breaks, inside an AC-shaped market.**
-  When it lands (M4+), the "advantage" is earned against a *mis-specified* closed form —
-  FrontierView's calibrated 0.6-power temporary impact, stochastic liquidity, a weak alpha
-  signal — with the now-wrong AC schedule and TWAP still on every chart. It is still a
-  synthetic, AC-shaped market with realistic impact curvature: it says the agent adapts to
-  a model change the formula cannot, not that it would make money.
+- **Phase 2 — the agent finds the optimum of a world whose closed form is derived at a
+  tangent.** Half of it has landed (M4a). FrontierView's temporary impact is a 0.6-power
+  law; the Almgren–Chriss closed form has no solution for that, so the vendored library
+  *linearises* at the tangent to it and solves the linear problem instead. M4a makes the
+  power law the world and grades the agent against that world's own optimum — solved by
+  Newton on the KKT system and **certified** (Cholesky PD, relative KKT residual 1.2e-15,
+  3 600 perturbations uphill, an independent bisection solver agreeing to 3.1e-15 of the
+  parent order), because a reference nobody checked is not a reference. The mis-specification
+  is small and real: at the reference case the tangent-derived schedule costs **1.54 % of
+  expected cost** more than the optimum, which in trajectory space is **16 878 shares —
+  16.9 % of the parent order** — and the advantage the agent captures is measured as a
+  fraction of *that*, never of the TWAP gap, because 5 % of the TWAP gap here is twice the
+  entire effect. {RESULT_SENTENCE} The now-wrong AC schedule and TWAP are on every chart.
+  It says the agent adapts to a model change the formula cannot; it says nothing about real
+  fills, and the effect is 0.037 bps in absolute terms — a small claim that should read as
+  one. **The liquidity half is not done.** M4b makes liquidity a second, independent noise
+  source, which is what actually breaks analytic grading and the antithetic pairing; M4a
+  deliberately left the observation untouched so that a red result could be attributed.
 - **Phase 3 — it runs on a wire against synthetic data.** The stretch leg (M6) works a parent
   order on the live Anvil book. That is plumbing evidence — the policy speaks a versioned
   venue protocol end to end — and not execution-quality evidence: the flow it trades
