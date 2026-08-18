@@ -34,7 +34,13 @@ from temper.eval.reference import (
     select_lambda,
     trajectory_band,
 )
-from temper.oracle import VENDOR_LAMBDA_GRID, Market, SymbolParams
+from temper.oracle import (
+    ENCODINGS,
+    LINEAR_ENCODING,
+    VENDOR_LAMBDA_GRID,
+    Market,
+    SymbolParams,
+)
 
 #: Lambda grids a config may name. ``vendor`` is M0's 17-point log-half-decade
 #: sweep, which is the grid task 0's rule is stated over. A config naming
@@ -82,33 +88,71 @@ class ExecutionCase:
         }
 
 
+#: The two denominators a tolerance may be a fraction of, and the ``Grade``
+#: attribute each reads. ``twap_gap`` is M2's and M3's: the excess over the
+#: optimum as a fraction of the excess TWAP already carries, portable across
+#: lambda by construction. ``available_advantage`` is M4a's: the excess as a
+#: fraction of what the tangent-derived closed form leaves on the table in a
+#: world it was not derived for.
+TWAP_GAP = "twap_gap"
+AVAILABLE_ADVANTAGE = "available_advantage"
+DENOMINATORS: dict[str, str] = {
+    TWAP_GAP: "gap_fraction",
+    AVAILABLE_ADVANTAGE: "advantage_fraction",
+}
+
+
 @dataclass(frozen=True)
 class Tolerances:
     """The pre-stated bar, in the units the brief states it in.
 
-    Both tolerances are fractions of the *TWAP gap* rather than of the objective
-    itself. That is deliberate and it is what makes them portable: "within 5 % of
-    the distance TWAP already covers" means the same thing at every lambda, while
-    "within 0.03 bps" would be trivially met at low lambda and unmeetable at
-    high.
+    A tolerance is a *fraction*, and `denominator` says of what. Never of the
+    objective itself: "within 0.03 bps" would be trivially met at low lambda and
+    unmeetable at high.
+
+    ``twap_gap`` — M2's and M3's — is "within 5 % of the distance TWAP already
+    covers", which means the same thing at every lambda. It is also degenerate
+    wherever TWAP and the optimum have nearly converged, which is the §9 entry
+    *The per-lambda tolerance is meaningful only where the testbed is
+    discriminative*.
+
+    ``available_advantage`` — M4a's — is "within 5 % of what the closed form left
+    on the table". The switch is not a preference. At M4a's lambda the whole
+    available advantage is 0.0367 bps while 5 % of that lambda's TWAP gap is
+    0.0743 bps, so an agent held to the older denominator could capture *none* of
+    the mis-specification the milestone exists to measure and still pass by a
+    factor of two. The denominator is the finding; the number 0.05 is not.
     """
 
-    epsilon_gap_fraction: float     # median across seeds
-    per_seed_gap_fraction: float    # no individual seed worse than this
+    epsilon_fraction: float         # median across seeds
+    per_seed_fraction: float        # no individual seed worse than this
     red_flag_rtol: float            # slack on J_agent >= J_optimal
+    denominator: str = TWAP_GAP
 
     def __post_init__(self) -> None:
-        if self.epsilon_gap_fraction > self.per_seed_gap_fraction:
+        if self.denominator not in DENOMINATORS:
+            raise ValueError(
+                f"unknown tolerance denominator {self.denominator!r}; expected "
+                f"one of {', '.join(sorted(DENOMINATORS))}"
+            )
+        if self.epsilon_fraction > self.per_seed_fraction:
             raise ValueError(
                 "the per-seed floor must be at least as loose as the median "
-                f"tolerance, got {self.per_seed_gap_fraction} < "
-                f"{self.epsilon_gap_fraction}"
+                f"tolerance, got {self.per_seed_fraction} < "
+                f"{self.epsilon_fraction}"
             )
+
+    @property
+    def graded_attribute(self) -> str:
+        """The :class:`~temper.eval.grading.Grade` field the bars are read on."""
+        return DENOMINATORS[self.denominator]
 
     def as_dict(self) -> dict:
         return {
-            "epsilon_gap_fraction": self.epsilon_gap_fraction,
-            "per_seed_gap_fraction": self.per_seed_gap_fraction,
+            "denominator": self.denominator,
+            "graded_attribute": self.graded_attribute,
+            "epsilon_fraction": self.epsilon_fraction,
+            "per_seed_fraction": self.per_seed_fraction,
             "red_flag_rtol": self.red_flag_rtol,
         }
 
@@ -285,6 +329,12 @@ class Experiment:
     case: ExecutionCase
     lambda_risk: float
     lambda_grid: str
+    #: The world this experiment trains and grades in. Defaulted to Phase 1 at
+    #: the loader, never inherited from anywhere else: constitution §4 says a
+    #: Phase-2 model is an additive alternative and never a silent modification,
+    #: so a config that wants one has to name it and
+    #: ``tests/test_repo_invariants.py`` checks that it did.
+    cost_encoding: str
     rule: LambdaRule
     #: The frontier sub-grid this experiment is one point of, or ``None`` when
     #: its lambda is the rule-selected one (M2, and M3's validation run).
@@ -307,19 +357,33 @@ class Experiment:
 
     # -- oracle surface, derived on demand ---------------------------------
 
-    def table(self) -> list[ReferenceRow]:
-        """Task 0's reference table over the committed grid."""
+    def table(self, encoding: str | None = None) -> list[ReferenceRow]:
+        """Task 0's reference table over the committed grid, in a world.
+
+        `encoding` defaults to the experiment's own. Passing the other one is how
+        :meth:`verify_lambda_rule` checks that both worlds' tables select the
+        same lambda — which is M4a's task-0 gate, and the condition under which
+        this milestone's result is comparable to M2's and M3's at all.
+        """
         return reference_table(
-            self.case.market, self.case.order_size, LAMBDA_GRIDS[self.lambda_grid]
+            self.case.market,
+            self.case.order_size,
+            LAMBDA_GRIDS[self.lambda_grid],
+            encoding=self.cost_encoding if encoding is None else encoding,
         )
 
-    def reference(self) -> ReferenceRow:
-        """The three schedules at the committed lambda."""
-        return reference_row(self.case.market, self.case.order_size, self.lambda_risk)
+    def reference(self, encoding: str | None = None) -> ReferenceRow:
+        """The world's reference schedules at the committed lambda."""
+        return reference_row(
+            self.case.market,
+            self.case.order_size,
+            self.lambda_risk,
+            encoding=self.cost_encoding if encoding is None else encoding,
+        )
 
-    def rule_selected(self) -> ReferenceRow:
-        """The row M2 task 0's rule selects on the committed grid."""
-        return select_lambda(self.table(), self.rule)
+    def rule_selected(self, encoding: str | None = None) -> ReferenceRow:
+        """The row M2 task 0's rule selects on the committed grid, in a world."""
+        return select_lambda(self.table(encoding), self.rule)
 
     def verify_lambda_rule(self) -> ReferenceRow:
         """Re-derive lambda from the rule; raise if the config disagrees.
@@ -334,7 +398,17 @@ class Experiment:
         frontier grid, that grid must be a subset of the committed grid, and it
         must contain the rule-selected lambda — so the sweep is a pre-stated set
         of points around a committed one, not a set chosen after the fact.
+
+        **Both worlds must agree.** From M4a the rule is applied to the table of
+        *every* encoding and the selections must match. A Phase-2 milestone whose
+        lambda was chosen by a different rule than the Phase-1 results it is
+        compared against is not comparable to them, and the resolution is a
+        decision rather than a rescue — so this raises instead of preferring one.
+        The rule itself is unchanged: smallest lambda whose TWAP gap clears
+        `min_twap_gap` and whose optimum's largest bin is inside
+        `max_bin_fraction`, read off each world's own optimum.
         """
+        self.verify_lambda_rule_agrees_across_worlds()
         selected = self.rule_selected()
         if self.frontier_grid is not None:
             try:
@@ -373,6 +447,32 @@ class Experiment:
             )
         return selected
 
+    def verify_lambda_rule_agrees_across_worlds(self) -> dict[str, float]:
+        """Apply the rule to every world's table; raise unless they agree.
+
+        Cheap — a few dozen closed forms and one Newton solve per grid point —
+        and the thing it buys is that M4a's training point sits at the lambda two
+        committed milestones already answered, so its capture fraction can be put
+        beside their gap fractions without an argument about the x axis.
+        """
+        selections = {
+            encoding: self.rule_selected(encoding).lambda_risk
+            for encoding in ENCODINGS
+        }
+        if len(set(selections.values())) > 1:
+            described = ", ".join(
+                f"{encoding} selects {lam:.6e}"
+                for encoding, lam in sorted(selections.items())
+            )
+            raise ValueError(
+                f"task 0's rule selects a different lambda in each world "
+                f"({described}). A Phase-2 milestone whose lambda was chosen by a "
+                "different rule than the Phase-1 results it is compared against is "
+                "not comparable to them; decide which case to run before running "
+                "one."
+            )
+        return selections
+
     def verify_gate_reference(self) -> float | None:
         """The gate's reference result exists and states a median; else raise.
 
@@ -394,24 +494,47 @@ class Experiment:
 
     # -- the derived trajectory band ---------------------------------------
 
-    def band(self, gap_fraction: float | None = None) -> TrajectoryBand:
-        """The trajectory band the tolerance implies, via task 0's Hessian.
+    def denominator_bps(self, reference: ReferenceRow | None = None) -> float:
+        """The bps quantity the tolerance is a fraction *of*, in this world.
 
-        `gap_fraction` defaults to the median tolerance, so ``experiment.band()``
-        is "how far from the sinh may a schedule that meets epsilon sit?" — the
-        number the figure draws and the brief reports beside the observed
-        deviation.
+        The TWAP gap for M2 and M3; the available advantage for M4a. One
+        function, so the bar, the band and the reported excess cannot be computed
+        against three different denominators by three call sites.
         """
-        fraction = (
-            self.tolerances.epsilon_gap_fraction if gap_fraction is None
-            else gap_fraction
+        row = self.reference() if reference is None else reference
+        if self.tolerances.denominator == AVAILABLE_ADVANTAGE:
+            advantage = row.available_advantage
+            if advantage is None:
+                raise ValueError(
+                    f"{self.path.name} states its tolerance against the available "
+                    f"advantage, but the {row.encoding!r} world has no "
+                    "tangent-derived schedule to beat — there the closed form is "
+                    "the optimum, and an agent that beat it would be a red flag "
+                    "rather than a result"
+                )
+            return advantage
+        return row.twap.objective - row.optimal.objective
+
+    def band(self, fraction: float | None = None) -> TrajectoryBand:
+        """The trajectory band the tolerance implies, via this world's Hessian.
+
+        `fraction` defaults to the median tolerance, so ``experiment.band()`` is
+        "how far from the optimum may a schedule that meets epsilon sit?" — the
+        number the figure draws and the brief reports beside the observed
+        deviation. In the power-law world the returned band is marked
+        :attr:`~temper.eval.reference.TrajectoryBand.local`, because there the
+        Hessian moves with the schedule.
+        """
+        chosen = (
+            self.tolerances.epsilon_fraction if fraction is None else fraction
         )
-        reference = self.reference()
-        excess = fraction * (
-            reference.twap.objective - reference.optimal.objective
-        )
+        excess = chosen * self.denominator_bps()
         return trajectory_band(
-            self.case.market, self.case.order_size, self.lambda_risk, excess
+            self.case.market,
+            self.case.order_size,
+            self.lambda_risk,
+            excess,
+            encoding=self.cost_encoding,
         )
 
     def provenance(self, repo_root: Path | None = None) -> Provenance:
@@ -425,6 +548,7 @@ class Experiment:
             "case": self.case.as_dict(),
             "lambda_risk": self.lambda_risk,
             "lambda_grid": self.lambda_grid,
+            "cost_encoding": self.cost_encoding,
             "frontier_grid": self.frontier_grid,
             "lambda_rule": {
                 "min_twap_gap": self.rule.min_twap_gap,
@@ -453,6 +577,65 @@ def repo_root_of(config_path: str | Path) -> Path:
         if (ancestor / "pyproject.toml").exists():
             return ancestor
     return path.parent.parent
+
+
+def _cost_encoding(document: dict) -> str:
+    """The world a config names, defaulting to Phase 1.
+
+    Constitution §4: Phase-2 models are *additive alternatives behind the same
+    interface, never silent modifications of Phase 1*. The default here is what
+    makes that mechanical — a config with no ``world`` block gets the linearised
+    world, so no config can inherit a Phase-2 world by omission, and one that
+    wants the power law has to write it down where a reader and a digest can both
+    see it. ``tests/test_repo_invariants.py`` pins the default and pins that
+    every committed config in a Phase-2 world names it.
+    """
+    block = document.get("world")
+    if block is None:
+        return LINEAR_ENCODING
+    encoding = str(block["cost_encoding"])
+    if encoding not in ENCODINGS:
+        raise ValueError(
+            f"unknown cost encoding {encoding!r}; known worlds are "
+            f"{', '.join(sorted(ENCODINGS))}"
+        )
+    return encoding
+
+
+def _tolerances(block: dict) -> Tolerances:
+    """Resolve the ``tolerances`` block, in either spelling.
+
+    M2 and M3 spell the bars ``epsilon_gap_fraction`` / ``per_seed_gap_fraction``
+    because for them the denominator *was* the TWAP gap and there was only one.
+    M4a's denominator is the available advantage, and a config that stated
+    ``epsilon_gap_fraction: 0.05`` while meaning "5 % of the available advantage"
+    would be lying in the one place this milestone cannot afford one — so the
+    neutral spelling ``epsilon_fraction`` exists and the ``_gap_`` spelling is
+    accepted only alongside the ``twap_gap`` denominator. The committed M2/M3
+    configs are byte-frozen by their result digests and keep the name they were
+    stamped with.
+    """
+    denominator = str(block.get("denominator", TWAP_GAP))
+    legacy = "epsilon_gap_fraction" in block or "per_seed_gap_fraction" in block
+    neutral = "epsilon_fraction" in block or "per_seed_fraction" in block
+    if legacy and neutral:
+        raise ValueError(
+            "the tolerances block states both the `_gap_fraction` and the "
+            "`_fraction` spelling; use one"
+        )
+    if legacy and denominator != TWAP_GAP:
+        raise ValueError(
+            f"the tolerances block spells its bars `epsilon_gap_fraction` but "
+            f"names the {denominator!r} denominator; the `_gap_` spelling means "
+            "the TWAP gap and nothing else"
+        )
+    suffix = "_gap_fraction" if legacy else "_fraction"
+    return Tolerances(
+        epsilon_fraction=float(block["epsilon" + suffix]),
+        per_seed_fraction=float(block["per_seed" + suffix]),
+        red_flag_rtol=float(block["red_flag_rtol"]),
+        denominator=denominator,
+    )
 
 
 def _market(block: dict) -> Market:
@@ -494,6 +677,7 @@ def load_experiment(path: str | Path) -> Experiment:
         ),
         lambda_risk=float(selection["lambda_risk"]),
         lambda_grid=grid,
+        cost_encoding=_cost_encoding(document),
         frontier_grid=(
             None
             if selection.get("frontier_grid") is None
@@ -503,15 +687,7 @@ def load_experiment(path: str | Path) -> Experiment:
             min_twap_gap=float(selection["rule"]["min_twap_gap"]),
             max_bin_fraction=float(selection["rule"]["max_bin_fraction"]),
         ),
-        tolerances=Tolerances(
-            epsilon_gap_fraction=float(
-                document["tolerances"]["epsilon_gap_fraction"]
-            ),
-            per_seed_gap_fraction=float(
-                document["tolerances"]["per_seed_gap_fraction"]
-            ),
-            red_flag_rtol=float(document["tolerances"]["red_flag_rtol"]),
-        ),
+        tolerances=_tolerances(document["tolerances"]),
         seeds=SeedPlan(
             root_seed=int(document["seeding"]["root_seed"]),
             train_pool=str(document["seeding"]["train_pool"]),

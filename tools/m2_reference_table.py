@@ -135,8 +135,8 @@ def main() -> int:
         f"{selected.optimal.max_bin_fraction * 100:.1f} % of X; κT "
         f"{selected.kappa_horizon:.2f}."
     )
-    epsilon = experiment.tolerances.epsilon_gap_fraction
-    per_seed = experiment.tolerances.per_seed_gap_fraction
+    epsilon = experiment.tolerances.epsilon_fraction
+    per_seed = experiment.tolerances.per_seed_fraction
     j_opt = selected.optimal.objective
     print(
         f"- ε = {epsilon:.0%} of the gap = {epsilon * gap * 100:.3f} % of "

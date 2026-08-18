@@ -159,7 +159,20 @@ class MirrorEnv(ExecutionEnv):
 
 
 def mirror_of(env: ExecutionEnv) -> MirrorEnv:
-    """The mirror of a raw env: same market, order, lambda and seed address."""
+    """The mirror of a raw env: same market, order, lambda, **world** and address.
+
+    The temporary-impact model is copied across, and that is not housekeeping.
+    Until M4a there was only one world and the mirror rebuilt it by default; the
+    moment the model became injectable, a mirror that defaulted was a *Phase-1*
+    env being averaged against a power-law primary. The pairing's cancellation is
+    exact only because both halves pay the same schedule-dependent cost, so the
+    two halves disagreeing about what a trade costs breaks the estimator
+    silently — the rewards still look like rewards.
+
+    Found by M4a task 4 rather than reasoned about, which is what that task is
+    for: the antithetic average stopped matching the control variate by 0.06 bps
+    per step, four orders above the 1e-12 band, on the first cell it was run on.
+    """
     if not isinstance(env, ExecutionEnv):
         raise TypeError(f"mirror_of takes a raw ExecutionEnv, got {type(env)!r}")
     root_seed, pool, stream = env.seed_address
@@ -167,6 +180,7 @@ def mirror_of(env: ExecutionEnv) -> MirrorEnv:
         env.market,
         env.order_size,
         env.lambda_risk,
+        temporary_impact=env.temporary_impact,
         root_seed=root_seed,
         pool=pool,
         stream_index=stream,

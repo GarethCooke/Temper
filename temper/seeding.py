@@ -41,12 +41,18 @@ from numpy.random import Generator, SeedSequence, default_rng
 #: rediscovery result is addressed by — on a check that does not care which
 #: shocks it gets. ``m3/diagnostic`` continues the pattern for M3's antithetic
 #: pairing checks, which are diagnostics of an estimator and report no number.
+#: ``m4a/differential`` is M1's differential again in the power-law world. Its
+#: own pool rather than more offsets inside ``m1/differential``: a new pool
+#: cannot collide with an in-use range, where a new offset can only be *checked*
+#: not to. Appended, never inserted — :data:`_POOL_INDEX` is positional and
+#: reordering this tuple would re-address every committed result.
 POOLS: tuple[str, ...] = (
     "train",
     "eval",
     "m1/differential",
     "m2/diagnostic",
     "m3/diagnostic",
+    "m4a/differential",
 )
 
 #: The pool M1's Monte-Carlo differential draws from. Named here rather than
@@ -60,6 +66,9 @@ M2_DIAGNOSTIC_POOL = "m2/diagnostic"
 #: The pool M3's non-reported checks draw from — the antithetic pairing's
 #: action-identity, shock-negation and zero-variance tests.
 M3_DIAGNOSTIC_POOL = "m3/diagnostic"
+
+#: The pool M4a's differential and its inherited-guarantee checks draw from.
+M4A_DIFFERENTIAL_POOL = "m4a/differential"
 
 _POOL_INDEX = {name: index for index, name in enumerate(POOLS)}
 

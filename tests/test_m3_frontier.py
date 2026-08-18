@@ -182,8 +182,8 @@ def _fake_point_document(experiment, rng: np.random.Generator) -> dict:
         "seeds": seeds,
         "summary": summary,
         "verdict": {
-            "epsilon_met": summary["gap_fraction"]["median"] <= tolerances.epsilon_gap_fraction,
-            "per_seed_met": summary["gap_fraction"]["worst"] <= tolerances.per_seed_gap_fraction,
+            "epsilon_met": summary["gap_fraction"]["median"] <= tolerances.epsilon_fraction,
+            "per_seed_met": summary["gap_fraction"]["worst"] <= tolerances.per_seed_fraction,
             "red_flags": [], "timed_out": [], "sweep_seconds": 6100.0,
         },
     }

@@ -20,7 +20,15 @@ from typing import Protocol
 
 import numpy as np
 
-from temper.oracle import Market, ac_trajectory, optimal_trajectory, twap_trajectory
+from temper.oracle import (
+    LINEAR_ENCODING,
+    POWER_LAW_ENCODING,
+    Market,
+    ac_trajectory,
+    optimal_trajectory,
+    power_law_optimum,
+    twap_trajectory,
+)
 
 
 class Policy(Protocol):
@@ -87,23 +95,70 @@ def optimal_policy(market: Market, order_size: float, lambda_risk: float):
     return SchedulePolicy(optimal_trajectory(market, order_size, lambda_risk), "optimal")
 
 
-#: The named baselines, by the key configs refer to them by. Both kappa
-#: conventions are here on purpose: `ac` is what the goldens pin and what every
-#: chart carries as the vendored comparison, `optimal` is what M2 grades against
-#: (``ARCHITECTURE.md`` §9, 2026-08-04).
-BASELINES: dict[str, Callable[[Market, float, float], SchedulePolicy]] = {
-    "twap": twap_policy,
-    "ac": ac_policy,
-    "optimal": optimal_policy,
+def tangent_policy(market: Market, order_size: float, lambda_risk: float):
+    """The same sinh, under its power-law-world name.
+
+    In the linearised world that schedule *is* the optimum. In M4a's world it is
+    the closed form's answer to a problem the closed form was not derived for —
+    still exactly optimal for the tangent, and 16 878 shares from the optimum of
+    the world it is actually run in. Two names for one trajectory because it
+    plays two roles, and conflating them is the whole mistake M4a measures.
+    """
+    return SchedulePolicy(optimal_trajectory(market, order_size, lambda_risk), "tangent")
+
+
+def power_law_optimum_policy(market: Market, order_size: float, lambda_risk: float):
+    """The certified optimum of the power-law world — what M4a grades against."""
+    return SchedulePolicy(power_law_optimum(market, order_size, lambda_risk), "optimal")
+
+
+#: The named baselines each world carries, by the key its reference row uses.
+#: Both kappa conventions are here on purpose: `ac` is what the goldens pin and
+#: what every chart carries as the vendored comparison, `optimal` is what the
+#: agent is graded against (``ARCHITECTURE.md`` §9, 2026-08-04) — and `optimal`
+#: means *this world's* optimum, so in the power-law world it is the certified
+#: solve and the sinh appears beside it as `tangent`.
+WORLD_BASELINES: dict[str, dict[str, Callable[[Market, float, float], SchedulePolicy]]] = {
+    LINEAR_ENCODING: {
+        "twap": twap_policy,
+        "ac": ac_policy,
+        "optimal": optimal_policy,
+    },
+    POWER_LAW_ENCODING: {
+        "twap": twap_policy,
+        "ac": ac_policy,
+        "tangent": tangent_policy,
+        "optimal": power_law_optimum_policy,
+    },
 }
 
+#: The Phase-1 baselines, under the name every committed config and test uses.
+BASELINES: dict[str, Callable[[Market, float, float], SchedulePolicy]] = (
+    WORLD_BASELINES[LINEAR_ENCODING]
+)
 
-def baseline(name: str, market: Market, order_size: float, lambda_risk: float):
-    """Build a named baseline, or fail with the list of names that exist."""
+
+def baseline(
+    name: str,
+    market: Market,
+    order_size: float,
+    lambda_risk: float,
+    *,
+    encoding: str = LINEAR_ENCODING,
+):
+    """Build a named baseline for a world, or fail with the names that exist."""
     try:
-        factory = BASELINES[name]
+        world = WORLD_BASELINES[encoding]
     except KeyError:
         raise ValueError(
-            f"unknown baseline {name!r}; expected one of {', '.join(sorted(BASELINES))}"
+            f"unknown cost encoding {encoding!r}; expected one of "
+            f"{', '.join(sorted(WORLD_BASELINES))}"
+        ) from None
+    try:
+        factory = world[name]
+    except KeyError:
+        raise ValueError(
+            f"unknown baseline {name!r} for the {encoding!r} world; expected one "
+            f"of {', '.join(sorted(world))}"
         ) from None
     return factory(market, order_size, lambda_risk)

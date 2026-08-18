@@ -435,19 +435,27 @@ def frontier_figure(
         **STYLE["agent"],
     )
     tolerances = points[0]["tolerances"]
+    # M3's committed points spell these `epsilon_gap_fraction`; M4a renamed the
+    # field because its denominator is no longer the TWAP gap. Read either, so
+    # this figure still redraws byte-identically from the artefact it was
+    # aggregated from (invariant 1).
+    epsilon = tolerances.get("epsilon_fraction", tolerances.get("epsilon_gap_fraction"))
+    per_seed = tolerances.get(
+        "per_seed_fraction", tolerances.get("per_seed_gap_fraction")
+    )
     bottom.axhline(
-        tolerances["epsilon_gap_fraction"],
+        epsilon,
         color="#b03a2e",
         linestyle=(0, (4, 2)),
         linewidth=1.2,
-        label=rf"$\varepsilon$ = {tolerances['epsilon_gap_fraction']:g} of the TWAP gap (median)",
+        label=rf"$\varepsilon$ = {epsilon:g} of the TWAP gap (median)",
     )
     bottom.axhline(
-        tolerances["per_seed_gap_fraction"],
+        per_seed,
         color="#b03a2e",
         linestyle=(0, (1, 2)),
         linewidth=1.2,
-        label=f"per-seed floor {tolerances['per_seed_gap_fraction']:g}",
+        label=f"per-seed floor {per_seed:g}",
     )
     if full is not None:
         bottom.plot(

@@ -12,8 +12,9 @@ M2_CONFIG   ?= configs/m2_ppo.yaml
 M2_SAMPLED  ?= configs/m2_ppo_sampled.yaml
 M3_VALIDATE ?= configs/m3_antithetic_validation.yaml
 M3_FRONTIER ?= configs/m3_frontier.yaml
+M4A_CONFIG  ?= configs/m4a_power_law.yaml
 
-.PHONY: help test test-verbose differential smoke sweep reference validate frontier frontier-figure frontier-check goldens clean
+.PHONY: help test test-verbose differential smoke sweep reference validate frontier frontier-figure frontier-check m4a-reference m4a-guarantees m4a-regression m4a m4a-figure goldens clean
 
 help:
 	@echo "make test          run the pytest suite (the gate); excludes the marked tiers"
@@ -25,6 +26,11 @@ help:
 	@echo "make frontier      M3 tasks 4-5: the nine-lambda sweep, then the frontier figure - a day"
 	@echo "make frontier-check M3's amended update budget, checked at one lambda first - ~2 h"
 	@echo "make frontier-figure redraw the committed frontier from results/m3_frontier.json"
+	@echo "make m4a-reference M4a task 0: the power-law table and its three gates"
+	@echo "make m4a-guarantees M4a task 4: the four inherited guarantees, before training"
+	@echo "make m4a-regression M4a task 2: one M3 seed retrained bitwise - ~20 min"
+	@echo "make m4a           M4a task 5: ten seeds in the power-law world - ~3 h"
+	@echo "make m4a-figure    redraw results/m4a_degradation.* from the committed result"
 	@echo "make goldens       re-export the FrontierView fixtures (read-only there)"
 	@echo "                   override the checkout with FRONTIERVIEW=/path/to/FrontierView"
 	@echo "make clean         remove caches and scratch results"
@@ -103,6 +109,35 @@ frontier-figure:
 
 frontier-check:
 	$(PYTHON) tools/m3_frontier.py run --quiet --only 3.1622776601683794e-04
+
+# M4a task 0 — oracle only, no agent, no training, minutes. Applies M2's
+# selection rule to the power-law table, checks it agrees with the linear one,
+# and reports the three gates. Exit status is whether all three are green.
+m4a-reference:
+	$(PYTHON) tools/m4a_reference_table.py --config $(M4A_CONFIG)
+
+# M4a task 4 — the four guarantees the power-law world inherits, run and recorded
+# *before* the training point. If any goes red, that is the milestone's finding
+# and training does not start.
+m4a-guarantees:
+	$(PYTHON) -m pytest tests/test_m4a_inherited_guarantees.py -v
+
+# M4a task 2 — the env seam's acceptance. `make test` green is necessary and not
+# sufficient: one M3 seed at 10^-3.5 is retrained through the new code and its
+# objective and whole trajectory must be *bitwise* the committed ones. ~20 min.
+m4a-regression:
+	$(PYTHON) -m pytest tests/test_m4a_phase1_regression.py -m training -v
+
+# M4a task 5 — the training point. Ten seeds at the rule-selected lambda in the
+# power-law world, graded analytically against the certified optimum. Serial and
+# unattended: 512 envs x 8 threads saturates the reference box.
+m4a:
+	$(PYTHON) tools/train.py --config $(M4A_CONFIG) --quiet --expect pass
+
+# M4a task 6 — the degradation figure. Oracle curves are free; the agent's ten
+# seeds are read off the committed result, so this redraws without retraining.
+m4a-figure:
+	$(PYTHON) tools/m4a_degradation.py --config $(M4A_CONFIG)
 
 # Regenerates $(GOLDENS) from a FrontierView checkout. Writes nothing into that
 # repo — the export imports its `api` package and nothing more (constitution §7).

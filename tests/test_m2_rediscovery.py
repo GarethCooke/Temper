@@ -288,9 +288,9 @@ def test_the_headline_median_is_within_epsilon():
     """The milestone's claim, as a number."""
     experiment, document = HEADLINE, DOCUMENTS["headline"]
     median = document["summary"]["gap_fraction"]["median"]
-    assert median <= experiment.tolerances.epsilon_gap_fraction, (
+    assert median <= experiment.tolerances.epsilon_fraction, (
         f"median gap fraction {median:.4f} exceeds the pre-stated "
-        f"{experiment.tolerances.epsilon_gap_fraction}"
+        f"{experiment.tolerances.epsilon_fraction}"
     )
     assert document["verdict"]["epsilon_met"]
 
@@ -298,9 +298,9 @@ def test_the_headline_median_is_within_epsilon():
 def test_no_headline_seed_is_outside_the_per_seed_floor():
     experiment, document = HEADLINE, DOCUMENTS["headline"]
     worst = document["summary"]["gap_fraction"]["worst"]
-    assert worst <= experiment.tolerances.per_seed_gap_fraction, (
+    assert worst <= experiment.tolerances.per_seed_fraction, (
         f"worst seed at {worst:.4f} is outside the per-seed floor "
-        f"{experiment.tolerances.per_seed_gap_fraction}"
+        f"{experiment.tolerances.per_seed_fraction}"
     )
     assert document["verdict"]["per_seed_met"]
     assert document["verdict"]["passed"]
@@ -317,9 +317,9 @@ def test_the_sampled_run_is_committed_as_the_recorded_miss():
     """
     document = DOCUMENTS["sampled"]
     median = document["summary"]["gap_fraction"]["median"]
-    assert median > SAMPLED.tolerances.epsilon_gap_fraction, (
+    assert median > SAMPLED.tolerances.epsilon_fraction, (
         f"the sampled-reward run now reaches {median:.4f}, inside epsilon "
-        f"{SAMPLED.tolerances.epsilon_gap_fraction}. The control-variate "
+        f"{SAMPLED.tolerances.epsilon_fraction}. The control-variate "
         "amendment exists because it did not — revisit it."
     )
     assert not document["verdict"]["epsilon_met"]
@@ -507,7 +507,7 @@ def test_one_seed_retrains_to_the_same_verdict():
         streams=experiment.seeds.eval_streams,
         name="seed0",
     )
-    assert regraded.gap_fraction <= experiment.tolerances.per_seed_gap_fraction, (
+    assert regraded.gap_fraction <= experiment.tolerances.per_seed_fraction, (
         f"retrained seed 0 scored {regraded.gap_fraction:.4f} of the TWAP gap, "
         f"outside the per-seed floor it was committed under "
         f"({committed['gap_fraction']:.4f} at commit time)"

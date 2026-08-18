@@ -30,25 +30,27 @@ property of a module nothing on this path imports.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 import numpy as np
 
-from temper.env import ExecutionEnv
-from temper.eval.metrics import GRADED
+from temper.env import ExecutionEnv, TemporaryImpact, impact_for
+from temper.eval.metrics import Metric, WorldMismatch, check_grades_world, metrics_for
 from temper.eval.reference import ReferenceRow, trajectory_deviation
 from temper.eval.rollout import run_episode
 from temper.oracle import Market
 
 #: The registry entries a grade is assembled from. Routed through
-#: :data:`~temper.eval.metrics.GRADED` rather than calling
+#: :func:`~temper.eval.metrics.metrics_for` rather than calling
 #: :func:`~temper.oracle.cost.schedule_moments` directly, which is not
-#: indirection for its own sake: ``register_graded`` refuses a metric encoded
-#: against FrontierView's power law, so going through the registry is what makes
-#: invariant 7's quarantine load-bearing for M2 rather than a fact about a module
-#: nobody on this path imports. ``tests/test_m2_grading.py`` pins that the names
-#: below are registered, are ``LINEAR``, and agree with the closed form.
+#: indirection for its own sake: the registry is keyed by *world*, so asking it
+#: for the metrics that charge this env's encoding is what makes M4a's rule — a
+#: metric grades the world that charges it — load-bearing on the grading path
+#: rather than a fact about a module nobody here imports.
+#: ``tests/test_m2_grading.py`` pins that the names below are registered and
+#: agree with the closed form in the linearised world;
+#: ``tests/test_objective_registry.py`` does it in both.
 OBJECTIVE = "objective"
 EXPECTED_COST = "expected_cost"
 SHORTFALL_VARIANCE = "shortfall_variance"
@@ -86,6 +88,8 @@ def deterministic_schedule(
     root_seed: int,
     pool: str = "eval",
     streams: Sequence[int] = DEFAULT_EVAL_STREAMS,
+    temporary_impact: TemporaryImpact | None = None,
+    expect_encoding: str | None = None,
 ) -> np.ndarray:
     """The inventory trajectory `policy` induces, verified shock-independent.
 
@@ -95,6 +99,12 @@ def deterministic_schedule(
     Bitwise, not ``allclose``: the claim is that the shocks did not enter the
     computation at all, and a policy that let 1e-16 of price into its action
     would still be a policy whose schedule is not open-loop.
+
+    `temporary_impact` names the world the policy is rolled out in; ``None`` is
+    Phase 1, which is what the env itself defaults to. `expect_encoding` is the
+    env half of M4a's world/metric check: the caller states which world it
+    believes it is grading in, and every env built here has to agree before a
+    step is taken.
     """
     if len(streams) < 2:
         raise ValueError(
@@ -107,10 +117,18 @@ def deterministic_schedule(
             market,
             order_size,
             lambda_risk,
+            temporary_impact=temporary_impact,
             root_seed=root_seed,
             pool=pool,
             stream_index=int(stream),
         )
+        if expect_encoding is not None and env.cost_encoding != expect_encoding:
+            raise WorldMismatch(
+                f"the eval env charges the {env.cost_encoding!r} encoding but "
+                f"the grade would be computed against a {expect_encoding!r} "
+                "reference; the schedule and the optimum it is scored against "
+                "must come from one world"
+            )
         trajectories.append(run_episode(env, policy).trajectory)
 
     reference = trajectories[0]
@@ -128,13 +146,30 @@ def deterministic_schedule(
 
 @dataclass(frozen=True)
 class Grade:
-    """One schedule, scored against the certified optimum.
+    """One schedule, scored against the certified optimum of one world.
 
-    ``gap_fraction`` is the number the milestone's tolerance is stated in: the
-    excess over the optimum, as a fraction of the excess TWAP already carries.
-    Zero is the optimum, one is TWAP, and the pre-stated epsilon is 0.05.
-    Expressing it this way rather than in bps is what makes the tolerance mean
-    the same thing at every lambda when M3 sweeps.
+    Two normalisations of the same excess, because the two milestones they serve
+    ask different questions, and reporting a fraction without saying which
+    denominator it has is the trap ``ARCHITECTURE.md`` §9 records twice.
+
+    ``gap_fraction`` is the excess over the optimum as a fraction of the excess
+    TWAP already carries. Zero is the optimum, one is TWAP; M2's and M3's epsilon
+    is 0.05 of it. Portable across lambda by construction, and degenerate
+    wherever TWAP and the optimum have nearly converged.
+
+    ``advantage_fraction`` is the excess as a fraction of the *available
+    advantage* — what the closed form leaves on the table in a world it was not
+    derived for. It exists only where there is such a world (M4a), is ``None``
+    elsewhere, and its complement :attr:`capture_fraction` is the number M4a
+    leads with. It is not interchangeable with ``gap_fraction``: at M4a's lambda
+    5 % of the TWAP gap is 1.8-2.0x the *entire* available advantage, so an agent
+    graded to the first bar could capture none of the mis-specification and pass.
+
+    The absolute :attr:`excess` in bps travels beside both of them everywhere,
+    for the reason §9 gives: a fraction alone made a healthy agent look like a
+    degrading one at low lambda, and the same trap runs the other way here — a
+    capture fraction near 1 on an advantage of 0.037 bps is a small absolute
+    claim and should read as one.
     """
 
     name: str
@@ -147,20 +182,55 @@ class Grade:
     gap_fraction: float      # relative_excess / (TWAP's relative excess)
     deviation: float         # |x - x*|_2 over the interior holdings, shares
     red_flag: bool           # J below the certified optimum beyond float slack
+    encoding: str            # the world this was charged and graded in
+    #: ``(J - J_optimal) / (J_tangent - J_optimal)``, where a tangent-derived
+    #: closed form exists to be beaten; ``None`` in the linearised world.
+    advantage_fraction: float | None = None
+
+    @property
+    def capture_fraction(self) -> float | None:
+        """``(J_tangent - J_agent) / (J_tangent - J_optimal)`` — M4a's headline.
+
+        One is the certified power-law optimum, zero is the Almgren-Chriss
+        schedule the vendored library would have run, and negative is an agent
+        that did worse than the closed form it was supposed to improve on.
+        """
+        if self.advantage_fraction is None:
+            return None
+        return 1.0 - self.advantage_fraction
 
     def as_dict(self) -> dict:
         return {
             "name": self.name,
+            "encoding": self.encoding,
             "expected_bps": self.expected,
             "variance_bps2": self.variance,
             "objective_bps": self.objective,
             "excess_bps": self.excess,
             "relative_excess": self.relative_excess,
             "gap_fraction": self.gap_fraction,
+            "advantage_fraction": self.advantage_fraction,
+            "capture_fraction": self.capture_fraction,
             "deviation_shares": self.deviation,
             "red_flag": self.red_flag,
             "trajectory": [float(x) for x in self.trajectory],
         }
+
+
+def graded_metrics(reference: ReferenceRow) -> Mapping[str, Metric]:
+    """The metrics that may score `reference`'s world, checked before use.
+
+    Two refusals, not one. :func:`~temper.eval.metrics.metrics_for` will not hand
+    back metrics for a world it does not have; :func:`check_grades_world` then
+    re-reads every one of their declared encodings against the reference's. The
+    second looks redundant against a registry that is keyed by encoding, and is
+    kept because it is the assertion that survives someone assembling a mapping
+    by hand — which is how a linear metric would find its way onto a power-law
+    env, the failure the flat quarantine could not have caught.
+    """
+    metrics = metrics_for(reference.encoding)
+    check_grades_world(reference.encoding, metrics)
+    return metrics
 
 
 def grade_trajectory(
@@ -173,9 +243,9 @@ def grade_trajectory(
 ) -> Grade:
     """Score a deterministic schedule against `reference`'s certified optimum.
 
-    `reference` carries the lambda, so there is no way to grade at one lambda
-    against an optimum computed at another — the pair travels together
-    (invariant 7).
+    `reference` carries the lambda *and the world*, so there is no way to grade
+    at one lambda against an optimum computed at another, or in one world against
+    an optimum solved in the other — the three travel together (invariant 7).
     """
     x = np.asarray(trajectory, dtype=float)
     # The registry's metrics take the schedule alone and read the parent size off
@@ -188,23 +258,27 @@ def grade_trajectory(
             f"{order_size:.6g}; the graded metrics linearise at the parent size"
         )
 
+    metrics = graded_metrics(reference)
     lambda_risk = reference.lambda_risk
-    objective = GRADED[OBJECTIVE](x, market, lambda_risk)
+    objective = metrics[OBJECTIVE](x, market, lambda_risk)
 
     optimum = reference.optimal
     excess = objective - optimum.objective
     relative = excess / optimum.objective
+    advantage = reference.available_advantage
     return Grade(
         name=name,
         trajectory=x,
-        expected=GRADED[EXPECTED_COST](x, market, lambda_risk),
-        variance=GRADED[SHORTFALL_VARIANCE](x, market, lambda_risk),
+        expected=metrics[EXPECTED_COST](x, market, lambda_risk),
+        variance=metrics[SHORTFALL_VARIANCE](x, market, lambda_risk),
         objective=objective,
         excess=excess,
         relative_excess=relative,
         gap_fraction=relative / reference.twap_gap,
         deviation=trajectory_deviation(x, optimum.trajectory),
         red_flag=bool(excess < -RED_FLAG_RTOL * abs(optimum.objective)),
+        encoding=reference.encoding,
+        advantage_fraction=None if advantage is None else excess / advantage,
     )
 
 
@@ -219,7 +293,13 @@ def grade_policy(
     streams: Sequence[int] = DEFAULT_EVAL_STREAMS,
     name: str | None = None,
 ) -> Grade:
-    """Roll a policy out deterministically, then score the schedule it induced."""
+    """Roll a policy out deterministically, then score the schedule it induced.
+
+    The world comes off the reference and nowhere else: the env the policy is
+    rolled out in and the optimum it is scored against are built from one string,
+    so "the agent was graded in the world it was evaluated in" is a property of
+    the call rather than of the caller's care.
+    """
     trajectory = deterministic_schedule(
         policy,
         market,
@@ -228,6 +308,8 @@ def grade_policy(
         root_seed=root_seed,
         pool=pool,
         streams=streams,
+        temporary_impact=impact_for(reference.encoding, market, order_size),
+        expect_encoding=reference.encoding,
     )
     return grade_trajectory(
         trajectory,

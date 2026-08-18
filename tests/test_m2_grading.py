@@ -28,6 +28,7 @@ import pytest
 from temper.agents import FractionPolicy, baseline, twap_fractions
 from temper.env import ExecutionEnv
 from temper.eval import CONTEXT, GRADED, LINEAR, POWER_LAW, sample_costs, standardise
+from temper.eval.metrics import WorldMismatch, check_grades_world, metrics_for
 from temper.eval.grading import (
     EXPECTED_COST,
     OBJECTIVE,
@@ -274,22 +275,30 @@ def test_the_configs_red_flag_tolerance_is_the_one_the_grader_uses():
 
 
 def test_the_graded_numbers_come_from_the_linear_registry():
-    """M2's metric is a *registered* metric, and registration refuses the power law.
+    """M2's metric is a *registered* metric, in the world M2's env charges.
 
-    `register_graded` rejects anything encoded against FrontierView's 0.6-power
-    charge, which on the Phase-1 golden sets differs from the tangent by 12–54 %
-    of expected cost. Grading through the registry is what makes that refusal
-    apply to M2; a direct call to the closed form would leave it a true statement
-    about a module the grading path never touches.
+    M4a keyed the registries by encoding, so the property this pins is now the
+    sharper one: M2's reference is the linearised world, and asking the registry
+    for that world's metrics returns three linear ones and nothing else. Grading
+    through the registry is what makes the rule apply to M2; a direct call to the
+    closed form would leave it a true statement about a module the grading path
+    never touches.
     """
+    assert REFERENCE.encoding == LINEAR
+    metrics = metrics_for(REFERENCE.encoding)
     for name in (OBJECTIVE, EXPECTED_COST, SHORTFALL_VARIANCE):
-        assert name in GRADED, f"{name!r} is not a graded metric"
-        assert GRADED[name].encoding == LINEAR
-        assert name not in CONTEXT
+        assert name in metrics, f"{name!r} is not a graded metric of this world"
+        assert metrics[name].encoding == LINEAR
+        assert name not in CONTEXT[LINEAR]
 
-    # ...and the power-law encodings are quarantined, not merely absent.
-    assert CONTEXT, "the context registry is empty; the quarantine proves nothing"
-    assert all(metric.encoding == POWER_LAW for metric in CONTEXT.values())
+    # ...and the vendored power-law charge is still quarantined, not merely
+    # absent: M4a gave it a world of its own without letting it grade this one.
+    assert CONTEXT[POWER_LAW], "the context registry is empty; the rule proves nothing"
+    assert all(
+        metric.encoding == POWER_LAW for metric in CONTEXT[POWER_LAW].values()
+    )
+    with pytest.raises(WorldMismatch):
+        check_grades_world(LINEAR, GRADED[POWER_LAW])
 
 
 def test_the_registry_route_and_the_closed_form_agree():

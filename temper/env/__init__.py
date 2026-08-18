@@ -1,17 +1,38 @@
 """Market models behind one Gymnasium interface.
 
-Phase 1 (`execution_env`) is arithmetic Brownian motion with linear permanent and
-linear temporary impact — the world the Almgren–Chriss closed form solves exactly,
-so the oracle can grade it. Phase-2 models (transient impact with decay, stochastic
-liquidity, alpha) arrive as *additive alternatives* behind the same interface, never
-as silent modifications of this one (constitution §4).
+`execution_env` is the one simulator and the one ``step`` loop. What changes
+between phases is the *temporary-impact model* it is handed (`impact`), not the
+loop: Phase 1 is arithmetic Brownian motion with linear permanent and linear
+temporary impact — the world the Almgren–Chriss closed form solves exactly, so
+the oracle can grade it — and M4a injects FrontierView's 0.6-power law instead.
+Phase-2 models arrive as *additive alternatives behind the same interface*, never
+as silent modifications of Phase 1, and never by default: an env or a config has
+to name the world it wants (constitution §4).
 
 Pure numpy: no torch below this package, and no import of
-:func:`~temper.oracle.cost.cost_moments` — Phase 1 is the linearised world
-end-to-end (``ARCHITECTURE.md`` §9, 2026-08-04) and both are enforced by
-``tests/test_repo_invariants.py``.
+:func:`~temper.oracle.cost.cost_moments` — the env reaches its cost the long way
+round, bin by bin, or M1's differential is checking the oracle against itself.
+Both are enforced by ``tests/test_repo_invariants.py``.
 """
 
 from .execution_env import EPISODE_KEY, SHOCK_KEY, ExecutionEnv
+from .impact import (
+    LinearTemporary,
+    PowerLawTemporary,
+    TemporaryImpact,
+    impact_for,
+    linear_temporary,
+    power_law_temporary,
+)
 
-__all__ = ["EPISODE_KEY", "SHOCK_KEY", "ExecutionEnv"]
+__all__ = [
+    "EPISODE_KEY",
+    "SHOCK_KEY",
+    "ExecutionEnv",
+    "LinearTemporary",
+    "PowerLawTemporary",
+    "TemporaryImpact",
+    "impact_for",
+    "linear_temporary",
+    "power_law_temporary",
+]

@@ -86,6 +86,8 @@ def _pin_thread_env(argv: list[str]) -> None:
 
 _pin_thread_env(sys.argv[1:])
 
+import numpy as np  # noqa: E402
+
 from temper.eval.experiment import Experiment, load_experiment  # noqa: E402
 from temper.eval.figures import trajectory_overlay  # noqa: E402
 from temper.eval.provenance import Provenance  # noqa: E402
@@ -153,13 +155,61 @@ def _header(experiment: Experiment) -> None:
     print(
         f"{experiment.milestone} — {case.symbol}, X = {case.order_size:,.0f}, "
         f"λ = {experiment.lambda_risk:.6e} ({where}), "
-        f"{experiment.seeds.n_seeds} seeds, {estimator}"
+        f"{experiment.seeds.n_seeds} seeds, {estimator}, "
+        f"{experiment.cost_encoding} world"
     )
     print(
         f"  J_optimal {reference.optimal.objective:.6f} bps · "
         f"J_ac {reference.ac.objective:.6f} · "
         f"J_twap {reference.twap.objective:.6f} · "
         f"TWAP gap {reference.twap_gap:.2%}"
+    )
+    advantage = reference.available_advantage
+    if advantage is not None:
+        print(
+            f"  J_tangent {reference.tangent.objective:.6f} bps · available "
+            f"advantage {advantage:.5f} bps ({reference.advantage_fraction:.3%} "
+            f"of J_optimal) · bar {experiment.tolerances.epsilon_fraction:.0%} of "
+            f"it = {experiment.tolerances.epsilon_fraction * advantage:.5f} bps"
+        )
+    _reward_scale_check(experiment, reference)
+
+
+def _reward_scale_check(experiment: Experiment, reference) -> None:
+    """The per-step reward range the scale actually produces, recorded not assumed.
+
+    M4a's brief asks for this before the run rather than after. The committed
+    ``reward.scale`` was set against a Phase-1 objective and carries at the
+    *episode* level — the two worlds' objectives are 1.2 % apart at this lambda —
+    but the per-step charge is more front-loaded under the power law, and PPO's
+    value head and advantage normalisation were tuned on a range. So the range is
+    printed for both the optimum and TWAP, in the scaled units the agent sees.
+    """
+    from temper.eval.reference import schedule_moments_for
+
+    market, order_size = experiment.case.market, experiment.case.order_size
+    scale, lam = experiment.reward_scale, experiment.lambda_risk
+    lines = []
+    for name in ("optimal", "twap"):
+        schedule = reference.schedules[name].trajectory
+        holdings = schedule[:-1]
+        trades = -np.diff(schedule)
+        # Per-step reward is -(shortfall + penalty), and the deterministic part of
+        # the shortfall is the impact charge on that bin's trade.
+        moments = schedule_moments_for(
+            experiment.cost_encoding, schedule, market, order_size
+        )
+        temporary_per_bin = moments.temporary * (trades / order_size) / max(
+            float(np.sum(trades / order_size)), 1e-300
+        )
+        penalty = lam * (market.sigma_bin * 1.0e4) ** 2 * (holdings / order_size) ** 2
+        reward = -scale * (temporary_per_bin + penalty)
+        lines.append(
+            f"{name} [{float(np.min(reward)):+.4f}, {float(np.max(reward)):+.4f}]"
+        )
+    print(
+        f"  reward scale {scale:g} · scaled per-step reward range: "
+        + " · ".join(lines)
     )
 
 
@@ -181,17 +231,21 @@ def _progress(experiment: Experiment):
 
 
 def _on_seed(ordinal: int, grade, result, pairs=()) -> None:
+    capture = (
+        ""
+        if grade.capture_fraction is None
+        else f" · capture {grade.capture_fraction:.4f}"
+    )
     print(
         f"  seed {ordinal}: J {grade.objective:.6f} bps · "
-        f"excess {grade.relative_excess:+.4%} = {grade.gap_fraction:.1%} of the "
-        f"TWAP gap · ‖δ‖₂ {grade.deviation:,.0f} shares · {result.seconds:.0f}s"
+        f"excess {grade.excess:+.5f} bps = {grade.relative_excess:+.4%} = "
+        f"{grade.gap_fraction:.1%} of the TWAP gap{capture} · "
+        f"‖δ‖₂ {grade.deviation:,.0f} shares · {result.seconds:.0f}s"
         f"{' (TIMED OUT)' if result.timed_out else ''}"
         f"{' · RED FLAG' if grade.red_flag else ''}",
         flush=True,
     )
     if pairs:
-        import numpy as np
-
         sampled = float(np.nanmedian([u.sampled_variance for u in pairs]))
         averaged = float(np.nanmedian([u.averaged_variance for u in pairs]))
         ratio = float(np.nanmedian([u.variance_ratio for u in pairs]))
@@ -230,7 +284,7 @@ def write_figure(experiment: Experiment, document: dict) -> None:
         caption += (
             f"median excess {summary['relative_excess']['median']:+.3%} of J_optimal "
             f"= {summary['gap_fraction']['median']:.1%} of the TWAP gap "
-            f"(ε = {experiment.tolerances.epsilon_gap_fraction:.0%}, "
+            f"(ε = {experiment.tolerances.epsilon_fraction:.0%}, "
             f"{'met' if verdict['epsilon_met'] else 'MISSED'}; "
             f"worst seed {summary['gap_fraction']['worst']:.1%})"
         )
@@ -324,11 +378,14 @@ def main() -> int:
             if experiment.frontier_grid is None
             else f"is a point of the {experiment.frontier_grid} frontier grid"
         )
+        denominator = experiment.denominator_bps(reference)
         print(
             f"config OK · λ = {experiment.lambda_risk:.6e} {where} · "
+            f"{experiment.cost_encoding} world · "
             f"J_optimal {reference.optimal.objective:.6f} bps · "
-            f"ε = {experiment.tolerances.epsilon_gap_fraction:.0%} of a "
-            f"{reference.twap_gap:.2%} gap"
+            f"ε = {experiment.tolerances.epsilon_fraction:.0%} of the "
+            f"{experiment.tolerances.denominator} = {denominator:.5f} bps "
+            f"⇒ {experiment.tolerances.epsilon_fraction * denominator:.5f} bps"
         )
         if gate_reference is not None:
             print(
@@ -363,14 +420,27 @@ def main() -> int:
         write_outputs(experiment, document)
 
     verdict, summary = document["verdict"], document["summary"]
+    graded = summary[experiment.tolerances.graded_attribute]
     print()
     print(
-        f"median gap fraction {summary['gap_fraction']['median']:.4f} "
-        f"(IQR {summary['gap_fraction']['iqr']:.4f}, worst "
-        f"{summary['gap_fraction']['worst']:.4f}) against ε = "
-        f"{experiment.tolerances.epsilon_gap_fraction} and a per-seed floor of "
-        f"{experiment.tolerances.per_seed_gap_fraction}"
+        f"median {experiment.tolerances.graded_attribute} {graded['median']:.4f} "
+        f"(IQR {graded['iqr']:.4f}, worst {graded['worst']:.4f}) against ε = "
+        f"{experiment.tolerances.epsilon_fraction} and a per-seed floor of "
+        f"{experiment.tolerances.per_seed_fraction}, both fractions of the "
+        f"{experiment.tolerances.denominator} "
+        f"({verdict['denominator_bps']:.5f} bps)"
     )
+    if "capture_fraction" in summary:
+        capture = summary["capture_fraction"]
+        # The fraction leads and the absolute excess goes beside it every time:
+        # a capture fraction near 1 on an advantage of 0.037 bps is a small
+        # absolute claim and should read as one (ARCHITECTURE.md §9).
+        print(
+            f"capture fraction: median {capture['median']:.4f} "
+            f"(IQR {capture['iqr']:.4f}, worst {capture['worst']:.4f}) · "
+            f"median absolute excess over the certified optimum "
+            f"{verdict['median_excess_bps']:+.5f} bps"
+        )
     print(
         f"median excess {summary['relative_excess']['median']:+.4%} of J_optimal · "
         f"median ‖δ‖₂ {summary['deviation']['median']:,.0f} shares against a "

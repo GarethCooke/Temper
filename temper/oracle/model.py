@@ -35,6 +35,21 @@ TEMP_EXPONENT = 0.6
 #: Basis-points scale factor. Impact functions are fractional; costs are bps.
 BPS = 1.0e4
 
+#: The frozen Phase-1 objective: linear temporary impact at the tangent eta_tilde.
+LINEAR_ENCODING = "linear"
+
+#: FrontierView's 0.6-power temporary charge — reporting context until M4a, and
+#: from M4a the world an agent may be trained in and graded against.
+POWER_LAW_ENCODING = "power_law"
+
+#: The cost encodings that exist. A *world* (an env's temporary-impact model), a
+#: *metric* and an *optimum* each declare one of these, and M4a's rule is that a
+#: metric grades the world that charges it — so the name lives here, beside the
+#: units, rather than in either of the two packages that have to agree on it.
+#: ``temper/env`` and ``temper/eval`` both import it from the oracle; the oracle
+#: is normative (invariant 2) and neither of them may depend on the other.
+ENCODINGS: tuple[str, ...] = (LINEAR_ENCODING, POWER_LAW_ENCODING)
+
 
 @dataclass(frozen=True)
 class SymbolParams:

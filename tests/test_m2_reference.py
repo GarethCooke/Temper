@@ -314,9 +314,9 @@ def test_the_band_is_attained_in_the_graded_objective():
 
 def test_the_band_widens_with_the_tolerance_and_is_a_square_root():
     epsilon = EXPERIMENT.band()
-    per_seed = EXPERIMENT.band(EXPERIMENT.tolerances.per_seed_gap_fraction)
-    ratio = EXPERIMENT.tolerances.per_seed_gap_fraction / (
-        EXPERIMENT.tolerances.epsilon_gap_fraction
+    per_seed = EXPERIMENT.band(EXPERIMENT.tolerances.per_seed_fraction)
+    ratio = EXPERIMENT.tolerances.per_seed_fraction / (
+        EXPERIMENT.tolerances.epsilon_fraction
     )
     assert per_seed.bound_shares > epsilon.bound_shares
     assert per_seed.bound_shares == pytest.approx(

@@ -110,6 +110,80 @@ def test_the_env_does_not_import_the_power_law_moments():
         )
 
 
+def test_no_config_can_inherit_a_phase_two_world_by_default():
+    """Constitution §4, made mechanical: a Phase-2 world has to be *named*.
+
+    "Phase-2 models are additive alternatives behind the same interface, never
+    silent modifications of Phase 1" is a sentence about defaults. So the default
+    is checked in three places at once — the env's constructor, the experiment
+    loader, and the reference table — and every committed config that ends up in
+    a non-linear world is required to say so in its own bytes.
+
+    The failure this prevents is specific and would be very quiet: a config
+    written for M2 or M3, re-run after M4a landed, silently training in the
+    power-law world because some default moved. Every number in ``results/``
+    would still regenerate; they would just regenerate from a different world
+    than the one they claim.
+    """
+    import inspect
+
+    import yaml
+
+    from temper.env import ExecutionEnv
+    from temper.eval.experiment import load_experiment
+    from temper.eval.reference import reference_row
+    from temper.oracle import LINEAR_ENCODING, Market, SymbolParams
+
+    market = Market.for_horizon(
+        SymbolParams(adv=6e7, sigma=0.0155, half_spread=0.3, eta=0.142, gamma=0.314), 6.5
+    )
+    env = ExecutionEnv(market, 100_000.0, 1e-4, root_seed=1)
+    assert env.cost_encoding == LINEAR_ENCODING, (
+        "ExecutionEnv's default world is not Phase 1"
+    )
+    assert reference_row(market, 100_000.0, 1e-4).encoding == LINEAR_ENCODING
+    assert (
+        inspect.signature(reference_row).parameters["encoding"].default
+        == LINEAR_ENCODING
+    )
+
+    configs = sorted((REPO_ROOT / "configs").rglob("*.yaml"))
+    assert configs, "no committed configs found"
+    for path in configs:
+        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+        if "lambda_selection" not in document:  # not an experiment config
+            named = document.get("world", {}).get("cost_encoding")
+            assert named is None or "world" in document
+            continue
+        experiment = load_experiment(path)
+        if experiment.cost_encoding == LINEAR_ENCODING:
+            continue
+        assert "world" in document, (
+            f"{path.relative_to(REPO_ROOT)} resolves to the "
+            f"{experiment.cost_encoding!r} world without naming it; a Phase-2 "
+            "world is never inherited (constitution §4)"
+        )
+        assert document["world"]["cost_encoding"] == experiment.cost_encoding
+
+
+def test_a_config_that_names_an_unknown_world_is_refused():
+    """The named world is checked against the oracle's list, not merely read."""
+    import tempfile
+
+    import yaml
+
+    from temper.eval.experiment import load_experiment
+
+    source = REPO_ROOT / "configs" / "m3_antithetic_validation.yaml"
+    document = yaml.safe_load(source.read_text(encoding="utf-8"))
+    document["world"] = {"cost_encoding": "vibes"}
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / "bad.yaml"
+        path.write_text(yaml.safe_dump(document), encoding="utf-8")
+        with pytest.raises(ValueError, match="unknown cost encoding"):
+            load_experiment(path)
+
+
 #: The packages a policy's code lives in. M2's PPO lands under `agents/`, so
 #: `rglob` covers "any future training path" without this list needing an edit.
 POLICY_PACKAGES = ("agents",)

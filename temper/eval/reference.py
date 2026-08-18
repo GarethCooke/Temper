@@ -32,20 +32,38 @@ import numpy as np
 
 from temper.oracle import (
     BPS,
+    LINEAR_ENCODING,
+    POWER_LAW_ENCODING,
     VENDOR_LAMBDA_GRID,
     Market,
     ac_trajectory,
+    charge_for,
+    cost_moments,
+    local_curvature_floor,
     objective_curvature_floor,
     optimal_kappa,
     optimal_trajectory,
+    power_law_optimum,
     schedule_moments,
     trades,
     twap_trajectory,
 )
 
-#: The schedules every table and figure carries (constitution invariant 4).
-#: Order is the reporting order and is part of the committed contract.
-REFERENCE_SCHEDULES: tuple[str, ...] = ("twap", "ac", "optimal")
+#: The schedules every table and figure carries, per world (invariant 4). Order
+#: is the reporting order and is part of the committed contract.
+#:
+#: ``optimal`` always names **the certified optimum of the world the row is in**,
+#: so nothing downstream needs a branch to know what it is being graded against.
+#: In the power-law world that is :func:`~temper.oracle.powerlaw.power_law_optimum`
+#: and the sinh gets its own key, ``tangent`` — which is the honest name for it
+#: there: :func:`~temper.oracle.schedules.optimal_trajectory` is the exact
+#: minimiser of the *tangent's* objective, and evaluating it under the power law
+#: is precisely the mis-specification M4a measures. Its excess over ``optimal``
+#: is the milestone's available advantage.
+REFERENCE_SCHEDULES: dict[str, tuple[str, ...]] = {
+    LINEAR_ENCODING: ("twap", "ac", "optimal"),
+    POWER_LAW_ENCODING: ("twap", "ac", "tangent", "optimal"),
+}
 
 
 def variance_floor_bps2(market: Market) -> float:
@@ -88,12 +106,17 @@ class ScheduleReference:
 
 @dataclass(frozen=True)
 class ReferenceRow:
-    """The three schedules at one lambda, plus what the selection rule reads."""
+    """The world's schedules at one lambda, plus what the selection rule reads."""
 
     lambda_risk: float
     schedules: dict[str, ScheduleReference]
     variance_floor: float
     kappa_horizon: float
+    #: Which cost functional every number in this row was charged under. Travels
+    #: with the row so a grade cannot be computed at one encoding against an
+    #: optimum solved at another (invariant 7) — the same reason `lambda_risk` is
+    #: here rather than passed alongside.
+    encoding: str = LINEAR_ENCODING
 
     @property
     def twap(self) -> ScheduleReference:
@@ -105,7 +128,17 @@ class ReferenceRow:
 
     @property
     def optimal(self) -> ScheduleReference:
+        """The certified optimum **of this row's world** — what an agent is graded on."""
         return self.schedules["optimal"]
+
+    @property
+    def tangent(self) -> ScheduleReference | None:
+        """The sinh derived at the tangent, where it is not this world's optimum.
+
+        ``None`` in the linearised world, because there it *is* ``optimal`` and a
+        second name for one schedule would invite the two to drift apart.
+        """
+        return self.schedules.get("tangent")
 
     @property
     def twap_gap(self) -> float:
@@ -117,16 +150,69 @@ class ReferenceRow:
         """
         return (self.twap.objective - self.optimal.objective) / self.optimal.objective
 
+    @property
+    def available_advantage(self) -> float | None:
+        """``J_tangent - J_optimal`` in bps — what there was to be beaten.
+
+        M4a's denominator, and ``None`` where there is nothing to beat: in the
+        linearised world the closed form already *is* the optimum, and §1.1 names
+        an agent that appears to beat it a red flag rather than a result.
+
+        In bps rather than as a fraction because it is small — 0.0367 bps at the
+        reference case — and because the whole reason M3's tolerance cannot be
+        reused in this world is that 5 % of that lambda's TWAP gap is 1.8-2.0x
+        this entire number. A milestone graded to the TWAP gap here would pass an
+        agent that captured none of the mis-specification.
+        """
+        tangent = self.tangent
+        if tangent is None:
+            return None
+        return tangent.objective - self.optimal.objective
+
+    @property
+    def advantage_fraction(self) -> float | None:
+        """The available advantage as a fraction of ``J_optimal`` — task 0's gate.
+
+        The gate is >= 1 %: below that the training point is not worth an evening
+        and the milestone leads with M4b instead.
+        """
+        advantage = self.available_advantage
+        if advantage is None:
+            return None
+        return advantage / self.optimal.objective
+
     def as_dict(self) -> dict:
         return {
             "lambda": self.lambda_risk,
+            "encoding": self.encoding,
             "twap_gap": self.twap_gap,
+            "available_advantage_bps": self.available_advantage,
+            "advantage_fraction": self.advantage_fraction,
             "kappa_horizon": self.kappa_horizon,
             "variance_floor_bps2": self.variance_floor,
             "schedules": {
                 name: schedule.as_dict() for name, schedule in self.schedules.items()
             },
         }
+
+
+def schedule_moments_for(
+    encoding: str, trajectory: np.ndarray, market: Market, order_size: float
+):
+    """The moments of a schedule under `encoding`. One place that maps the worlds.
+
+    The linear branch keeps ``schedule_moments``' `order_size` argument, which
+    matters for a realised trajectory whose first point is not the parent size:
+    ``eta_tilde`` is a property of the order the env was configured with. The
+    power law needs no such care — it is the same function whatever size is
+    worked through it, which is exactly why it has no tangent to be taken in the
+    wrong place.
+    """
+    if encoding == LINEAR_ENCODING:
+        return schedule_moments(trajectory, market, order_size=order_size)
+    if encoding == POWER_LAW_ENCODING:
+        return cost_moments(trajectory, market)
+    raise ValueError(f"unknown cost encoding {encoding!r}")
 
 
 def _schedule_reference(
@@ -136,8 +222,9 @@ def _schedule_reference(
     order_size: float,
     lambda_risk: float,
     floor: float,
+    encoding: str,
 ) -> ScheduleReference:
-    moments = schedule_moments(trajectory, market, order_size=order_size)
+    moments = schedule_moments_for(encoding, trajectory, market, order_size)
     return ScheduleReference(
         name=name,
         trajectory=trajectory,
@@ -150,28 +237,69 @@ def _schedule_reference(
     )
 
 
-def reference_row(
-    market: Market, order_size: float, lambda_risk: float
-) -> ReferenceRow:
-    """TWAP, the vendored AC schedule and the exact optimum at one lambda."""
-    floor = variance_floor_bps2(market)
-    trajectories = {
+def reference_trajectories(
+    encoding: str, market: Market, order_size: float, lambda_risk: float
+) -> dict[str, np.ndarray]:
+    """The world's reference schedules at one lambda, by name.
+
+    Every world carries TWAP and the vendored AC schedule (invariant 4) and an
+    ``optimal`` that is its *own* certified optimum. The power-law world carries
+    one more: the tangent-derived sinh, which is what the closed form actually
+    produces there and what the advantage is measured against.
+    """
+    common = {
         "twap": twap_trajectory(market, order_size),
         "ac": ac_trajectory(market, order_size, lambda_risk),
-        "optimal": optimal_trajectory(market, order_size, lambda_risk),
     }
+    if encoding == LINEAR_ENCODING:
+        return common | {
+            "optimal": optimal_trajectory(market, order_size, lambda_risk)
+        }
+    if encoding == POWER_LAW_ENCODING:
+        return common | {
+            "tangent": optimal_trajectory(market, order_size, lambda_risk),
+            "optimal": power_law_optimum(market, order_size, lambda_risk),
+        }
+    raise ValueError(f"unknown cost encoding {encoding!r}")
+
+
+def reference_row(
+    market: Market,
+    order_size: float,
+    lambda_risk: float,
+    *,
+    encoding: str = LINEAR_ENCODING,
+) -> ReferenceRow:
+    """The world's reference schedules at one lambda, priced by that world.
+
+    `encoding` defaults to the linearised world, which is Phase 1's and every
+    committed result's. A Phase-2 world is never inherited — the caller names it
+    (constitution §4), and ``tests/test_repo_invariants.py`` pins that the
+    default here is the Phase-1 one.
+    """
+    floor = variance_floor_bps2(market)
+    trajectories = reference_trajectories(
+        encoding, market, order_size, lambda_risk
+    )
     return ReferenceRow(
         lambda_risk=lambda_risk,
         schedules={
             name: _schedule_reference(
-                name, trajectories[name], market, order_size, lambda_risk, floor
+                name,
+                trajectories[name],
+                market,
+                order_size,
+                lambda_risk,
+                floor,
+                encoding,
             )
-            for name in REFERENCE_SCHEDULES
+            for name in REFERENCE_SCHEDULES[encoding]
         },
         variance_floor=floor,
         kappa_horizon=(
             optimal_kappa(market, order_size, lambda_risk) * market.horizon_hours
         ),
+        encoding=encoding,
     )
 
 
@@ -179,9 +307,14 @@ def reference_table(
     market: Market,
     order_size: float,
     lambdas: Iterable[float] = VENDOR_LAMBDA_GRID,
+    *,
+    encoding: str = LINEAR_ENCODING,
 ) -> list[ReferenceRow]:
     """The whole table, ascending in lambda. M0's 17-point grid by default."""
-    return [reference_row(market, order_size, lam) for lam in sorted(lambdas)]
+    return [
+        reference_row(market, order_size, lam, encoding=encoding)
+        for lam in sorted(lambdas)
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -271,12 +404,25 @@ class TrajectoryBand:
     realise is monotone. The band is therefore exact on exactly the schedules M2
     grades, which ``tests/test_m2_reference.py`` pins from both ends: tight where
     the quadratic holds, and the env unable to leave that set.
+
+    **Global in the linearised world, local in the power-law one.** Everything
+    above holds because ``H`` does not depend on ``x``. Under the power law it
+    does — the curvature of ``w ** 1.6`` is ``w ** -0.4``, so a schedule that
+    concentrates differently is in a differently-shaped bowl — and the bound
+    becomes a statement *at the optimum it was assembled at*. :attr:`local` says
+    which kind a band is, and M4a validates the local one by direct evaluation on
+    random directions at the band radius rather than by asserting the quadratic
+    inequality it no longer satisfies globally.
     """
 
     delta_objective: float   # the objective excess allowed, bps
     curvature_floor: float   # lambda_min(H), bps per share^2
     bound_shares: float      # the implied |d|_2 bound, shares
     order_size: float        # the parent order the bound is a fraction of
+    #: Whether the Hessian this came from is the whole problem's or one point's.
+    local: bool = False
+    #: The world the curvature was measured in.
+    encoding: str = LINEAR_ENCODING
 
     @property
     def bound_fraction(self) -> float:
@@ -289,6 +435,8 @@ class TrajectoryBand:
             "curvature_floor_bps_per_share2": self.curvature_floor,
             "bound_shares": self.bound_shares,
             "bound_fraction_of_X": self.bound_fraction,
+            "local": self.local,
+            "encoding": self.encoding,
         }
 
 
@@ -297,19 +445,47 @@ def trajectory_band(
     order_size: float,
     lambda_risk: float,
     delta_objective: float,
+    *,
+    encoding: str = LINEAR_ENCODING,
 ) -> TrajectoryBand:
-    """The band an objective excess of `delta_objective` bps implies."""
+    """The band an objective excess of `delta_objective` bps implies.
+
+    The linearised world takes its curvature from
+    :func:`~temper.oracle.schedules.objective_curvature_floor` — the closed form,
+    for the reason that function's docstring gives: this is a number a tolerance
+    is *divided* by, and an iterative eigensolver a few ulps low would loosen a
+    pre-stated band by exactly the amount nobody would notice. The power-law
+    world has no such closed form, so its floor is ``eigvalsh`` of the Hessian at
+    the certified optimum, and the band it returns is marked
+    :attr:`~TrajectoryBand.local`.
+    """
     if delta_objective < 0.0:
         raise ValueError(
             f"delta_objective is an objective excess and must be >= 0, "
             f"got {delta_objective}"
         )
-    floor = objective_curvature_floor(market, order_size, lambda_risk)
+    if encoding == LINEAR_ENCODING:
+        floor = objective_curvature_floor(market, order_size, lambda_risk)
+        local = False
+    elif encoding == POWER_LAW_ENCODING:
+        optimum = power_law_optimum(market, order_size, lambda_risk)
+        floor = local_curvature_floor(
+            optimum,
+            market,
+            order_size,
+            lambda_risk,
+            charge_for(encoding, market, order_size),
+        )
+        local = True
+    else:
+        raise ValueError(f"unknown cost encoding {encoding!r}")
     return TrajectoryBand(
         delta_objective=delta_objective,
         curvature_floor=floor,
         bound_shares=math.sqrt(2.0 * delta_objective / floor),
         order_size=order_size,
+        local=local,
+        encoding=encoding,
     )
 
 

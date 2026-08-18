@@ -420,13 +420,24 @@ def test_the_shock_is_published_through_info_and_nowhere_else(env):
         "market",
         "order_size",
         "lambda_risk",
-        "eta_tilde",
+        # M4a: the temporary-impact model, injected rather than a precomputed
+        # `eta_tilde`. Public because a result has to be able to name the world
+        # it was produced in, and because the grader reads `cost_encoding` off
+        # it; it carries impact parameters and no path.
+        "temporary_impact",
         "action_space",
         "observation_space",
     }, "the env grew a public attribute; if it exposes the price path, §4 is broken"
 
     class_surface = {name for name in vars(ExecutionEnv) if not name.startswith("_")}
-    assert class_surface == {"metadata", "seed_address", "step_count", "reset", "step"}
+    assert class_surface == {
+        "metadata",
+        "seed_address",
+        "cost_encoding",   # M4a: which functional this env charges
+        "step_count",
+        "reset",
+        "step",
+    }
 
     for name in instance_surface | class_surface:
         value = getattr(env, name)

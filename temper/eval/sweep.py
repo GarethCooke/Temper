@@ -32,6 +32,7 @@ import numpy as np
 
 from temper.agents.execution import PPOPolicy, execution_env_factory
 from temper.agents.ppo import TrainResult, train
+from temper.env import impact_for
 from temper.eval.antithetic import PairLedger, PairUpdateStats, antithetic_reward
 from temper.eval.experiment import ANTITHETIC, CONTROL_VARIATE, SAMPLED, Experiment
 from temper.eval.grading import Grade, grade_policy, summarise
@@ -40,8 +41,16 @@ from temper.eval.variate import deterministic_reward
 from temper.seeding import pool_seeds
 
 #: The quantities reported with median and IQR across seeds. All are costs, so
-#: larger is worse for every one of them without exception.
+#: larger is worse for every one of them without exception — which is why the
+#: capture fraction is *not* here and ``advantage_fraction``, its complement, is:
+#: :func:`~temper.eval.grading.summarise` takes ``worst`` to be ``max`` for
+#: everything it is handed, and one quantity where bigger is better would get
+#: that backwards exactly once, silently, in a verdict.
 SUMMARISED = ("gap_fraction", "relative_excess", "objective", "deviation")
+
+#: Reported as well, but only in a world where the closed form left something on
+#: the table (M4a). ``advantage_fraction`` is ``None`` elsewhere.
+ADVANTAGE_SUMMARISED = ("advantage_fraction",)
 
 
 def reward_wrapper(experiment: Experiment, ledger: PairLedger | None = None):
@@ -86,6 +95,7 @@ def train_seed(
     if ledger is None:
         ledger = PairLedger()
     wrapper = reward_wrapper(experiment, ledger)
+    impact = impact_for(experiment.cost_encoding, case.market, case.order_size)
 
     def hook(update: int, metrics: dict) -> None:
         if experiment.estimator.antithetic:
@@ -103,6 +113,7 @@ def train_seed(
             stream_index=stream,
             reward_scale=experiment.reward_scale,
             reward_wrapper=wrapper,
+            temporary_impact=impact,
         )
         for stream in seeds.env_streams(ordinal, ppo.num_envs)
     ]
@@ -134,16 +145,23 @@ def grade_baselines(experiment: Experiment) -> dict[str, Grade]:
     when it is handed the oracle's own schedules — and it is what puts the three
     baselines on every table, as invariant 4 requires.
     """
-    from temper.agents.baselines import baseline
+    from temper.agents.baselines import WORLD_BASELINES, baseline
 
     case = experiment.case
+    encoding = experiment.cost_encoding
     return {
         name: grade(
             experiment,
-            baseline(name, case.market, case.order_size, experiment.lambda_risk),
+            baseline(
+                name,
+                case.market,
+                case.order_size,
+                experiment.lambda_risk,
+                encoding=encoding,
+            ),
             name=name,
         )
-        for name in ("twap", "ac", "optimal")
+        for name in WORLD_BASELINES[encoding]
     }
 
 
@@ -316,17 +334,38 @@ def build_document(sweep: SweepResult) -> dict:
     tolerances = experiment.tolerances
     reference = experiment.reference()
 
+    names = list(SUMMARISED)
+    if reference.available_advantage is not None:
+        names += list(ADVANTAGE_SUMMARISED)
     summary = {
         name: summarise(name, [getattr(g, name) for g in sweep.grades]).as_dict()
-        for name in SUMMARISED
+        for name in names
     }
-    red_flags = [g.name for g in sweep.grades if g.red_flag]
+    # The capture fraction is the number M4a leads with, so it is written out
+    # rather than left to the reader to subtract — from the *same* summary, so
+    # the two can never disagree about which seed was worst.
+    if "advantage_fraction" in summary:
+        advantage = summary["advantage_fraction"]
+        summary["capture_fraction"] = {
+            "name": "capture_fraction",
+            "values": [1.0 - v for v in advantage["values"]],
+            "median": 1.0 - advantage["median"],
+            "q1": 1.0 - advantage["q3"],
+            "q3": 1.0 - advantage["q1"],
+            "iqr": advantage["iqr"],
+            "worst": 1.0 - advantage["worst"],
+        }
+    # Which fraction the pre-stated bars are read on. The denominator is the
+    # committed decision (`tolerances.denominator`); this is the field it names.
+    graded_on = summary[tolerances.graded_attribute]
     verdict = {
+        "tolerance_denominator": tolerances.denominator,
+        "graded_attribute": tolerances.graded_attribute,
         "epsilon_met": bool(
-            summary["gap_fraction"]["median"] <= tolerances.epsilon_gap_fraction
+            graded_on["median"] <= tolerances.epsilon_fraction
         ),
         "per_seed_met": bool(
-            summary["gap_fraction"]["worst"] <= tolerances.per_seed_gap_fraction
+            graded_on["worst"] <= tolerances.per_seed_fraction
         ),
         "red_flags": red_flags,
         "timed_out": [
@@ -343,6 +382,10 @@ def build_document(sweep: SweepResult) -> dict:
         verdict["epsilon_met"] and verdict["per_seed_met"] and not red_flags
     )
     gate = _gate_block(experiment, summary["gap_fraction"]["median"])
+    verdict["denominator_bps"] = experiment.denominator_bps(reference)
+    verdict["median_excess_bps"] = summarise(
+        "excess", [g.excess for g in sweep.grades]
+    ).median
     if gate is not None:
         verdict["gate_met"] = gate["met"]
 
@@ -375,7 +418,7 @@ def build_document(sweep: SweepResult) -> dict:
         "bands": {
             "epsilon": experiment.band().as_dict(),
             "per_seed": experiment.band(
-                tolerances.per_seed_gap_fraction
+                tolerances.per_seed_fraction
             ).as_dict(),
         },
         "baselines": {name: g.as_dict() for name, g in sweep.baselines.items()},

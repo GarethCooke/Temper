@@ -19,13 +19,14 @@ from pathlib import Path
 import pytest
 import yaml
 
-from temper.env import ExecutionEnv, execution_env
+from temper.env import ExecutionEnv, execution_env, impact_for
 from temper.oracle import Market, SymbolParams
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 GOLDEN_PATH = REPO_ROOT / "tests" / "golden" / "vendor" / "frontierview_goldens.json"
 M1_CONFIG_PATH = REPO_ROOT / "configs" / "m1_differential.yaml"
 M2_CONFIG_PATH = REPO_ROOT / "configs" / "m2_ppo.yaml"
+M4A_CONFIG_PATH = REPO_ROOT / "configs" / "m4a_differential.yaml"
 
 #: Pre-stated M0 tolerances (docs/briefs/M0-oracle-and-goldens.md).
 TRAJECTORY_RTOL = 1e-6  # relative to the parent order size X
@@ -111,6 +112,13 @@ def pytest_generate_tests(metafunc):
 
 M1_CONFIG: dict = yaml.safe_load(M1_CONFIG_PATH.read_text(encoding="utf-8"))
 
+#: M4a's committed input: the certificate's pre-stated bars, the power-law
+#: differential's tiers, and the four inherited guarantees. A separate file from
+#: M1's for the reason its header gives — a Phase-2 milestone editing Phase 1's
+#: committed thresholds in place would put both worlds' bars in one blast radius.
+M4A_CONFIG: dict = yaml.safe_load(M4A_CONFIG_PATH.read_text(encoding="utf-8"))
+M4A_ENCODING: str = str(M4A_CONFIG["world"]["cost_encoding"])
+
 
 def case_by_id(case_id: str) -> GoldenCase:
     """Resolve a config's `case_id` against the vendored fixture."""
@@ -183,6 +191,52 @@ def build_env(case, stream_index: int) -> ExecutionEnv:
         pool=seeding["pool"],
         stream_index=stream_index,
     )
+
+
+def build_power_law_env(case, stream_index: int) -> ExecutionEnv:
+    """The same env in M4a's world, seeded from M4a's own pool.
+
+    One ``ExecutionEnv`` and one ``step`` loop; the only difference from
+    :func:`build_env` is the injected temporary-impact model, which is the whole
+    of what "the world changed" means here.
+    """
+    seeding = M4A_CONFIG["seeding"]
+    return ExecutionEnv(
+        case.market,
+        case.order_size,
+        case.lambda_risk,
+        temporary_impact=impact_for(M4A_ENCODING, case.market, case.order_size),
+        root_seed=int(seeding["root_seed"]),
+        pool=seeding["pool"],
+        stream_index=stream_index,
+    )
+
+
+def power_law_pairs(tier: str) -> list[DifferentialPair]:
+    """Every (case, schedule) cell of M4a's `tier`, addressed as its config says.
+
+    The same derivation as :func:`differential_pairs` over M4a's config, which is
+    four schedules wide rather than three: the tangent-derived sinh is a schedule
+    like any other in this world, and the certified power-law optimum is a fourth.
+    """
+    spec = M4A_CONFIG["tiers"][tier]
+    schedules = M4A_CONFIG["schedules"]
+    n_sim = int(spec["n_sim"])
+    return [
+        DifferentialPair(
+            tier=tier,
+            case=case_by_id(case_id),
+            schedule=schedule,
+            n_sim=n_sim,
+            stream_index=(
+                int(spec["stream_base"]) + case_ordinal * len(schedules) + schedule_ordinal
+            ),
+            mean_band=float(spec["mean_z_sigmas"]) / math.sqrt(n_sim),
+            var_band=float(spec["var_z_sigmas"]) * math.sqrt(2.0 / n_sim),
+        )
+        for case_ordinal, case_id in enumerate(spec["cases"])
+        for schedule_ordinal, schedule in enumerate(schedules)
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -291,12 +345,32 @@ POOL_ALLOWANCE: dict[str, frozenset[str]] = {
     "test_m2_rediscovery.py": frozenset({"m2/diagnostic", "train", "eval"}),
     "test_m3_antithetic.py": frozenset({"m3/diagnostic"}),
     "test_m3_validation.py": frozenset({"m3/diagnostic", "train", "eval"}),
+    # M4a: the power-law differential, the certificate's env-side checks, and the
+    # four inherited guarantees re-run in the new world. None reports a number.
+    "test_m4a_differential.py": frozenset({"m4a/differential"}),
+    # `eval` because the fourth guarantee *is* about the eval streams: the
+    # open-loop check rolls a policy out on two of them and requires bitwise
+    # equality, which is exactly what M2's grading test holds the same pool for.
+    "test_m4a_inherited_guarantees.py": frozenset({"m4a/differential", "eval"}),
+    "test_m4a_power_law.py": frozenset({"m4a/differential", "eval"}),
+    # The Phase-1 bitwise regression retrains a committed M3 seed and regrades
+    # it, so it legitimately holds both reserved pools — the same grant, for the
+    # same reason, as the two sweep regenerators above.
+    "test_m4a_phase1_regression.py": frozenset({"train", "eval"}),
 }
 
 #: The modules that regenerate a committed result and so legitimately hold both
 #: reserved pools — one per committed sweep, and `tests/test_seed_pool_discipline.py`
 #: asserts the list is exactly this.
-SWEEP_REGENERATORS: tuple[str, ...] = ("test_m2_rediscovery.py", "test_m3_validation.py")
+SWEEP_REGENERATORS: tuple[str, ...] = (
+    "test_m2_rediscovery.py",
+    "test_m3_validation.py",
+    # M4a's seam regression retrains a committed M3 seed and regrades it, which
+    # is the same shape of work as the two above: it reproduces a committed
+    # result end to end and therefore needs the pools that result was addressed
+    # by. It is not a *new* sweep — it is the invariant-1 check on one.
+    "test_m4a_phase1_regression.py",
+)
 
 DEFAULT_POOL_ALLOWANCE = frozenset({"m1/differential"})
 

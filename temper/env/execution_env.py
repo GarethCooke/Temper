@@ -1,9 +1,11 @@
-"""``ExecutionEnv`` — the Phase-1 execution simulator (constitution §4).
+"""``ExecutionEnv`` — the execution simulator (constitution §4).
 
 One episode liquidates a parent order of ``X`` shares over ``n_bins`` intervals of
 ``dt`` hours. Prices follow arithmetic Brownian motion; trading pays linear
-permanent impact, linear temporary impact at the tangent slope ``eta_tilde``, and
-the half-spread on every share.
+permanent impact, the half-spread on every share, and a temporary concession from
+an **injected** impact model (:mod:`temper.env.impact`). The default is Phase 1's
+linear tangent ``eta_tilde``; M4a's power-law world is the same env with a
+different model, not a different env.
 
 The whole point of this module is that it is **not** the oracle. Nothing here
 imports a trajectory, a kappa or a closed-form moment: the env accumulates cost
@@ -20,7 +22,7 @@ arrival price normalised to ``1``. Within bin ``k``:
 
     walk_k     = walk_{k-1} + sigma_bin * BPS * eps_k          eps_k ~ N(0, 1)
     own_k      = gamma * sigma * BPS / v_hourly * n_k          this bin's permanent drift
-    temp_k     = eta_tilde * BPS / dt * n_k                    temporary, per share
+    temp_k     = temporary_impact(n_k)                         per share; the world's model
     price_k    = walk_k - perm_{<k} - own_k / 2 - temp_k - half_spread
     shortfall_k = -(n_k / X) * price_k                         bps of notional
 
@@ -56,7 +58,8 @@ import numpy as np
 from gymnasium import Env, spaces
 from numpy.random import Generator
 
-from temper.oracle import BPS, Market, linearised_eta
+from temper.env.impact import TemporaryImpact, linear_temporary
+from temper.oracle import BPS, Market
 from temper.seeding import DIFFERENTIAL_POOL, pool_rng
 
 #: ``info`` key the terminal step publishes its episode summary under. Not
@@ -98,12 +101,19 @@ class ExecutionEnv(Env):
     market:
         Symbol parameters and the execution grid (:class:`~temper.oracle.Market`).
     order_size:
-        Parent order ``X``, in shares. Also fixes ``eta_tilde``, the tangent the
-        linear temporary impact is taken at — a property of the *order*, frozen
-        for the episode, not something the realised schedule moves.
+        Parent order ``X``, in shares. Under the default linear model it also
+        fixes ``eta_tilde``, the tangent the temporary impact is taken at — a
+        property of the *order*, frozen for the episode, not something the
+        realised schedule moves.
     lambda_risk:
         Risk aversion in the frozen objective ``E + lambda * V``, with ``E`` in
         bps and ``V`` in bps².
+    temporary_impact:
+        The world's temporary-impact model
+        (:mod:`temper.env.impact`). ``None`` builds
+        :func:`~temper.env.impact.linear_temporary` — Phase 1, exactly as this
+        env built it before the model became injectable. A Phase-2 world is
+        never inherited: it has to be named, here or in a config.
     root_seed, pool, stream_index:
         The seed address (see the module docstring).
 
@@ -111,6 +121,12 @@ class ExecutionEnv(Env):
     The final bin force-liquidates whatever is left and charges it like any other
     trade, which is the discrete form of the closed form's ``x_N = 0`` terminal
     constraint: the agent cannot dodge the boundary by simply not trading.
+
+    **One env, one ``step``.** The temporary charge is injected rather than
+    subclassed. A Phase-2 env with its own loop would duplicate the twenty lines
+    the whole differential is a claim about — including
+    :attr:`step_count`, whose "``N_sim`` episodes went through *this* loop"
+    (invariant 6) stops being falsifiable the moment there are two of them.
     """
 
     metadata: dict = {"render_modes": []}
@@ -121,6 +137,7 @@ class ExecutionEnv(Env):
         order_size: float,
         lambda_risk: float,
         *,
+        temporary_impact: TemporaryImpact | None = None,
         root_seed: int,
         pool: str = DIFFERENTIAL_POOL,
         stream_index: int = 0,
@@ -133,7 +150,11 @@ class ExecutionEnv(Env):
         self.market = market
         self.order_size = float(order_size)
         self.lambda_risk = float(lambda_risk)
-        self.eta_tilde = linearised_eta(market, self.order_size)
+        self.temporary_impact = (
+            linear_temporary(market, self.order_size)
+            if temporary_impact is None
+            else temporary_impact
+        )
 
         self._root_seed = int(root_seed)
         self._pool = pool
@@ -145,9 +166,10 @@ class ExecutionEnv(Env):
         self._last_bin = n_bins - 1
 
         # Per-share coefficients, all in bps, all precomputed: `step` runs tens of
-        # millions of times in the deep differential tier.
+        # millions of times in the deep differential tier. The temporary charge is
+        # bound to the grid once here for the same reason.
         params = market.params
-        self._temporary_per_share = self.eta_tilde * BPS / market.dt
+        self._temporary_bps = self.temporary_impact.bind(market)
         self._permanent_per_share = params.gamma * params.sigma * BPS / market.v_hourly
         self._shock_bps = market.sigma_bin * BPS
         self._variance_bps2 = self._shock_bps**2
@@ -182,6 +204,19 @@ class ExecutionEnv(Env):
     def seed_address(self) -> tuple[int, str, int]:
         """``(root_seed, pool, stream_index)`` — what a result must record."""
         return (self._root_seed, self._pool, self._stream_index)
+
+    @property
+    def cost_encoding(self) -> str:
+        """Which cost functional this env charges — the world, named.
+
+        M4a's rule is that a metric grades the world that charges it, and this is
+        the half of the pairing the env states. :mod:`temper.eval.grading` refuses
+        to compute anything until this and the metric's ``encoding`` agree, which
+        is strictly stronger than the flat refusal it replaced: the old rule
+        banned the power-law encoding outright and so could not have caught the
+        failure that is now live — a *linear* metric grading a power-law env.
+        """
+        return self.temporary_impact.encoding
 
     @property
     def step_count(self) -> int:
@@ -254,7 +289,7 @@ class ExecutionEnv(Env):
             self._walk
             - self._permanent
             - 0.5 * own_drift
-            - self._temporary_per_share * shares
+            - self._temporary_bps(shares)
             - self._half_spread
         )
         self._permanent += own_drift

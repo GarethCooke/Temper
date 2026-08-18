@@ -238,7 +238,7 @@ def test_the_median_gap_is_within_the_gate():
 def test_the_epsilon_verdict_is_reported_too_and_met():
     verdict = DOCUMENT["verdict"]
     assert verdict["epsilon_met"] and verdict["per_seed_met"] and verdict["passed"]
-    assert DOCUMENT["summary"]["gap_fraction"]["worst"] <= M3.tolerances.per_seed_gap_fraction
+    assert DOCUMENT["summary"]["gap_fraction"]["worst"] <= M3.tolerances.per_seed_fraction
 
 
 def test_the_variance_reduced_populations_do_not_overlap_the_sampled_one():
@@ -340,7 +340,7 @@ def test_one_seed_retrains_to_the_same_verdict():
         streams=M3.seeds.eval_streams, name="seed0",
     )
     regraded = grade_policy(policy, M3.case.market, M3.case.order_size, M3.reference(), **kwargs)
-    assert regraded.gap_fraction <= M3.tolerances.per_seed_gap_fraction, (
+    assert regraded.gap_fraction <= M3.tolerances.per_seed_fraction, (
         f"retrained seed 0 scored {regraded.gap_fraction:.5f}, committed "
         f"{committed['gap_fraction']:.5f}"
     )

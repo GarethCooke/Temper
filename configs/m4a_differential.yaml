@@ -1,0 +1,163 @@
+# M4a — the power-law world: the optimum's certificate, and the differential.
+#
+# Committed input to `tests/test_power_law_certificate.py` and
+# `tests/test_m4a_differential.py`. Those tests read *this file*, not literals:
+# constitution invariant 3 fixes thresholds before the work, and a threshold that
+# lives in a test body is a threshold that drifts to fit the run. Every number
+# here is pre-stated in docs/briefs/M4a-power-law-world.md and may only be
+# loosened by amending that brief first.
+#
+# Separate from configs/m1_differential.yaml rather than appended to it. That
+# file is the committed input to three Phase-1 test modules and its bytes are the
+# only thing standing between M1's pre-stated bands and a later session's idea of
+# them; a Phase-2 milestone editing it in place would put the two worlds' bars in
+# one blast radius for no gain.
+#
+# Cases are named by the vendored golden `case_id`, so the market parameters,
+# order sizes and lambdas come from FrontierView's export rather than from here.
+
+brief: docs/briefs/M4a-power-law-world.md
+
+# --- the world --------------------------------------------------------------
+# Named, never inherited (constitution §4). Everything below is charged and
+# graded under FrontierView's 0.6-power temporary impact; the permanent, spread
+# and shock models are Phase 1's, untouched.
+world:
+  cost_encoding: power_law
+
+canonical_bins: 13
+
+# --- randomness -------------------------------------------------------------
+# Its own pool, so no offset arithmetic has to be reconciled against
+# configs/m1_differential.yaml's in-use list and a collision is impossible rather
+# than merely avoided. Streams are addressed, not drawn: stream_index =
+# stream_base + case_ordinal * n_schedules + schedule_ordinal over the `cases`
+# and `schedules` lists in their committed order.
+seeding:
+  root_seed: 20260819
+  pool: m4a/differential       # never `train` or `eval` — invariant 5
+  guarantee_stream: 900        # the task-4 inherited-guarantee checks
+
+# --- schedules under test ---------------------------------------------------
+# Four, not three. `tangent` is `optimal_trajectory` — the sinh the closed form
+# derives at the tangent, which in this world is a schedule like any other rather
+# than the answer — and `optimal` is the certified power-law optimum. Order fixes
+# the stream addressing above, so it is part of the committed contract.
+schedules: [twap, ac, tangent, optimal]
+
+# --- the Monte-Carlo tiers --------------------------------------------------
+# M1's tiers and CI level, unchanged, with the analytic reference swapped from
+# `schedule_moments` to `cost_moments`. Bands are on the standardised cost
+# z = (C - E) / sqrt(V):
+#   |mean(z)|      <= mean_z_sigmas / sqrt(N)
+#   |var(z) - 1|   <= var_z_sigmas * sqrt(2 / N)
+#
+# Still exact rather than asymptotic, and for the same reason as in M1 — which is
+# worth saying out loud because it is the one thing about the differential the
+# power law could have broken and did not. The temporary term is a function of
+# the *schedule*; it carries no shock. So realised cost stays affine in the draws,
+# a deterministic schedule's shortfall stays exactly Gaussian, and the 4-sigma
+# bounds stay exact with no chi-squared quantile and no scipy.
+#
+# `expected_steps` is the tier's total calls into `ExecutionEnv.step`, exactly:
+# cells x n_sim x canonical_bins. Asserted per cell and in total (invariant 6,
+# M1a) — a vectorised shortcut would leave the counter short however green the
+# bands came out, and injecting the impact model rather than subclassing the env
+# is what keeps that one loop to count.
+tiers:
+  fast:
+    # In `make test`. One case per symbol at the middle lambda.
+    n_sim: 20000
+    mean_z_sigmas: 4.0
+    var_z_sigmas: 4.0
+    stream_base: 0
+    runtime_budget_seconds: 120
+    expected_steps: 3120000     # 12 cells x 20 000 x 13
+    cases:
+      - core:AAPL:X100000:T6.5:lam1e-05
+      - core:MSFT:X250000:T6.5:lam1e-05
+      - core:JPM:X500000:T6.5:lam1e-05
+  deep:
+    # `make differential`, marker `deep`. The acceptance gate: the full 3 x 3
+    # golden grid at M1's N_sim, resolving mean shifts of 0.89% of sigma_C and
+    # variance mis-scalings of 1.26%.
+    n_sim: 200000
+    mean_z_sigmas: 4.0
+    var_z_sigmas: 4.0
+    stream_base: 100
+    runtime_budget_seconds: 1800
+    expected_steps: 93600000    # 36 cells x 200 000 x 13
+    cases:
+      - core:AAPL:X100000:T6.5:lam1e-07
+      - core:AAPL:X100000:T6.5:lam1e-05
+      - core:AAPL:X100000:T6.5:lam0.001
+      - core:MSFT:X250000:T6.5:lam1e-07
+      - core:MSFT:X250000:T6.5:lam1e-05
+      - core:MSFT:X250000:T6.5:lam0.001
+      - core:JPM:X500000:T6.5:lam1e-07
+      - core:JPM:X500000:T6.5:lam1e-05
+      - core:JPM:X500000:T6.5:lam0.001
+
+# --- the optimality certificate (task 1) ------------------------------------
+# The power-law optimum has no closed form, so it is *solved* — and a solved
+# reference is only normative (invariant 2) if the solve is certified. Five
+# parts, M1 task 0's shape adapted to a solve.
+certificate:
+  # (a) Convexity: Cholesky of the Hessian at x* succeeds. lambda_min and the
+  #     condition number are recorded rather than bounded — they are measurements
+  #     of the bowl, and the band below is derived from the first of them.
+  # (b) KKT: every bin's marginal cost equal, to this relative residual, with no
+  #     lower bound active.
+  kkt_rtol: 1.0e-12
+  # (c) Perturbation: `directions` random feasible interior directions at each
+  #     scale, all uphill. Same test as M1 task 0, same reason.
+  directions: 200
+  scales: [1.0e-3, 1.0e-6]
+  tolerance_rel: 1.0e-9
+  seed: 20260819               # the perturbation directions; a plain generator
+  # (d) Independence: the shooting solver — bisection on the equal-marginal-cost
+  #     condition, no matrix anywhere — reproduces the Newton solve to this
+  #     fraction of X. Slow and inelegant on purpose.
+  independent_rtol: 1.0e-10
+  # (e) The Phase-1 limit: the same solver at exponent 1, on the tangent charge,
+  #     must return `optimal_trajectory` to this fraction of X.
+  tangent_rtol: 1.0e-12
+  # The band is *local* here: the Hessian moves with the schedule, so
+  # |d| <= sqrt(2 delta / lambda_min(H(x*))) is a statement at the optimum.
+  # Validated by direct evaluation on this many random directions at the band
+  # radius rather than by asserting the quadratic inequality.
+  band_directions: 200
+  # Cross-check that the new Hessian assembly is right: run it on the *tangent*
+  # charge and it must reproduce the Phase-1 closed-form curvature floor.
+  hessian_cross_check_rtol: 1.0e-12
+  cases:                       # the 3 x 3 golden grid
+    - core:AAPL:X100000:T6.5:lam1e-07
+    - core:AAPL:X100000:T6.5:lam1e-05
+    - core:AAPL:X100000:T6.5:lam0.001
+    - core:MSFT:X250000:T6.5:lam1e-07
+    - core:MSFT:X250000:T6.5:lam1e-05
+    - core:MSFT:X250000:T6.5:lam0.001
+    - core:JPM:X500000:T6.5:lam1e-07
+    - core:JPM:X500000:T6.5:lam1e-05
+    - core:JPM:X500000:T6.5:lam0.001
+  # The certificate also runs across the whole committed lambda grid at the
+  # reference case, because the reference table (task 0) reads the optimum at
+  # every one of those points and a solve that failed at one of them would move a
+  # gate rather than a footnote.
+  grid_case: core:AAPL:X100000:T6.5:lam1e-05
+
+# --- the four inherited guarantees (task 4) ---------------------------------
+# Predicted green, and checked before training starts. The power law replaces the
+# temporary term, which is a function of the schedule and carries no shock, so
+# realised cost stays affine in the draws — and M1a's exact noise identity, the
+# antithetic pair's exact cancellation, its action-identity assertion and the
+# open-loop schedule check should all survive verbatim. If any goes red, that is
+# the milestone's finding and training does not start that night.
+inherited_guarantees:
+  noise_rtol: 1.0e-12          # M1a's exact per-episode noise identity
+  cancellation_atol: 1.0e-12   # the antithetic pair's averaged noise, in bps
+  episodes: 64
+  cases:
+    - core:AAPL:X100000:T6.5:lam1e-05
+    - core:MSFT:X250000:T6.5:lam1e-05
+    - core:JPM:X500000:T6.5:lam1e-05

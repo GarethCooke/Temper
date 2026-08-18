@@ -45,7 +45,7 @@ import torch
 from gymnasium import Env, Wrapper, spaces
 
 from temper.agents.ppo import AGENT_DTYPE, Agent
-from temper.env import ExecutionEnv
+from temper.env import ExecutionEnv, TemporaryImpact
 from temper.oracle import Market
 from temper.seeding import DIFFERENTIAL_POOL
 
@@ -171,6 +171,7 @@ def execution_env_factory(
     stream_index: int = 0,
     reward_scale: float = 1.0,
     reward_wrapper: Callable[[Env], Env] | None = None,
+    temporary_impact: TemporaryImpact | None = None,
 ) -> Callable[[], Env]:
     """A thunk building one training env at one seed address.
 
@@ -189,6 +190,11 @@ def execution_env_factory(
     parameter rather than an import because every estimator so far reads the
     env's published price shock, which no module under ``temper/agents/`` may
     name; the experiment driver passes it in.
+
+    `temporary_impact` is the world the agent trains in, and it arrives the same
+    way and for a related reason: ``None`` is Phase 1, and a Phase-2 world is
+    named by the config the driver read rather than defaulted to by the training
+    path (constitution §4).
     """
 
     def make() -> Env:
@@ -196,6 +202,7 @@ def execution_env_factory(
             market,
             order_size,
             lambda_risk,
+            temporary_impact=temporary_impact,
             root_seed=root_seed,
             pool=pool,
             stream_index=stream_index,
