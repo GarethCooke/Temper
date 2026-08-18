@@ -4,6 +4,7 @@
     python tools/m3_frontier.py check        # the committed point configs are what the generator writes
     python tools/m3_frontier.py run          # every point, serially, through tools/train.py — a day
     python tools/m3_frontier.py figure       # aggregate results/m3_frontier/*.json -> results/m3_frontier.*
+    python tools/m3_frontier.py figure --redraw   # redraw from the committed aggregate, byte-identical
     python tools/m3_frontier.py status       # which points have results, and their verdicts
 
 The manifest is ``configs/m3_frontier.yaml``: which frontier grid, which template
@@ -165,21 +166,41 @@ def _caption(document: dict) -> str:
     )
 
 
-def cmd_figure(manifest, *, allow_partial: bool) -> int:
+def cmd_figure(manifest, *, allow_partial: bool, redraw: bool = False) -> int:
+    """Aggregate the points and draw the frontier; with `redraw`, draw only.
+
+    The distinction is the same one M2 drew with ``--figure-only`` and it exists
+    for the same reason. Aggregating **re-stamps**: the document records the
+    revision it was built at, so committing it necessarily creates a newer
+    revision, and re-aggregating from the commit that contains it can never
+    reproduce its bytes. ``--redraw`` reads the committed aggregate and draws
+    from it, provenance included, so the figure is a pure function of a
+    committed result — which is what makes "the figure redraws byte-identically"
+    a property one can check from a clean clone rather than a hope.
+    """
     from temper.eval.figures import frontier_figure
     from temper.eval.provenance import Provenance
 
-    document = aggregate(manifest, REPO_ROOT, require_complete=not allow_partial)
-    if document["provenance"]["git_dirty"]:
-        print(
-            "  WARNING: the source tree is dirty; the aggregate's recorded revision "
-            "does not contain the code that produced it (invariant 1)."
+    if redraw:
+        if not manifest.results_metrics.exists():
+            print(
+                f"{manifest.results_metrics.relative_to(REPO_ROOT)} does not exist; "
+                "run the sweep and aggregate first"
+            )
+            return 1
+        document = json.loads(manifest.results_metrics.read_text(encoding="utf-8"))
+    else:
+        document = aggregate(manifest, REPO_ROOT, require_complete=not allow_partial)
+        if document["provenance"]["git_dirty"]:
+            print(
+                "  WARNING: the source tree is dirty; the aggregate's recorded revision "
+                "does not contain the code that produced it (invariant 1)."
+            )
+        manifest.results_metrics.parent.mkdir(parents=True, exist_ok=True)
+        manifest.results_metrics.write_text(
+            json.dumps(document, indent=2) + "\n", encoding="utf-8"
         )
-    manifest.results_metrics.parent.mkdir(parents=True, exist_ok=True)
-    manifest.results_metrics.write_text(
-        json.dumps(document, indent=2) + "\n", encoding="utf-8"
-    )
-    print(f"  wrote {manifest.results_metrics.relative_to(REPO_ROOT)}")
+        print(f"  wrote {manifest.results_metrics.relative_to(REPO_ROOT)}")
     written = frontier_figure(
         manifest.results_figure,
         aggregate=document,
@@ -212,6 +233,14 @@ def main() -> int:
         "--partial", action="store_true", help="figure: draw whatever points exist"
     )
     parser.add_argument(
+        "--redraw",
+        action="store_true",
+        help=(
+            "figure: draw from the committed aggregate without re-aggregating or "
+            "re-stamping it — the byte-identical redraw"
+        ),
+    )
+    parser.add_argument(
         "--only",
         type=float,
         default=None,
@@ -229,7 +258,7 @@ def main() -> int:
         return cmd_run(
             manifest, quiet=args.quiet, skip_done=args.skip_done, only=args.only
         )
-    return cmd_figure(manifest, allow_partial=args.partial)
+    return cmd_figure(manifest, allow_partial=args.partial, redraw=args.redraw)
 
 
 if __name__ == "__main__":

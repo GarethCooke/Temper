@@ -9,7 +9,7 @@ M2_SAMPLED  ?= configs/m2_ppo_sampled.yaml
 M3_VALIDATE ?= configs/m3_antithetic_validation.yaml
 M3_FRONTIER ?= configs/m3_frontier.yaml
 
-.PHONY: help test test-verbose differential smoke sweep reference validate frontier frontier-check goldens clean
+.PHONY: help test test-verbose differential smoke sweep reference validate frontier frontier-figure frontier-check goldens clean
 
 help:
 	@echo "make test          run the pytest suite (the gate); excludes the marked tiers"
@@ -89,6 +89,12 @@ frontier:
 
 # The amended update budget, checked at the one lambda two committed results
 # already answer, before the other eight points spend sixteen hours on it.
+# Redraw the committed frontier without retraining or re-aggregating: the figure
+# is a view of results/m3_frontier.json, and this is the form that reproduces its
+# bytes from a clean clone.
+frontier-figure:
+	$(PYTHON) tools/m3_frontier.py figure --redraw
+
 frontier-check:
 	$(PYTHON) tools/m3_frontier.py run --quiet --only 3.1622776601683794e-04
 

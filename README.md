@@ -24,18 +24,28 @@ Temper is the controlled treatment that follows forging.
    client. A demo that the policy speaks a real venue wire; performance claims stay in the
    simulator.
 
-**Status:** M2 done. The agent rediscovers Almgren–Chriss — and the interesting part is what
-it took. Trained on the noise-free reward it converges on the exact discrete optimum to a
-median of **+0.0115 % of `J_optimal`** across five seeds (0.0002 of the TWAP gap against a
-pre-stated ε of 0.05), sitting a median 1 336 shares from the sinh where the objective's own
-curvature allows 28 797. Trained on the *realised* reward — the same agent, the same
-hyperparameters, the full 1:70 per-episode signal-to-noise ratio — it misses the same bar
-(median 0.098, worst seed 0.819), and misses it as a **lottery** rather than a plateau: one
-seed in five lands inside ε, another barely learns at all. Both runs are committed, differ
-in exactly one config field, and the weaker claim travels with the figure. Grading is
-analytic: the observation carries no price, so a deterministic policy induces an open-loop
-schedule whose objective is a closed form — one rollout per seed, zero Monte-Carlo error,
-behind a bitwise assertion that the schedule really is shock-independent.
+**Status:** M3 done — the risk–cost frontier. The agent tracks the exact discrete optimum
+across nine λ spanning four decades, ten seeds each, every seed drawn:
+`results/m3_frontier.png`. Its median excess over the certified optimum stays between
+**+0.004 % and +0.33 %** everywhere on the grid, the red-flag test (`J_agent ≥ J_optimal`)
+is green on every seed at every λ, and the per-λ tolerance is met at eight of nine — the
+exception being λ = 10^−5, where TWAP is itself only 0.44 % worse than optimal, so ε is 2
+micro-bps and the miss measures the *tolerance's denominator* rather than the agent.
+
+What makes the sweep affordable and the claim cleaner than M2's is the reward regime. M2
+needed a control variate that subtracts the analytic noise form — exact, but it does not
+exist once cost stops being affine in the shocks. M3 replaces it with **antithetic
+pairing**: every episode runs twice, against the shock path and against its exact
+negation, and the rewards are averaged. Because the observation carries no price the agent
+takes identical actions in both halves — asserted bitwise on every step, not assumed — so
+the noise cancels on the average, and the realised per-update reward variance drops by
+**eleven orders of magnitude** under the agent's own actions. It was validated at M2's λ
+against M2's committed answer before being used anywhere: median gap fraction 0.000168
+against a gate of 0.002, and on the seeds the two runs share, the trained policies agree
+*bitwise* — their rewards differ by ~1e−17 bps, below float32 resolution at the agent
+boundary, so the optimiser sees identical numbers.
+
+The honesty ladder below says what this does and does not establish.
 
 Earlier: `temper/oracle` lands the Almgren–Chriss closed forms and matches 16
 vendored FrontierView cases plus a 17-point frontier to float round-off, ten orders of

@@ -339,6 +339,108 @@ The grid is generated, not hand-written: `configs/m3_frontier.yaml` is the manif
 config; `tests/test_m3_frontier.py` asserts every committed point is byte-identical to what
 the generator writes, so a point cannot drift from the template it claims to be.
 
+## Task 1's acceptance run, and what repeating it measured
+
+The numbers above were produced twice. The first run started from a dirty tree —
+this session was writing the frontier tooling while it trained — so it was discarded
+and re-run from commit `8bf6953`; `results/m3_antithetic_validation.json` is the second.
+
+**All ten seeds reproduced bitwise.** Not the median, not "within tolerance": every
+seed's graded objective to seventeen digits *and* its full 14-point inventory
+trajectory, at a different revision, nine hours apart, with per-seed wall clocks
+differing by up to 17 % (1,658–1,997 s against 1,743–2,513 s). The provenance failure
+therefore cost time and nothing else, and it extends M2's reproducibility finding —
+one sweep, repeated on one revision — to a second reward regime across two.
+
+## Task 4 — the sweep
+
+Nine λ, ten seeds each, 751 updates per seed, antithetic reward, graded analytically
+through the unchanged `GRADED` registry, three baselines through the identical grader
+at every point. Every point carries `git_dirty: false` and a config digest the suite
+re-checks. `results/m3_frontier/*.json`, aggregated into `results/m3_frontier.json`.
+
+| λ | κT | TWAP gap | median gap fraction | IQR | worst seed | ε | median excess | median ‖δ‖₂ / band | red flags | wall clock |
+| --- | ---: | ---: | ---: | ---: | ---: | :---: | ---: | ---: | :---: | ---: |
+| 10^−5 | 0.92 | 0.44 % | **0.06963** | 0.06342 | 0.53612 | **✗** | +0.0309 % | 751 / 2,980 | none | 1.93 h |
+| 10^−4.5 | 1.63 | 3.26 % | **0.03966** | 0.03101 | 0.09273 | ✓ | +0.1293 % | 1,777 / 8,084 | none | 2.27 h |
+| 10^−4 | 2.90 | 16.80 % | **0.00340** | 0.00116 | 0.00565 | ✓ | +0.0571 % | 1,563 / 17,714 | none | 2.39 h |
+| **10^−3.5** | 5.14 | 56.30 % | **0.00010** | 0.00003 | 0.00018 | ✓ | +0.0056 % | 675 / 28,797 | none | 1.92 h |
+| 10^−3 | 9.01 | 130.14 % | **0.00003** | 0.00006 | 0.00010 | ✓ | +0.0044 % | 838 / 36,657 | none | 2.48 h |
+| 10^−2.5 | 15.42 | 224.97 % | **0.00002** | 0.00003 | 0.00010 | ✓ | +0.0046 % | 774 / 40,822 | none | 2.48 h |
+| 10^−2 | 25.02 | 307.21 % | **0.00002** | 0.00001 | 0.00004 | ✓ | +0.0048 % | 699 / 42,710 | none | 2.21 h |
+| 10^−1.5 | 37.39 | 354.55 % | **0.00094** | 0.00000 | 0.00094 | ✓ | +0.3332 % | 5,642 / 43,459 | none | 2.00 h |
+| 10^−1 | 51.36 | 374.32 % | **0.00010** | 0.00000 | 0.00010 | ✓ | +0.0376 % | 1,924 / 43,724 | none | 1.97 h |
+
+**ε met at eight of nine; the red-flag test is green on every seed at every λ**; every
+median ‖δ‖₂ sits inside that λ's derived band; 19.65 h against the ~24 h ceiling, per
+seed 689–998 s. Artefacts: 5.5 MB of point files plus a 0.2 MB aggregate, against the
+~20 MB the ROADMAP's M3 note was written to prevent — the `trace_points: 128` budget
+is what bought that, and the estimate recorded in task 3 (~1.4 MB) counted only the
+traces and not the per-seed grades and trajectories, which are kept whole.
+
+Three things in that table are worth more than the verdict.
+
+**The miss at 10^−5 is the tolerance's denominator, not the agent.** ε is 5 % of *that
+λ's* TWAP gap, and at 10^−5 the entire TWAP gap is 0.0041 bps — so the bar is 2
+micro-bps, and the agent's median excess of +0.031 % (2.9 micro-bps) reads as 0.070 of
+the gap. The same agent at 10^−3 is +0.0044 % and reads as 0.00003. Across the grid the
+absolute excess stays between +0.004 % and +0.33 % while the gap fraction moves by three
+and a half orders of magnitude: what the low end measures is that TWAP and the optimum
+have nearly converged, which is precisely what M2 task 0's condition (i) rejected λ ≤
+10^−4 for. The sweep visits those λ anyway because the frontier's *shape* needs its low
+end, and reports the miss rather than trimming the grid to flatter itself.
+
+**The seed spread narrows as the optimum steepens.** IQR runs 0.063 → 0.031 → 0.0012 →
+0.00003 as κT runs 0.92 → 1.63 → 2.90 → 5.14. At κT < 1 the objective is flat (the
+derived band is 2,980 shares, 3 % of X) and seeds scatter; by κT = 25 the band is 42,710
+shares and the seeds agree to five decimals. Dispersion here is a property of the
+objective's curvature, not of the optimiser's luck — the same statement M2's Hessian
+made at one λ, now measured across four decades.
+
+**The action space has a floor, and it is visible at 10^−1.5.** That point's IQR is
+*zero to six decimals*: eight of ten seeds return 0.000940, one 0.000378, one 0.000003.
+That is a plateau, not dispersion. At κT = 37 the optimum sells 94.4 % of the order in
+bin 0 and then 5.32 %, 0.30 %, 0.017 % — a tail decaying ~18× per bin; the typical seed
+sells 96.6 % and then 1.27 %, 0.71 %, 0.42 %, still holding 0.75 % of the order at bin 5
+where the optimum holds 0.0001 %. The action is a fraction of *remaining* inventory
+squashed to [0, 1], so tracking that tail needs fractions ever closer to 1, and a
+Gaussian mean with a fixed log-std cannot sit just short of a boundary with precision.
+
+The prediction recorded before 10^−1 ran was that this would be *worse* there, since
+that optimum's first bin is 98.1 %. **It is better** — 0.00010, again identical on all
+ten seeds — and the refutation is what makes the finding precise. At 10^−1 the corner
+*is* the answer: selling 100 % in bin 0 is the exact vertex of the action space, every
+seed finds it, and it costs 0.04 % of `J_optimal`. The difficulty is therefore not
+monotone in λ. It peaks where the optimum approaches the vertex without being at it,
+and falls away once the vertex is optimal. That is a statement about M2's action
+parameterisation, it is inside ε by fifty-fold either way, and it is the first thing
+M4 should revisit if Phase-2 schedules live near that boundary.
+
+## Task 5 — the figure
+
+`results/m3_frontier.png`, drawn from `results/m3_frontier.json` and nothing else, so it
+redraws byte-identically without training (`tools/m3_frontier.py figure`; the suite
+asserts the redraw).
+
+**Axes, as the brief requires them stated.** x is `V − σ_bin²X²`, the variance in excess
+of the floor every schedule pays (§9, M1a: 1,848.08 bps² at this case); y is `E[cost]` in
+bps of notional. Plotting total `V` would compress the schedules exactly where they
+separate most. The x axis is **symlog**, linear below 0.5 and logarithmic above, and that
+is a result rather than a preference: at high λ the agent liquidates in bin 0, so its
+excess variance is *exactly zero* — eight of ten seeds at 10^−1.5, all ten at 10^−1 — and
+a log axis cannot place zero. It dropped those seeds and ran their traces off the canvas
+edge looking like data. On symlog the top of the frontier is legible: the agent reaches
+the floor at E = 4.2604 bps while the exact optimum stops short of it, keeping 0.68 bps²
+of excess variance at E = 4.1208, and the gap between them is the cost of the corner.
+
+Every seed is drawn at every λ and traced across the grid; the median carries IQR bars in
+both coordinates; TWAP is one point because its schedule does not move with λ; the AC
+curve leaves the frame at the high-λ end as it collapses onto the floor. The lower panel
+is the per-λ tolerance table drawn — every seed's gap fraction, the median with its IQR,
+ε and the per-seed floor, and the full-budget validation run at 10^−3.5 as open diamonds,
+so the effect of amendment 1's budget cut is visible on the same axes rather than
+asserted.
+
 ## Pre-stated numbers (invariant 3 — loosen only by amending this brief before work)
 
 | Item | Value |
@@ -364,22 +466,40 @@ the generator writes, so a point cannot drift from the template it claims to be.
 
 ## Definition of done
 
-- [ ] Task 1 green: median ≤ 0.002 on 10 seeds, with reward-variance evidence, not outcome
-      inference.
-- [ ] Action-identity and shock-negation tests permanent and green.
-- [ ] Measured pairing multiplier reported; any update-budget cut recorded as an amendment
-      **before** the sweep.
-- [ ] Grid, seeds and wall-clock estimate recorded here before the sweep starts.
-- [ ] Sweep complete; per-λ median + IQR; three baselines through the identical grader at
-      every point.
-- [ ] Red-flag test green on every seed at every λ.
-- [ ] Frontier figure on excess-over-floor axes, every seed traced, config hash + git rev.
-- [ ] README ladder written.
-- [ ] House notes placed.
-- [ ] Clean clone through the documented interface: `make help`, `make test`, `make
-      reference`, sweep configs dry-run, figure redraws byte-identical.
-- [ ] Artifacts stamped `git_dirty: false` at a committed rev.
-- [ ] `ROADMAP.md` M3 row flipped; anything structural → §9.
+- [x] Task 1 green: **median 0.000168** on 10 seeds against a gate of 0.002, with the
+      reward variance measured per update inside the run (3,377 bps² sampled half vs
+      3.4e−08 averaged, ratio 1.0e−11) rather than inferred from the outcome.
+- [x] Action-identity and shock-negation tests permanent and green — asserted per step in
+      `AntitheticPair` for every training run, and in `tests/test_m3_antithetic.py` for the
+      baselines, a fraction policy and two PPO networks, each shown non-vacuous by leaking
+      a shock into the mirror and requiring `PairDiverged`.
+- [x] Measured pairing multiplier reported: **1.17×** (1.10–1.17× across three
+      comparisons), not the 2× allowed for. Update-budget cut to 751 updates recorded as
+      amendment 1 **before** the sweep, and checked at 10^−3.5 first, where it beat the
+      full-budget run (0.000100 vs 0.000168).
+- [x] Grid, seeds and wall-clock estimate recorded here before the sweep started: 9 λ ×
+      10 seeds × 751 updates, 18.3 h estimated against a ~24 h ceiling; **19.65 h
+      measured**.
+- [x] Sweep complete; per-λ median + IQR in the task-4 table; TWAP, `ac` and `optimal`
+      through the identical grader at every point (`optimal` 0.0000, `twap` 1.0000 at all
+      nine, which is the grading path returning the oracle's own numbers).
+- [x] Red-flag test green on every seed at every λ — 90 seeds, no seed below the certified
+      optimum.
+- [x] Frontier figure on excess-over-floor axes (symlog, so the agent's zero-excess
+      schedules at high λ have a place on the chart), every seed drawn and traced across
+      λ, config digest + git rev in the footer.
+- [x] README ladder written — three phases, each narrowed to what it actually shows, and
+      the plain statement that none of it establishes real-market performance.
+- [x] House notes placed in `docs/house-notes.md`: *Thread count is a reproducibility
+      axis* and *Below n ≈ 10, draw every trace*.
+- [x] Clean clone through the documented interface — `make help`, `make test`, `make
+      reference`, every M3 config dry-run, `m3_frontier check`, and the frontier figure
+      redrawn byte-identically from the committed aggregate.
+- [x] Artifacts stamped `git_dirty: false` at a committed rev — every point, the
+      validation run and the aggregate. Getting there cost two discarded artefacts and
+      exposed a real defect: `git_dirty` could fire on a clean tree (fixed, with the
+      regression test).
+- [x] `ROADMAP.md` M3 row flipped; three structural findings → `ARCHITECTURE.md` §9.
 
 ## Out of scope (resist)
 
@@ -402,3 +522,23 @@ the Anvil wire.
   practice now. Keep it. Task 2's update-budget decision is exactly the shape of thing that
   benefits.
 - Serial scheduling is not a preference. It is the finding from M2's first discarded run.
+
+### What this session actually cost, recorded because the brief asked for one night
+
+Task 1 took four launches, not one. The first completed and was discarded for provenance
+(the tooling was being written while it trained). The second died with the workstation —
+bugcheck `0x3b`, which I misattributed to a harness teardown at the time. The third died
+after 114 seconds: `schtasks /Run` starts a task inside the interactive session, so it
+inherited a short-lived console and MKL's Fortran runtime aborted on the close event
+(`forrtl: error (200)`). The fourth ran, from its own hidden console with
+`FOR_DISABLE_CONSOLE_CTRL_HANDLER=1`. The sweep then lost four seeds to a second
+bugcheck (`0x51`, REGISTRY_ERROR) and resumed, because each point writes its own results
+file and `--skip-done` is exact. Two practices came out of it and both are cheap:
+**commit a results file the moment it exists** rather than at the end of a sweep, and
+**launch long runs detached with their own console**. The owner elected to add a
+ten-minute cooldown between points after the second crash; it changes wall clock only.
+
+The scheduling rule also wants widening. M2's finding was "no two concurrent sweeps";
+this session measured a seed at 2,513 s against a 1,752 s median because the box was
+simultaneously rendering figures and running the test suite. Anything that uses the cores
+counts, editor tooling included.
