@@ -23,6 +23,7 @@ import matplotlib
 matplotlib.use("Agg")  # before pyplot: headless, deterministic, no display needed
 
 import matplotlib.pyplot as plt  # noqa: E402  (backend must be set first)
+import matplotlib.ticker as ticker  # noqa: E402
 import numpy as np  # noqa: E402
 
 from temper.eval.provenance import Provenance  # noqa: E402
@@ -37,6 +38,12 @@ STYLE: dict[str, dict] = {
     "optimal": {"color": "#1f4e79", "linestyle": "-", "linewidth": 2.0},
     "agent": {"color": "#227a4b", "linestyle": "-", "linewidth": 2.0},
 }
+
+#: Where the frontier's x axis switches from linear to logarithmic. Below this
+#: the axis is linear so that an excess variance of exactly zero — the agent's
+#: schedule at high lambda, which liquidates in bin 0 and lands on the floor —
+#: has a place on the chart instead of being dropped by a log transform.
+SYMLOG_THRESHOLD = 0.5
 
 LABELS = {
     "twap": "TWAP",
@@ -198,7 +205,12 @@ def trajectory_overlay(
     target.parent.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
     for suffix in formats:
-        out = target.with_suffix(f".{suffix.lstrip('.')}")
+        # Appended, never `with_suffix`: a frontier point is named for its
+        # lambda (`lambda_1e-3.5`), and `with_suffix` reads the `.5` as a suffix
+        # to replace — which silently collided the half-decade points with the
+        # integer-decade ones. Every path M2 committed has no dot in its final
+        # component, so the two spellings agree there byte for byte.
+        out = target.with_name(f"{target.name}.{suffix.lstrip('.')}")
         # No timestamp of any kind. matplotlib stamps a `Date` chunk into a PNG
         # by default, which makes every redraw a diff — and a figure that always
         # shows as modified is one nobody checks, so a *real* change to it would
@@ -354,15 +366,34 @@ def frontier_figure(
             linestyle="none",
             zorder=2.8,
         )
-    top.set_xscale("log")
-    # The x-range is the *optimum's* over the grid, with margin. The vendored AC
-    # schedule collapses onto the variance floor at high lambda (excess ~1e-10
-    # bps^2 by lambda = 0.1) and would otherwise stretch the log axis by ten
-    # decades of nothing; where it leaves the canvas it is sitting on the floor,
-    # which the caption says.
+    # symlog, not log, and the reason is a result rather than a preference. At
+    # high lambda the agent liquidates the whole order in bin 0, so its schedule
+    # sits *exactly* on the variance floor and `V - floor` is 0 — for eight of
+    # ten seeds at 10^-1.5 and for all ten at 1e-1. A log axis cannot place zero:
+    # those seeds would vanish, and the lines reaching them would run off the
+    # canvas edge looking like data. symlog is linear inside `SYMLOG_THRESHOLD`
+    # and logarithmic outside it, so "on the floor" is a position on the axis and
+    # the decades above it still read as decades. The exact optimum never reaches
+    # the floor (it keeps a small tail: 0.68 bps^2 of excess at lambda = 1e-1),
+    # so the separation at the top of the frontier is exactly what the reader
+    # should be able to see.
+    top.set_xscale("symlog", linthresh=SYMLOG_THRESHOLD, linscale=0.6)
     grid_optimal = [p["baselines"]["optimal"]["excess_variance_bps2"] for p in points]
-    top.set_xlim(0.25 * min(grid_optimal), 2.5 * twap["excess_variance_bps2"])
-    top.set_xlabel(r"$V - \sigma_{bin}^2 X^2$ — variance in excess of the floor (bps$^2$)")
+    top.set_xlim(-0.25 * SYMLOG_THRESHOLD, 2.5 * twap["excess_variance_bps2"])
+    # Explicit ticks: symlog's default locator emits both a 0 and a decade tick
+    # inside the linear region, and at this width their labels overlap into an
+    # unreadable smudge. Zero is the tick that has to be legible — it is where
+    # the agent's high-lambda schedules sit.
+    decades = 1
+    while decades <= twap["excess_variance_bps2"]:
+        decades *= 10
+    top.set_xticks([0.0] + [10.0**k for k in range(0, len(str(int(decades))))])
+    top.xaxis.set_minor_locator(ticker.NullLocator())
+    del grid_optimal
+    top.set_xlabel(
+        r"$V - \sigma_{bin}^2 X^2$ — variance in excess of the floor (bps$^2$); "
+        rf"linear below {SYMLOG_THRESHOLD:g}, so $0$ is on the axis"
+    )
     top.set_ylabel(r"$E$[cost] (bps of notional)")
     top.grid(True, which="both", alpha=0.25, linewidth=0.6)
     top.legend(frameon=False, fontsize=8.5, loc="upper right")
@@ -440,13 +471,18 @@ def frontier_figure(
     figure.text(
         0.01, 0.012, provenance.short, fontsize=7.5, color="#666666", family="monospace"
     )
-    figure.subplots_adjust(left=0.105, right=0.98, top=0.905, bottom=0.075)
+    figure.subplots_adjust(left=0.105, right=0.98, top=0.890, bottom=0.075)
 
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
     for suffix in formats:
-        out = target.with_suffix(f".{suffix.lstrip('.')}")
+        # Appended, never `with_suffix`: a frontier point is named for its
+        # lambda (`lambda_1e-3.5`), and `with_suffix` reads the `.5` as a suffix
+        # to replace — which silently collided the half-decade points with the
+        # integer-decade ones. Every path M2 committed has no dot in its final
+        # component, so the two spellings agree there byte for byte.
+        out = target.with_name(f"{target.name}.{suffix.lstrip('.')}")
         figure.savefig(
             out, dpi=160, metadata={"Software": None, "Creator": None, "Date": None}
         )
