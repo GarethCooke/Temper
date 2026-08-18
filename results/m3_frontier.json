@@ -4,8 +4,8 @@
   "provenance": {
     "config": "m3_frontier.yaml",
     "config_sha256": "cbe5f3ae36856dae43c881e3b2f97cb08076f8ddbfaa23fa5fa07af71cef0c9b",
-    "git_rev": "508edff06c6199bd3264614a57cd6806f8e5db12",
-    "git_dirty": true,
+    "git_rev": "24533d30e254cb0cb4a7a43af4723dd268fe5cbe",
+    "git_dirty": false,
     "python": "3.12.2"
   },
   "grid": {
