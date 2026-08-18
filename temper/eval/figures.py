@@ -471,7 +471,7 @@ def frontier_figure(
     figure.text(
         0.01, 0.012, provenance.short, fontsize=7.5, color="#666666", family="monospace"
     )
-    figure.subplots_adjust(left=0.105, right=0.98, top=0.890, bottom=0.075)
+    figure.subplots_adjust(left=0.105, right=0.98, top=0.875, bottom=0.075)
 
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)

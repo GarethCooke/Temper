@@ -159,6 +159,9 @@ def _caption(document: dict) -> str:
         f"top: E[cost] vs V − σ²_bin·X² (floor {floor:,.0f} bps², paid by every schedule);\n"
         f"x is linear below 0.5, so 0 is on the axis — where the agent sits once it "
         f"liquidates in bin 0\n"
+        f"AC lies ON the optimal curve, displaced: AC(λ) = optimal(cλ) exactly, "
+        f"c ≈ 5 at low λ
+"
         f"bottom: gap fraction per λ, every seed drawn · ε met at {met} of "
         f"{len(document['points'])} λ · red flags: "
         f"{'none' if verdict['red_flag_free'] else verdict['red_flags']} · "

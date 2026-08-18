@@ -190,6 +190,15 @@ def _fresh_agent(seed: int) -> PPOPolicy:
 def test_a_policy_shown_each_half_separately_takes_identical_actions(policy_name):
     """The load-bearing assumption, made executable for every kind of policy.
 
+    **When this test goes red in Phase 2, that is the designed signal and not a
+    regression to be silenced.** The pairing cancels noise exactly only because
+    the observation carries no price, so both halves take the same actions; an
+    enriched observation breaks that, and this test is how the repo finds out.
+    See ``ARCHITECTURE.md`` §9, *Antithetic pairing is the Phase-1
+    variance-reduction regime, and at this reward magnitude it is bitwise the
+    control variate* — the estimator degrades to partial cancellation, which is
+    a different claim, not a broken one.
+
     Two rollouts through the shared :func:`~temper.eval.run_episode`, one on the
     primary env and one on its mirror, each with the policy acting on *that*
     half's observations. The action sequences must be bitwise identical, and so

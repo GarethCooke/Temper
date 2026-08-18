@@ -397,24 +397,69 @@ shares and the seeds agree to five decimals. Dispersion here is a property of th
 objective's curvature, not of the optimiser's luck — the same statement M2's Hessian
 made at one λ, now measured across four decades.
 
-**The action space has a floor, and it is visible at 10^−1.5.** That point's IQR is
-*zero to six decimals*: eight of ten seeds return 0.000940, one 0.000378, one 0.000003.
-That is a plateau, not dispersion. At κT = 37 the optimum sells 94.4 % of the order in
-bin 0 and then 5.32 %, 0.30 %, 0.017 % — a tail decaying ~18× per bin; the typical seed
-sells 96.6 % and then 1.27 %, 0.71 %, 0.42 %, still holding 0.75 % of the order at bin 5
-where the optimum holds 0.0001 %. The action is a fraction of *remaining* inventory
-squashed to [0, 1], so tracking that tail needs fractions ever closer to 1, and a
-Gaussian mean with a fixed log-std cannot sit just short of a boundary with precision.
+**The two high-λ points are one datum: the agent saturates the action space's corner.**
+Their IQRs are *zero to five decimals*, and the per-seed schedules say why. At 10^−1 all
+ten seeds sell **100.0000 % of the order in bin 0** — one bin, nothing after. At 10^−1.5
+eight of the ten do the same; the plateau value 0.000940 *is* the immediate-liquidation
+schedule, not a near miss of the optimum's 94.3669 %. A zero IQR here is saturation, not
+convergence, and the two points are one observation reported twice: *the agent liquidates
+immediately*, which costs 0.00010 of the TWAP gap at 10^−1 (where the optimum is 98.0759 %
+in bin 0, so the corner is nearly right) and 0.00094 at 10^−1.5 (where it is 94.3669 %, so
+the corner overshoots).
 
-The prediction recorded before 10^−1 ran was that this would be *worse* there, since
-that optimum's first bin is 98.1 %. **It is better** — 0.00010, again identical on all
-ten seeds — and the refutation is what makes the finding precise. At 10^−1 the corner
-*is* the answer: selling 100 % in bin 0 is the exact vertex of the action space, every
-seed finds it, and it costs 0.04 % of `J_optimal`. The difficulty is therefore not
-monotone in λ. It peaks where the optimum approaches the vertex without being at it,
-and falls away once the vertex is optimal. That is a statement about M2's action
-parameterisation, it is inside ε by fifty-fold either way, and it is the first thing
-M4 should revisit if Phase-2 schedules live near that boundary.
+It is an optimisation attractor rather than a representational limit, and the two escaping
+seeds prove it. Seed 9 at 10^−1.5 realised 94.4348 % in two bins and scored **0.000003** —
+essentially the optimum — so the policy class can express the schedule perfectly well.
+Seed 0 realised 96.5907 % over thirteen bins for 0.000378. The other eight stopped at the
+clip. The mechanism is that the fraction action is clipped to [0, 1]: once the Gaussian
+mean pushes past 1 every larger mean produces an *identical* trade, so the return surface
+is exactly flat in that direction and there is no gradient pointing back. Eight seeds fall
+into that flat region; two do not.
+
+Two things this corrects, both recorded rather than quietly amended. An earlier reading of
+this table in the session described "the typical seed" as selling 96.6 % and then a slow
+tail — that was seed 0, one of the two *outliers*, and the eight-seed majority does
+something simpler and more extreme. And the accompanying explanation — that a Gaussian
+mean with fixed log-std cannot track a geometrically decaying tail — is withdrawn: seed 9
+tracked it. What actually happens is saturation against a clip whose far side is flat.
+
+The prediction recorded before 10^−1 ran was that the effect would be *worse* there, since
+that optimum's first bin is 98.1 %. It is better, and for a reason that survives the
+correction above: at 10^−1 the corner is nearly the right answer, so saturating costs
+almost nothing, while at 10^−1.5 the same saturation overshoots by 5.6 % of the parent
+order. The difficulty peaks where the optimum approaches the vertex without being at it.
+Inside ε by fiftyfold either way, and the first thing M4 should revisit if Phase-2
+schedules live near that boundary.
+
+**AC is displaced along the frontier, not dominated by it.** The sweep grades the vendored
+AC schedule at every λ, and its gap fraction moves by nearly five orders of magnitude —
+8.2942 at 10^−5, 0.3435 at M2's 10^−3.5 (the committed value), 0.0001 at 10^−1 — so the
+single number M2 reported was a point on a steep curve rather than a property of AC. The
+curve has an exact explanation. `ac_trajectory` and `optimal_trajectory` are the *same*
+`sinh_trajectory` function differing only in κ, so solving `optimal_kappa(λ′) = ac_kappa(λ)`
+gives a λ′ at which the two trajectories must coincide — and they do, to 7.3e−11 shares in
+100,000, which is float round-off:
+
+| λ | κ_ac·dt | c = λ′/λ | ‖AC(λ) − optimal(cλ)‖∞, shares |
+| --- | ---: | ---: | ---: |
+| 10^−5 | 0.158 | 5.0104 | 7.3e−11 |
+| 10^−4.5 | 0.281 | 5.0330 | 4.4e−11 |
+| 10^−4 | 0.500 | 5.1050 | 2.9e−11 |
+| **10^−3.5** | 0.889 | **5.3381** | 3.3e−11 |
+| 10^−3 | 1.581 | 6.1322 | 0 |
+| 10^−2.5 | 2.811 | 9.2952 | 1.8e−12 |
+| 10^−2 | 5.000 | 29.276 | 0 |
+| 10^−1.5 | 8.891 | 459.35 | 0 |
+| 10^−1 | 15.810 | 147,000 | 0 |
+
+So the vendored schedule is never a *worse-shaped* schedule; it is the exactly optimal
+schedule for a different risk aversion, and its (E, V) point lies **on** the optimal
+frontier rather than inside it. In the low-κ limit `c → X·τ/10⁴ = 5.0` for this case,
+which is precisely the factor M0's §9 entry says FrontierView's κ drops; √5 = 2.236 is the
+"~2.2× in κ" that entry quotes. The constant-displacement reading holds to within 7 % up to
+10^−3.5 and then fails as `cosh` saturates — `optimal_kappa` grows like `log μ` while
+`ac_kappa` keeps growing as `√λ`, so by 10^−1 the displacement is five orders of magnitude
+and AC has collapsed onto the variance floor. The §9 κ entry now carries this restatement.
 
 ## Task 5 — the figure
 
