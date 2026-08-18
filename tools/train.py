@@ -176,40 +176,52 @@ def _header(experiment: Experiment) -> None:
 
 
 def _reward_scale_check(experiment: Experiment, reference) -> None:
-    """The per-step reward range the scale actually produces, recorded not assumed.
+    """The per-step reward range the scale actually produces, measured not derived.
 
     M4a's brief asks for this before the run rather than after. The committed
     ``reward.scale`` was set against a Phase-1 objective and carries at the
     *episode* level — the two worlds' objectives are 1.2 % apart at this lambda —
     but the per-step charge is more front-loaded under the power law, and PPO's
-    value head and advantage normalisation were tuned on a range. So the range is
-    printed for both the optimum and TWAP, in the scaled units the agent sees.
+    value head and advantage normalisation were tuned on a range.
+
+    The range is *measured*, by stepping the real env with the control variate on
+    top so the shocks are subtracted exactly. That is the deterministic per-step
+    reward the antithetic pair averages to, which is what the agent actually
+    sees — and it is measured rather than reassembled from the moments because
+    re-deriving the per-bin split of permanent, temporary and spread by hand is
+    precisely the kind of arithmetic that is wrong in a way nobody notices in a
+    diagnostic line.
     """
-    from temper.eval.reference import schedule_moments_for
+    from temper.env import ExecutionEnv, impact_for
+    from temper.eval.variate import deterministic_reward
+    from temper.seeding import DIFFERENTIAL_POOL
 
     market, order_size = experiment.case.market, experiment.case.order_size
-    scale, lam = experiment.reward_scale, experiment.lambda_risk
+    scale = experiment.reward_scale
     lines = []
     for name in ("optimal", "twap"):
-        schedule = reference.schedules[name].trajectory
-        holdings = schedule[:-1]
-        trades = -np.diff(schedule)
-        # Per-step reward is -(shortfall + penalty), and the deterministic part of
-        # the shortfall is the impact charge on that bin's trade.
-        moments = schedule_moments_for(
-            experiment.cost_encoding, schedule, market, order_size
+        schedule = np.asarray(reference.schedules[name].trajectory, dtype=float)
+        env = deterministic_reward(
+            ExecutionEnv(
+                market,
+                order_size,
+                experiment.lambda_risk,
+                temporary_impact=impact_for(
+                    experiment.cost_encoding, market, order_size
+                ),
+                root_seed=experiment.seeds.root_seed,
+                pool=DIFFERENTIAL_POOL,
+                stream_index=0,
+            )
         )
-        temporary_per_bin = moments.temporary * (trades / order_size) / max(
-            float(np.sum(trades / order_size)), 1e-300
-        )
-        penalty = lam * (market.sigma_bin * 1.0e4) ** 2 * (holdings / order_size) ** 2
-        reward = -scale * (temporary_per_bin + penalty)
-        lines.append(
-            f"{name} [{float(np.min(reward)):+.4f}, {float(np.max(reward)):+.4f}]"
-        )
+        env.reset()
+        rewards = [
+            scale * float(env.step(trade)[1]) for trade in -np.diff(schedule)
+        ]
+        lines.append(f"{name} [{min(rewards):+.4f}, {max(rewards):+.4f}]")
     print(
-        f"  reward scale {scale:g} · scaled per-step reward range: "
-        + " · ".join(lines)
+        f"  reward scale {scale:g} · scaled per-step reward range, measured on the "
+        f"noise-free reward: " + " · ".join(lines)
     )
 
 
