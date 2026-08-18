@@ -368,3 +368,64 @@ def test_the_committed_frontier_figure_exists_and_redraws_byte_identically(tmp_p
         caption=_caption(COMMITTED),
     )
     assert redrawn[0].read_bytes() == figure.read_bytes()
+
+
+# ---------------------------------------------------------------------------
+# The provenance parser, against the shapes git actually emits
+# ---------------------------------------------------------------------------
+
+
+def test_a_regenerated_results_file_does_not_make_the_tree_read_dirty():
+    """The M3 sweep's own output must not flip the flag its artefacts are gated on.
+
+    This is a regression test with a scar. `_git` used to `.strip()` git's
+    stdout, which removed the leading space of the *first* porcelain line only —
+    and an unstaged modification is encoded as exactly that leading space. The
+    first line's path was then read one character short (`sults/...`), failed
+    the `results/` prefix test, and a tree whose only change was a regenerated
+    figure reported dirty. It cost an aggregate and a figure, twice, and the
+    first time it was misattributed to an editor.
+
+    Order matters in the cases below: the defect only ever bit the first line.
+    """
+    from temper.eval.provenance import _source_is_dirty
+
+    ignored = [
+        " M results/m3_frontier.json",
+        "?? results/m3_frontier/lambda_1e-3.5.png",
+        " D results/m3_frontier/lambda_1e-3.png",
+        "A  results/m3_frontier.png",
+        "?? results/scratch/run_sweep.cmd",
+        "?? results/m3_frontier/",
+    ]
+    for line in ignored:
+        assert not _source_is_dirty(line), f"{line!r} should not make the tree dirty"
+    # ...in any order, and all together.
+    assert not _source_is_dirty("\n".join(ignored))
+    for index in range(len(ignored)):
+        rotated = ignored[index:] + ignored[:index]
+        assert not _source_is_dirty("\n".join(rotated))
+
+    # And the flag is not vacuous: source changes are dirty wherever they sit.
+    for source in (" M temper/eval/figures.py", "?? tools/new_tool.py", "M  configs/x.yaml"):
+        assert _source_is_dirty(source)
+        assert _source_is_dirty("\n".join([*ignored, source]))
+        assert _source_is_dirty("\n".join([source, *ignored]))
+    # A source file *renamed into* results/ is still a source change.
+    assert _source_is_dirty('R  temper/eval/x.py -> results/x.py')
+
+
+def test_the_git_helper_returns_git_output_verbatim():
+    """`_git` must not strip: the porcelain format encodes state in column 1."""
+    from pathlib import Path
+
+    from temper.eval.provenance import _git
+
+    status = _git(Path(REPO_ROOT), "status", "--porcelain")
+    assert status is not None
+    for line in status.splitlines():
+        if line.strip():
+            assert line[:2] == line[:2].upper() or line[0] == " ", line
+            assert len(line) > 3 and line[2] == " ", (
+                f"porcelain line {line!r} lost its status columns; _git stripped it"
+            )

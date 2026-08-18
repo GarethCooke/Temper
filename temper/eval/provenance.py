@@ -39,6 +39,16 @@ def config_digest(path: str | Path) -> str:
 
 
 def _git(repo_root: Path, *args: str) -> str | None:
+    """Run git and return its stdout **verbatim**, or ``None`` if it failed.
+
+    Verbatim matters. ``git status --porcelain`` encodes a file's state in the
+    first two columns, and an unstaged modification is a *leading space* (``" M
+    path"``). Stripping the output removed that space from the first line only,
+    which shifted every subsequent index by one and made
+    :func:`_source_is_dirty` read the path as ``"sults/..."`` — so a tree whose
+    only change was a regenerated file under ``results/`` reported dirty, but
+    only when that file happened to sort first. Callers strip what they need.
+    """
     try:
         completed = subprocess.run(
             ["git", *args],
@@ -52,7 +62,7 @@ def _git(repo_root: Path, *args: str) -> str | None:
         return None
     if completed.returncode != 0:
         return None
-    return completed.stdout.strip()
+    return completed.stdout
 
 
 #: Paths whose modification does not make a run's provenance dirty. Exactly one
@@ -71,11 +81,16 @@ def _source_is_dirty(status: str) -> bool:
     ``git status --porcelain`` lines are ``XY <path>``, with renames written
     ``XY <old> -> <new>``; both sides are checked, so moving a source file *into*
     ``results/`` still reads as dirty.
+
+    The path is taken as ``line[2:].lstrip()`` rather than ``line[3:]``: the two
+    agree on well-formed porcelain, and the former also survives a line whose
+    leading status space has been trimmed by something upstream — which is
+    exactly the defect that once made a clean tree report dirty.
     """
     for line in status.splitlines():
         if not line.strip():
             continue
-        paths = line[3:].split(" -> ")
+        paths = line[2:].lstrip().split(" -> ")
         if any(
             not path.strip().strip('"').startswith(PROVENANCE_IGNORED_PREFIXES)
             for path in paths
@@ -97,7 +112,7 @@ def git_revision(repo_root: str | Path) -> tuple[str, bool]:
     if revision is None:
         return UNKNOWN_REV, False
     status = _git(root, "status", "--porcelain")
-    return revision, _source_is_dirty(status or "")
+    return revision.strip(), _source_is_dirty(status or "")
 
 
 @dataclass(frozen=True)
