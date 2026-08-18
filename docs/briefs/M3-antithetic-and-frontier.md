@@ -492,9 +492,13 @@ asserted.
       the plain statement that none of it establishes real-market performance.
 - [x] House notes placed in `docs/house-notes.md`: *Thread count is a reproducibility
       axis* and *Below n ≈ 10, draw every trace*.
-- [x] Clean clone through the documented interface — `make help`, `make test`, `make
-      reference`, every M3 config dry-run, `m3_frontier check`, and the frontier figure
-      redrawn byte-identically from the committed aggregate.
+- [x] Clean clone through the documented interface, run through `make` itself: `make
+      help`, `make test` (857 passed), `make reference`, `make frontier-figure`; plus
+      every M3 config dry-run and `m3_frontier check` from the clone, and byte-identical
+      redraws of all six committed figures. Two gaps this closed rather than confirmed:
+      `make help` did not list the two targets M3 added, and the targets need
+      `PYTHON=.venv/Scripts/python.exe` on this box because a bare `python` is the system
+      install without numpy — now said in the Makefile rather than learned by failing.
 - [x] Artifacts stamped `git_dirty: false` at a committed rev — every point, the
       validation run and the aggregate. Getting there cost two discarded artefacts and
       exposed a real defect: `git_dirty` could fire on a clean tree (fixed, with the

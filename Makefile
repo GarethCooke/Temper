@@ -1,5 +1,9 @@
 # Temper — the red/green gate. `make test` from a clean clone is the milestone bar.
 
+# The venv's interpreter, not the host's: every target here needs numpy, torch and
+# pyyaml, and a bare `python` on a Windows box is usually the system install that
+# has none of them (README: create .venv and install requirements first). Override
+# for a different layout: `make test PYTHON=/path/to/python`.
 PYTHON ?= python
 FRONTIERVIEW ?= ../FrontierView
 GOLDENS := tests/golden/vendor/frontierview_goldens.json
@@ -19,6 +23,8 @@ help:
 	@echo "make sweep         M2's 5-seed sweeps, both estimators - hours, unattended"
 	@echo "make validate      M3 task 1: antithetic pairing at M2's lambda, 10 seeds - a night"
 	@echo "make frontier      M3 tasks 4-5: the nine-lambda sweep, then the frontier figure - a day"
+	@echo "make frontier-check M3's amended update budget, checked at one lambda first - ~2 h"
+	@echo "make frontier-figure redraw the committed frontier from results/m3_frontier.json"
 	@echo "make goldens       re-export the FrontierView fixtures (read-only there)"
 	@echo "                   override the checkout with FRONTIERVIEW=/path/to/FrontierView"
 	@echo "make clean         remove caches and scratch results"

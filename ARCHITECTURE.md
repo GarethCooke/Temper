@@ -204,6 +204,10 @@ trading.
 
 ## 9. Amendment log
 
+Entries here are *structural decisions about Temper*. Portable practice — a rule that
+would apply just as well to Anvil or Crucible — goes in `docs/house-notes.md` instead, and
+is cited from a brief by title the same way.
+
 **Cite entries by title, not by date.** The `Date` column records the *session* date, not a
 commit date, and several entries legitimately share one — M0, M1 and M1a all closed on
 2026-08-04, and five entries carry it. Titles are unique; dates are not, so every pointer

@@ -107,7 +107,10 @@ docs/       milestone briefs (the work orders) + vendored contract snapshots
 ```
 
 Orientation docs at root: `ARCHITECTURE.md` (the constitution — read first),
-`ROADMAP.md` (milestones and status).
+`ROADMAP.md` (milestones and status). Practices that outgrew the milestone that found
+them live in [`docs/house-notes.md`](docs/house-notes.md) — currently *thread count is a
+reproducibility axis* and *below n ≈ 10, draw every trace*, both measured here and both
+applying to any project in the portfolio that reports a trained or sampled number.
 
 ## Build (host)
 
