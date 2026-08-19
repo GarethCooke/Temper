@@ -521,15 +521,151 @@ yaml` retrained through the new code and reproduced its committed grade bitwise*
 
 ## Task 3 — the differential
 
-{DIFFERENTIAL}
+`configs/m4a_differential.yaml`, M1's tiers and CI level with the analytic
+reference swapped from `schedule_moments` to `cost_moments`, four schedules wide
+rather than three — the tangent-derived sinh is a schedule like any other in this
+world, and the certified optimum is a fourth.
+
+`make differential`, the acceptance gate, runs both worlds' deep tiers:
+
+| tier | cells | episodes/cell | steps | wall | worst band use, mean | worst, variance |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| M1, linear | 27 | 200 000 | 70 200 000 | 365.6 s | 55 % | 50 % |
+| M4a, power law | 36 | 200 000 | 93 600 000 | 522.3 s | 72 % | 54 % |
+
+**Green, with the step totals asserted rather than assumed** — 163 800 000 calls
+into the one `ExecutionEnv.step` loop, matching the arithmetic of the two configs
+exactly. That assertion is why the seam injects the impact model instead of
+subclassing the env: two loops would make invariant 6's claim unfalsifiable, and
+this is the number that would have stopped being checkable.
+
+No cell used more than 72 % of its mean band or 54 % of its variance band. The
+fast tier (12 cells, 3 120 000 steps, ~15 s) runs in `make test`.
+
+Two things this module records that the brief did not ask for and a later session
+should not have to rediscover.
+
+**The bands are still exact, and that is the one thing the power law could have
+broken.** Temporary impact is a function of the schedule and carries no shock, so
+realised cost stays affine in the draws, a deterministic schedule's shortfall
+stays exactly Gaussian, and the 4-sigma bounds need no chi-squared quantile and
+no scipy — exactly as in M1.
+
+**Only one of the two moments needed a new reference**, because `V` is
+bit-for-bit identical between the encodings. Asserted on every vendored case
+rather than argued from the formula, and it is why half of M1's work carried over
+untouched.
+
+**And the tiers cannot tell the two encodings apart at most cells.** The obvious
+claim to want — "score a power-law cell against Phase 1's moments and the band
+breaks" — is *false* at most cells, and finding that out is worth more than the
+claim would have been. The separation is `|E_power − E_linear| / sigma_C`: for
+AAPL the two encodings differ by 0.19 bps against a per-episode cost SD of 93
+bps, which is 0.002 of sigma_C against a fast-tier band of 0.0283. Twenty
+thousand episodes cannot distinguish them. At the deep tier the band is 0.0089
+and the JPM cells (0.0132–0.111) and MSFT's high-lambda AC cell (0.0476) come
+clear of it, while every AAPL cell except one stays under. So the tiers are **not
+M4a's gate on the cost assembly** — that job belongs to the exact per-episode
+noise identity, which pins realised cost against an independently assembled
+reference to 1e-12 with no sampling at all. The same division of labour §9
+records for M1a, where the tiers stopped being the cost gate and became a check
+on the *draws*.
 
 ## Task 5 — the training point
 
-{TRAINING}
+`make m4a` — ten seeds, `train` pool, antithetic regime, evaluated on `eval`,
+graded analytically through the world-keyed registry. 7 366 s (2 h 3 min), every
+seed inside its 1 200 s budget, `git_dirty: false`, verdict **PASS**.
+
+| quantity | median | IQR | worst seed |
+| --- | ---: | ---: | ---: |
+| **capture fraction** `c` | **0.9942** | 0.0021 | **0.9905** |
+| excess over `J_pow*`, bps | **+0.00021** | — | +0.00035 |
+| excess over `J_pow*`, relative | +0.0090 % | — | +0.0147 % |
+| gap fraction (M3's unit) | 0.000144 | — | 0.000235 |
+| ‖δ‖₂, shares | 727 | 368 | 1 329 |
+
+Against the pre-stated bars: median `c ≥ 0.95` **met with 0.9942**, per-seed
+`c ≥ 0.90` **met on all ten, worst 0.9905**. The red-flag test — any seed with
+`J_agent < J_pow* − 1e-9·|J_pow*|` — is **green on every seed**; no seed came
+within four orders of the certified optimum from below.
+
+**Both numbers, together, as §9 requires.** The capture fraction is 99.4 %. The
+absolute claim is **0.00021 bps**, out of an available 0.03674 bps, on an
+objective of 2.3832 bps. That is a *small* number and it should read as one: the
+milestone's finding is that the agent recovers almost all of a real but tiny
+mis-specification, not that it found free money.
+
+In trajectory space it is larger and clearer. The median ‖δ‖₂ from the certified
+optimum is **727 shares** against a derived local band of 4 739, while the
+tangent-derived schedule the vendored library would have run sits **16 878
+shares** away — the agent is 23× closer to the optimum than the closed form is.
+
+The four baselines through the same grader, as capture fractions: `optimal`
+**1.0000** (it is the reference), `tangent` **0.0000** (it *is* the closed form's
+answer, and the advantage is defined as its excess), `ac` **−2.5701**, `twap`
+**−39.4573**. The last two are negative because both are worse than the schedule
+the agent had to beat.
+
+The antithetic pairing behaved as task 4 predicted it would: per-update reward
+variance of **2 872.8 bps²** on the sampled half against **2.6e-07 bps²**
+averaged, a ratio of **9.2e-11**, measured inside the run under the agent's own
+actions.
+
+**Per-seed wall clock** 732–748 s, tight enough that the spread is thermal rather
+than algorithmic.
+
+### The run that did not produce this artefact
+
+The first launch trained all ten seeds, graded them to the same numbers above,
+and then wrote **nothing**: `build_document` raised `NameError: red_flags`
+because the edit that made the verdict read a world-dependent field dropped the
+line computing it. Two hours of correct answers discarded by a missing
+assignment.
+
+Recorded rather than quietly re-run, because the *reason* nothing caught it is
+worth inheriting. Every test that reached `build_document` got there by training
+first, so a microsecond of pure data assembly had inherited the cost of the thing
+that produces its input, and was therefore never exercised on its own.
+`tests/test_sweep_document.py` severs that: it grades a nudged copy of each
+world's optimum through the real grader, pairs it with a real `TrainResult`
+(whose `as_dict` never touches the network, so one can be built without
+training), and runs the real `build_document` in both worlds in under a second.
+Verifying the same write path end to end on a fabricated document — which is what
+should have preceded the first launch — also caught the overlay caption running
+off the canvas.
+
+The re-run reproduced every seed exactly, which is the one consolation: the
+pipeline is deterministic, so the cost was time and not evidence.
 
 ## Task 6 — the figure and the ladder
 
-{FIGURE}
+`results/m4a_degradation.png` — excess over the certified power-law optimum
+against λ for TWAP, the vendored AC schedule and the tangent-derived sinh across
+the whole committed grid (oracle only, so the curves are free), with the agent's
+ten seeds drawn individually at the one λ that was trained. The vertical distance
+from the tangent's curve down to the seed markers *is* the capture fraction, and
+the figure carries it as an annotated bracket.
+
+Worth reading off it: **the available advantage peaks at 10^−3, not at the λ the
+rule selects.** It is 1.54 % of the objective at 10^−3.5 and 2.33 % at 10^−3,
+falling away to 0.011 % by 10^−1. M4a trains one point; the shape of that curve
+across the frontier is a sized milestone of its own and is now in the ROADMAP's
+backlog rather than smuggled in as a stretch goal.
+
+`results/m4a_trajectory_overlay.png` — the schedules. The agent sits on the
+certified optimum and the tangent-derived schedule visibly does not: the residual
+panel peaks around 9 500 shares of separation in the first hour, against a
+derived band of 4 739.
+
+Both redraw byte-identically from the committed JSON, and
+`tests/test_m4a_power_law.py` checks that by regenerating the degradation figure
+and comparing bytes.
+
+The README's Phase-2 rung is rewritten to what is established — the certified
+reference, the 1.54 %, the capture fraction with its absolute excess beside it,
+and, explicitly, that the liquidity half is not done and that none of it is a
+statement about real fills.
 
 ## §9 amendments this milestone yielded
 

@@ -96,9 +96,7 @@ def caption(experiment, document: dict, curves: dict) -> str:
         f"median absolute excess of {verdict['median_excess_bps']:+.5f} bps. "
         f"{len(document['seeds'])} seeds, each drawn. Graded analytically — the "
         f"dispersion here is across seeds, not a sampling interval. Curves are "
-        f"clipped at 1e-7: below $\\lambda\\approx10^{{-7}}$ all three schedules "
-        f"and the optimum agree to four decimal places in bps, so the flat left "
-        f"end is the clip, not a floor in the objective."
+        f"clipped at 1e-7, below which all four schedules agree to four decimals."
     )
 
 

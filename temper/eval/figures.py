@@ -647,9 +647,9 @@ def degradation_figure(
     )
     figure.text(
         0.012,
-        0.945,
+        0.948,
         caption,
-        fontsize=8.0,
+        fontsize=7.4,
         color="#333333",
         va="top",
         wrap=True,

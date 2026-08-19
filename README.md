@@ -24,30 +24,55 @@ Temper is the controlled treatment that follows forging.
    client. A demo that the policy speaks a real venue wire; performance claims stay in the
    simulator.
 
-**Status:** M3 done — the risk–cost frontier. The agent tracks the exact discrete optimum
-across nine λ spanning four decades, ten seeds each, every seed drawn:
-`results/m3_frontier.png`. Its median excess over the certified optimum stays between
-**+0.004 % and +0.33 %** everywhere on the grid, the red-flag test (`J_agent ≥ J_optimal`)
-is green on every seed at every λ, and the per-λ tolerance is met at eight of nine — the
-exception being λ = 10^−5, where TWAP is itself only 0.44 % worse than optimal, so ε is 2
-micro-bps and the miss measures the *tolerance's denominator* rather than the agent.
+**Status:** M4a done — the first *earned* advantage, and it is bounded on both sides.
+FrontierView's temporary impact is a 0.6-power law, which Almgren–Chriss has no closed form
+for; the vendored library linearises at the tangent and solves that instead. M4a makes the
+power law the world, and the agent has to find *that* world's optimum while the tangent-derived
+schedule does not: `results/m4a_degradation.png`.
 
-What makes the sweep affordable and the claim cleaner than M2's is the reward regime. M2
-needed a control variate that subtracts the analytic noise form — exact, but it does not
-exist once cost stops being affine in the shocks. M3 replaces it with **antithetic
-pairing**: every episode runs twice, against the shock path and against its exact
-negation, and the rewards are averaged. Because the observation carries no price the agent
-takes identical actions in both halves — asserted bitwise on every step, not assumed — so
-the noise cancels on the average, and the realised per-update reward variance drops by
-**eleven orders of magnitude** under the agent's own actions. It was validated at M2's λ
-against M2's committed answer before being used anywhere: median gap fraction 0.000168
-against a gate of 0.002, and on the seeds the two runs share, the trained policies agree
-*bitwise* — their rewards differ by ~1e−17 bps, below float32 resolution at the agent
-boundary, so the optimiser sees identical numbers.
+The numerator is what the agent beat the closed form by. The denominator is what there was
+to beat — a **certified** power-law optimum rather than a best-so-far, solved by Newton on
+the KKT system and checked five ways (Cholesky PD, relative KKT residual 1.2e-15, 3 600
+perturbations uphill, an independent bisection solver agreeing to 3.1e-15 of the parent
+order, and the same solver at exponent 1 returning the sinh to 3.5e-16). Without the
+denominator, "the agent beats AC" is a number with no scale.
+
+At the rule-selected λ the mis-specification is worth **0.0367 bps** — 1.54 % of the
+objective, 2.50 % of expected cost, **16 878 shares (16.9 % of the parent order)** in
+trajectory space. Ten seeds captured a median **99.4 %** of it (IQR 0.2 %, worst seed
+99.0 %), a median absolute excess over the certified optimum of **+0.00021 bps**, with the
+red-flag test green on every seed. The tolerance is a fraction of that *available
+advantage* and not of the TWAP gap, which is the milestone's methodological finding: 5 % of
+the TWAP gap here is twice the whole effect, so M2's and M3's bar could not have told
+success from complete failure.
+
+Two things the milestone establishes about the machinery, not the agent. Phase 1 reproduces
+**bitwise** through the new env seam — one `step` loop, the impact model injected rather
+than subclassed — so every M2 and M3 number still regenerates from code that exists. And the
+four guarantees the new world inherits were checked *before* training: the exact per-episode
+noise identity, the antithetic pair's exact cancellation, its action identity, and the
+open-loop schedule check are all still green, because the power law replaces a term that
+carries no shock. That check earned its place immediately by catching an antithetic mirror
+that was quietly charging the Phase-1 world.
+
+Earlier: **M3** traced the risk–cost frontier — nine λ across four decades, ten seeds each,
+every seed drawn (`results/m3_frontier.png`), median excess over the certified optimum
+between **+0.004 % and +0.33 %** everywhere, red-flag test green throughout, and the per-λ
+tolerance met at eight of nine (the exception, λ = 10^−5, measures the tolerance's
+denominator rather than the agent). What made the sweep affordable is the reward regime. M2
+needed a control variate that subtracts the analytic noise form — exact, but it needs a
+closed form for the noise. M3 replaced it with **antithetic pairing**: every episode runs
+twice, against the shock path and its exact negation, and the rewards are averaged. Because
+the observation carries no price the agent takes identical actions in both halves —
+asserted bitwise on every step, not assumed — so the noise cancels on the average, and the
+realised per-update reward variance drops by **eleven orders of magnitude** under the
+agent's own actions. It was validated at M2's λ against M2's committed answer before being
+used anywhere: median gap fraction 0.000168 against a gate of 0.002, and on the seeds the
+two runs share, the trained policies agree *bitwise*.
 
 The honesty ladder below says what this does and does not establish.
 
-Earlier: `temper/oracle` lands the Almgren–Chriss closed forms and matches 16
+Before that: `temper/oracle` lands the Almgren–Chriss closed forms and matches 16
 vendored FrontierView cases plus a 17-point frontier to float round-off, ten orders of
 magnitude inside the pre-stated 1e-6 tolerance (M0). `temper/env` lands `ExecutionEnv` and
 proves it by differential: TWAP and both AC schedules run *as policies* through the real
@@ -57,7 +82,7 @@ exact per-episode identity pins the realised noise to the specific draws the env
 the cost assembly holds by construction and the Monte-Carlo tiers certify only that the
 shocks are iid normal. Alongside it: six exact per-episode identities, an exact step
 count, and a variational certificate that the schedule M2 grades against really is the
-minimiser. M4a (the power-law world) is the current milestone. See `ROADMAP.md`.
+minimiser. M4b (stochastic liquidity) is next. See `ROADMAP.md`.
 
 ## What this does and does not establish
 
@@ -75,22 +100,29 @@ is deliberately narrower than it might sound.
   committed beside the pass. The frontier (M3) is nine points of that same world.
 - **Phase 2 — the agent finds the optimum of a world whose closed form is derived at a
   tangent.** Half of it has landed (M4a). FrontierView's temporary impact is a 0.6-power
-  law; the Almgren–Chriss closed form has no solution for that, so the vendored library
-  *linearises* at the tangent to it and solves the linear problem instead. M4a makes the
-  power law the world and grades the agent against that world's own optimum — solved by
-  Newton on the KKT system and **certified** (Cholesky PD, relative KKT residual 1.2e-15,
-  3 600 perturbations uphill, an independent bisection solver agreeing to 3.1e-15 of the
-  parent order), because a reference nobody checked is not a reference. The mis-specification
-  is small and real: at the reference case the tangent-derived schedule costs **1.54 % of
-  expected cost** more than the optimum, which in trajectory space is **16 878 shares —
-  16.9 % of the parent order** — and the advantage the agent captures is measured as a
-  fraction of *that*, never of the TWAP gap, because 5 % of the TWAP gap here is twice the
-  entire effect. {RESULT_SENTENCE} The now-wrong AC schedule and TWAP are on every chart.
-  It says the agent adapts to a model change the formula cannot; it says nothing about real
-  fills, and the effect is 0.037 bps in absolute terms — a small claim that should read as
-  one. **The liquidity half is not done.** M4b makes liquidity a second, independent noise
-  source, which is what actually breaks analytic grading and the antithetic pairing; M4a
-  deliberately left the observation untouched so that a red result could be attributed.
+  law; Almgren–Chriss has no closed form for that, so the vendored library *linearises* at
+  the tangent to it and solves the linear problem instead. M4a makes the power law the
+  world and grades the agent against that world's own optimum — solved by Newton on the KKT
+  system and **certified** (Cholesky PD, relative KKT residual 1.2e-15, 3 600 perturbations
+  uphill, an independent bisection solver agreeing to 3.1e-15 of the parent order), because
+  a reference nobody checked is not a reference.
+  The mis-specification is real and small. At the reference case the tangent-derived
+  schedule costs **1.54 % of the objective** more than the optimum — 2.50 % of expected
+  cost alone, 0.0367 bps either way — which in trajectory space is **16 878 shares, 16.9 %
+  of the parent order**. Ten seeds captured a median **99.4 %** of that (IQR 0.2 %, worst
+  seed 99.0 %): a median excess over the certified optimum of **+0.00021 bps**, and a
+  median ‖δ‖₂ of 727 shares, 23× closer to the optimum than the closed form is. The two
+  numbers travel together everywhere, because the fraction alone would make a very small
+  claim sound like a large one — and because the *denominator* is the thing that had to
+  change: 5 % of this λ's TWAP gap, which is what M2 and M3 graded against, is twice the
+  entire available advantage, so the old bar could not have told success from complete
+  failure.
+  The now-wrong AC schedule and TWAP are on every chart. It says the agent adapts to a
+  model change the formula cannot. It says nothing about real fills, and 0.037 bps is a
+  small absolute claim that should read as one. **The liquidity half is not done.** M4b
+  makes liquidity a second, *independent* noise source, which is what actually breaks
+  analytic grading and the antithetic pairing — M4a deliberately left the observation
+  untouched so that a red result could be attributed to one thing.
 - **Phase 3 — it runs on a wire against synthetic data.** The stretch leg (M6) works a parent
   order on the live Anvil book. That is plumbing evidence — the policy speaks a versioned
   venue protocol end to end — and not execution-quality evidence: the flow it trades
@@ -136,14 +168,18 @@ make reference     # M2's oracle-only table, and the lambda its rule fixes
 make sweep         # M2's 5-seed sweeps, both estimators — hours, unattended
 make validate      # M3 task 1: antithetic pairing at M2's λ, 10 seeds — a night
 make frontier      # M3 tasks 4–5: the nine-λ sweep, then the frontier figure — a day
+make m4a-reference # M4a task 0: the power-law table and its three gates — minutes
+make m4a           # M4a task 5: ten seeds in the power-law world — ~2 h
 ```
 
 `make test` is the per-commit gate and stays evening-sized (~15 s; the brief's ceiling is
 3 min). The rest are milestone acceptance gates, each behind a pytest marker or a driver so
 the per-commit loop never waits on them:
 
-- `make differential` — 27 (case, schedule) cells at 200,000 episodes each, 70.2 M calls
-  into the real `step` loop, counted and asserted; ~5.5 min, from `configs/m1_differential.yaml`.
+- `make differential` — the deep Monte-Carlo tiers of both worlds: M1's 27 (case, schedule)
+  cells at 200,000 episodes each and M4a's 36, 163.8 M calls into the real `step` loop,
+  counted and asserted; from `configs/m1_differential.yaml` and
+  `configs/m4a_differential.yaml`.
 - `make smoke` — the CleanRL adaptation solving `Pendulum-v1` and `CartPole-v1` on three
   seeds each, ~7 min, from `configs/ppo_smoke.yaml`. It stays in the suite permanently
   because it is what separates "PPO is broken" from "the env is hard" for every later
@@ -163,6 +199,16 @@ the per-commit loop never waits on them:
   anything runs). Each λ is an ordinary experiment through `tools/train.py`; the aggregate
   `results/m3_frontier.json` and the frontier figure are views of the nine results files
   and redraw without training (`python tools/m3_frontier.py figure`).
+- `make m4a-reference` — M4a's task 0, oracle only and minutes: the power-law table, M2's
+  selection rule applied to it, and the three gates. Exit status is whether all three are
+  green, so it is a check rather than a report.
+- `make m4a-guarantees` — the four guarantees the power-law world inherits from Phase 1,
+  run *before* training. `make m4a-regression` — one M3 seed retrained through the new env
+  seam and required to reproduce its committed grade **bitwise**, ~12 min.
+- `make m4a` — M4a's acceptance run, from `configs/m4a_power_law.yaml`: ten seeds in the
+  power-law world, everything except the world and the graded encoding identical to M3's
+  point at the same λ. ~2 h, unattended. `make m4a-figure` redraws
+  `results/m4a_degradation.png` from the committed JSON without training.
 
 Everything regenerates from a committed config plus one root seed. Every entry in
 `results/` carries the config's SHA-256 and the git revision that produced it, and the
