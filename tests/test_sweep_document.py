@@ -17,7 +17,9 @@ copy of each world's own optimum through the *real* grader, pairs it with a real
 :class:`~temper.agents.ppo.TrainResult` (whose ``as_dict`` never touches the
 network, so no training is needed to build one), and runs the real
 ``build_document`` over the pair in both encodings — asserting the shape a
-committed result must have.
+committed result must have. The portable form of the rule is
+``docs/house-notes.md``, *The artefact writer is tested on fabricated data, not on
+the run*.
 
 What it deliberately does **not** do is check the numbers are right — that is
 ``tests/test_m2_rediscovery.py``, ``tests/test_m3_validation.py`` and

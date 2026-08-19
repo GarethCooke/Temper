@@ -66,3 +66,40 @@ five-run timing comparison, or a bootstrap band over a handful of captures: the 
 statistic is a property of the middle of the sample, and at small *n* the middle is most
 of what there is. Drawing the samples costs one line and makes the spread the reader's to
 judge rather than the statistic's to hide.
+
+
+---
+
+## The artefact writer is tested on fabricated data, not on the run
+
+**Rule.** The code that turns a long run's results into its committed artefact — the JSON
+assembly, the verdict, the caption, the figure — is exercised on *fabricated* inputs, in a
+test that takes milliseconds, separately from the thing that produces those inputs. If the
+only way to reach the writer is to run the job first, then the writer is untested at the
+moment it matters, and every bug in it costs one full run to find and one more to fix.
+
+**Measured (Temper M4a, 2026-08-19).** The verdict block was edited to read its pass/fail
+bar off a world-dependent field. The edit dropped one line — the one computing `red_flags`
+— and the suite stayed green, because every test that reached `build_document` got there
+by *training first* and so none of them was ever run. Ten seeds trained for two hours, were
+graded correctly, and the driver then raised `NameError: red_flags` while assembling the
+file. Nothing was written. Ten correct answers discarded by a missing assignment, and the
+only reason it cost two hours rather than two evenings is that the pipeline is deterministic
+and the re-run reproduced every seed exactly.
+
+**How it is applied here.** `tests/test_sweep_document.py` grades a nudged copy of each
+world's own optimum through the real grader, pairs it with a real `TrainResult` — whose
+`as_dict` never touches the network, so one can be constructed without training — and runs
+the real `build_document` over the pair in both cost encodings. Nine tests, under a second,
+asserting that every key a reader, a test and a figure depend on is present. The same pass
+verifies the whole write path end to end, which is what caught a figure caption running off
+the canvas before it reached a committed artefact.
+
+**Why it generalises.** Any project with an expensive producer and a cheap reporter has this
+shape: a benchmark harness writing a results file, a capture tool rendering a report, a
+deploy script emitting a summary. The reporter is usually the part edited most often and
+tested least, because reaching it honestly means paying for the producer. Fabricating its
+input is not a compromise — the reporter's contract is over data, not over how the data was
+obtained — and it converts "found after the run" into "found before it". A useful smell:
+if a function's only test is marked slow, ask whether the function is actually slow or
+merely *downstream* of something that is.

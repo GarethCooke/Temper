@@ -638,6 +638,10 @@ off the canvas.
 The re-run reproduced every seed exactly, which is the one consolation: the
 pipeline is deterministic, so the cost was time and not evidence.
 
+The portable form is `docs/house-notes.md`, *The artefact writer is tested on
+fabricated data, not on the run* — a third house note, and the milestone's fourth
+finding.
+
 ## Task 6 — the figure and the ladder
 
 `results/m4a_degradation.png` — excess over the certified power-law optimum
@@ -676,3 +680,6 @@ All three the brief predicted, and no others:
    antithetic pairing survive it exactly.*
 3. *The tolerance's denominator is the available advantage, not the TWAP gap,
    wherever the closed form is the thing being beaten.*
+
+And one house note, which is portable practice rather than a decision about
+Temper: *The artefact writer is tested on fabricated data, not on the run.*
