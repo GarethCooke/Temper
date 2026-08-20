@@ -37,11 +37,22 @@ there is no bench track. M0's golden export was the one owner-input step; re-exp
   AC", it costs one extra config field, and it is the number M4's harder environments will
   want. Deliberately *not* done in M2: the brief's task 3 sanctions the variate or nothing,
   and a `c`-sweep is a study rather than a fallback.
-- **Revisit the oracle↔FrontierView code-sharing decision after M2, with M2's evidence in
-  hand** (owner unconvinced, 2026-08-04). The 2026-08-04 audit sized the parallel formula
-  code at ~55 executable lines across ~12 sites; the counter-case is the κ finding and
-  vendor-doc quirk #1, both products of the second derivation. Constitution §7
-  ("separate repo", "zero upstream changes") stands unless amended via §9.
+- **A `Market`-style derived-quantities object — Temper-side: nothing to do** (raised by the
+  2026-08-04 audit, re-scoped and checked 2026-08-20). Ordinary internal tidiness, true
+  whether or not the oracle shares code with anything — which is why it is no longer filed
+  under the code-sharing question, now closed in `ARCHITECTURE.md` §9 (*The oracle stays
+  independent, and the question is closed rather than carried*). Recorded rather than dropped
+  because a re-scope nobody writes down gets re-raised: `temper/oracle/model.py`'s `Market`
+  has owned `dt`, `v_hourly`, `sigma_bin` and `times` since M0 — "so that no caller
+  re-derives them and drifts" — and nothing in `temper/` re-derives any of them, the only
+  bare `6.5` in the package being the `TRADING_HOURS_PER_DAY` definition itself. The
+  three-plus unnamed-literal call sites the audit counted are *FrontierView's*, which is why
+  the cross-referenced item below has no Temper-side counterpart. The one place it bites
+  Temper is `tools/export_frontierview_goldens.py`, which re-derives `v_hourly`, `dt` and
+  `sigma_bin` from FrontierView's constants — forced, not debt: the script imports
+  FrontierView's modules and the standard library only (§7), so it cannot reach `Market` and
+  must not. The `sigma_bin` re-derivations in `tests/` are the same thing deliberately: an
+  independent second derivation is what makes a differential test a test.
 - Transient impact with exponential decay (Obizhaeva–Wang-style) as a further Phase-2
   break beyond M4 — demoted from M4 when the calibrated power law was promoted to lead.
 - **The power-law frontier** (raised by M4a, 2026-08-19). M3 swept nine λ in the linearised
@@ -67,8 +78,10 @@ there is no bench track. M0's golden export was the one owner-input step; re-exp
 - FrontierView-side (lives on FrontierView's backlog, cross-referenced only): the
   discrete-κ convention question surfaced by M0 — the goldens pin `f87795f6`, so if
   upstream ever adopts `cosh(κτ) = 1 + μ/2`, that is a golden re-vendor with fresh
-  provenance, not a Temper break; and a `Market`-style derived-quantities object (2026-08-04 audit: `v_hourly`,
-  `dt`, `sigma_bin` re-derived at three-plus call sites, with unnamed literals).
+  provenance, not a Temper break; and a `Market`-style derived-quantities object **in
+  FrontierView's compute core** (2026-08-04 audit: `v_hourly`, `dt`, `sigma_bin` re-derived
+  at three-plus call sites, with unnamed literals) — Temper's own `Market` already does this,
+  so the item above closes the Temper side rather than duplicating this one.
 - Anvil-side (lives on Anvil's backlog, cross-referenced only): feeder realism — Hawkes
   arrivals / mirror mode — which would make the M6 book livelier; the sequenced L2 feed.
 - DepthCharge cameo hardening: a dedicated capture of the agent working an order, vendored
