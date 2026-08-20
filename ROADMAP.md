@@ -24,7 +24,7 @@ there is no bench track. M0's golden export was the one owner-input step; re-exp
 | M4b | Broken assumptions — stochastic liquidity | Liquidity becomes a second, *independent* noise source, which enriches the observation and therefore breaks analytic grading, the antithetic pair's action-identity check and the "no Monte-Carlo interval" property all at once. Split from M4a for that reason: bundled, a red result could not be attributed to a break. Sampling intervals arrive here. | M4a | ☐ |
 | M5 | Alpha-aware execution        | Weak short-horizon signal in the observation; agent learns to tilt the schedule; advantage holds on held-out seeds; overfit check (signal-shuffled control) green. | M4b | ☐ |
 | M6 | Anvil live leg *(stretch)*   | `client/` works a parent order on the live Anvil book via `PROTOCOL.md` (vendored snapshot) — third independent client; arrival-slippage measured and reported as a demo, not an evaluation (constitution §7); DepthCharge panel cameo optional but delightful. | M2 + Anvil deployed | ☐ |
-| MP | Portfolio portal             | **Executes in the `garethcooke-portfolio` repo.** Stage 1 (after M3): `/projects/temper` live with the frontier hero figure, In Progress badge, tags, repo/architecture links. Stage 2 (after M6): live-leg writeup. | Stage 1: M3 · Stage 2: M6 | ☐ |
+| MP | Portfolio portal             | **Executes in the `garethcooke-portfolio` repo.** Stage 1 (after M3): `/projects/temper` live with the hero figure, In Progress badge, tags, repo/architecture links. Stage 2 (after M6): live-leg writeup. | Stage 1: M3 · Stage 2: M6 | ☑ **Stage 1 done** 2026-08-20 — brief: `garethcooke-portfolio/docs/briefs/MP-temper-portal.md` (it executes there, so it lives there). `/projects/temper` live. The hero is `results/m4a_degradation.png`, not the frontier: the frontier shows the agent *agreeing* with a closed form, while the degradation figure shows the closed form being wrong across four decades of λ and the agent finding the truth anyway — the more interesting claim to a reader who has fitted an Almgren–Chriss model. `results/m3_frontier.png` carries second, as the Phase-1 evidence the advantage claim rests on. The entry sits after DepthCharge so the trading cluster reads as one body of work, and `GalleryVariant` gained `"Figures"` because calling a plotted frontier a screenshot on a page whose argument is careful labelling would not do. The copy states each milestone's claim with its denominator and says plainly that there are no real fills or historical data anywhere in the project. Stage 2 (live-leg write-up) still gated on M6. |
 
 ## Backlog (not scheduled)
 
@@ -55,6 +55,15 @@ there is no bench track. M0's golden export was the one owner-input step; re-exp
   under fire; ties the ML work back to the C++ story).
 - Real-data calibration (LOBSTER or crypto L2) replacing the synthetic parameter set.
 - Limit-order placement / queue-position action space — the v2-sized extension.
+- **The figures are light-ground and the portal is dark** (raised by MP Stage 1, 2026-08-20). Both
+  committed PNGs are RGBA with a fully opaque white background; against the portal's
+  `--bg-card` (`#0c1220`) that is roughly an 18:1 luminance step, so each reads as a lit
+  panel rather than a figure on the page. Legible, and the lightbox at full size is good,
+  but the fix belongs in `temper/eval/figures.py` as a transparent or theme-neutral
+  ground, not as CSS on the site. The cost is why it is not a tweak: restyling changes
+  the bytes of every committed figure, which re-baselines the byte-identical redraw
+  assertions M2, M3 and M4a all carry. A deliberate task with the re-baseline recorded,
+  not something done in passing.
 - FrontierView-side (lives on FrontierView's backlog, cross-referenced only): the
   discrete-κ convention question surfaced by M0 — the goldens pin `f87795f6`, so if
   upstream ever adopts `cosh(κτ) = 1 + μ/2`, that is a golden re-vendor with fresh
