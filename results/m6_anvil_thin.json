@@ -1,0 +1,1784 @@
+{
+  "milestone": "M6",
+  "run": "thin",
+  "label": "thin ladder - prediction machinery, partial fills",
+  "claim": "A trained execution policy worked one parent order on a live Anvil book over the versioned wire, as PROTOCOL.md's third independent client, with zero changes to Anvil. This is plumbing evidence, not execution-quality evidence: the flow is synthetic, the sample is one order, and there is no baseline it can fairly be compared against (ARCHITECTURE.md \u00a77). No epsilon, no capture fraction and no oracle comparison appears here \u2014 none of them is defined on this venue.",
+  "provenance": {
+    "config": "m6_anvil.yaml",
+    "config_sha256": "2b1bd379a2055c946bac1606cb654219b0bc3e9e5fed04ff4bce1bc3c8ee4807",
+    "git_rev": "a217163f9d1bac43a427b01e4cbc5edf6b6611e8",
+    "git_dirty": false,
+    "python": "3.12.2"
+  },
+  "policy": {
+    "checkpoint": "results/m4a_power_law_policy.npz",
+    "name": "m4a-seed9",
+    "n_bins": 13,
+    "selection": {
+      "rule": "the sweep's seeds sorted ascending by graded objective (a cost, so best-first), index n // 2 \u2014 the upper of the two central ranks, which at an even seed count is the worse of the two. A tie-break that can only cost, so the exported policy is at or below the sweep's median and never above it.",
+      "ordinal": 9,
+      "n_seeds": 10,
+      "rank_from_best": 6,
+      "sweep_median_objective_bps": 2.38342975003669
+    },
+    "grade": {
+      "name": "seed9",
+      "encoding": "power_law",
+      "expected_bps": 1.4679385347113973,
+      "variance_bps2": 2895.071246682515,
+      "objective_bps": 2.383440447509391,
+      "excess_bps": 0.00022507451124953448,
+      "relative_excess": 9.444153214167354e-05,
+      "gap_fraction": 0.00015141068275771862,
+      "advantage_fraction": 0.006125667695377409,
+      "capture_fraction": 0.9938743323046226,
+      "deviation_shares": 702.4713045130367,
+      "red_flag": false,
+      "trajectory": [
+        100000.0,
+        57948.1840133667,
+        35762.9968582323,
+        23329.66409716237,
+        15786.620425786188,
+        10920.586946939104,
+        7649.614819730991,
+        5392.501621827512,
+        3810.0406939471445,
+        2690.729667775362,
+        1895.871862410368,
+        1331.0912556322337,
+        930.4965380207984,
+        0.0
+      ]
+    },
+    "source_result": {
+      "path": "results/m4a_power_law.json",
+      "sha256": "897e5cddecfc6f98b46869be667f6318b5856a926a91e2e50c8cf1eb9fddc3b7",
+      "git_rev": "9de3d7b782bbe60a6b2ee6a126343d80ab38ca6f"
+    }
+  },
+  "venue": {
+    "host": "127.0.0.1",
+    "port": 18080,
+    "scheme": "http",
+    "ticker": 101,
+    "wire_version": 1
+  },
+  "order": {
+    "side": "S",
+    "parent": 1000
+  },
+  "ladder": {
+    "name": "thin",
+    "built_by_client": true,
+    "centre_ticks": 100000,
+    "half_spread_ticks": 100,
+    "spacing_ticks": 100,
+    "quantities": [
+      80,
+      70,
+      60,
+      50,
+      40,
+      30,
+      25,
+      20
+    ],
+    "depth_per_side": 375
+  },
+  "grid": {
+    "n_bins": 13,
+    "bin_seconds": 8.0,
+    "settle_seconds": 0.75,
+    "note": "13 bins, as the policy was trained on \u2014 the bin *count* is part of the observation's clock and is not a free choice. The wall-clock length is: the 6.5-hour grid compresses to minutes because no market parameter enters at inference."
+  },
+  "predicted": {
+    "parent": 1000,
+    "side": "S",
+    "arrival_mid_ticks": 100000.0,
+    "filled": 1000,
+    "complete": true,
+    "vwap_ticks": 99771.5,
+    "bins": [
+      {
+        "bin": 0,
+        "time_remaining": 1.0,
+        "inventory_before": 1000,
+        "fraction": 0.4205181300640106,
+        "requested": 421,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 80
+          },
+          {
+            "price_ticks": 99800,
+            "qty": 70
+          },
+          {
+            "price_ticks": 99700,
+            "qty": 60
+          },
+          {
+            "price_ticks": 99600,
+            "qty": 50
+          },
+          {
+            "price_ticks": 99500,
+            "qty": 40
+          },
+          {
+            "price_ticks": 99400,
+            "qty": 30
+          },
+          {
+            "price_ticks": 99300,
+            "qty": 25
+          },
+          {
+            "price_ticks": 99200,
+            "qty": 20
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 80
+          },
+          {
+            "price_ticks": 99800,
+            "qty": 70
+          },
+          {
+            "price_ticks": 99700,
+            "qty": 60
+          },
+          {
+            "price_ticks": 99600,
+            "qty": 50
+          },
+          {
+            "price_ticks": 99500,
+            "qty": 40
+          },
+          {
+            "price_ticks": 99400,
+            "qty": 30
+          },
+          {
+            "price_ticks": 99300,
+            "qty": 25
+          },
+          {
+            "price_ticks": 99200,
+            "qty": 20
+          }
+        ],
+        "trade_frames": 8,
+        "filled": 375,
+        "unfilled": 46,
+        "inventory_after": 625,
+        "notional_tick_shares": 37368500
+      },
+      {
+        "bin": 1,
+        "time_remaining": 0.9230769230769231,
+        "inventory_before": 625,
+        "fraction": 0.388978511095047,
+        "requested": 243,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 80
+          },
+          {
+            "price_ticks": 99800,
+            "qty": 70
+          },
+          {
+            "price_ticks": 99700,
+            "qty": 60
+          },
+          {
+            "price_ticks": 99600,
+            "qty": 33
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 80
+          },
+          {
+            "price_ticks": 99800,
+            "qty": 70
+          },
+          {
+            "price_ticks": 99700,
+            "qty": 60
+          },
+          {
+            "price_ticks": 99600,
+            "qty": 33
+          }
+        ],
+        "trade_frames": 4,
+        "filled": 243,
+        "unfilled": 0,
+        "inventory_after": 382,
+        "notional_tick_shares": 24246800
+      },
+      {
+        "bin": 2,
+        "time_remaining": 0.8461538461538461,
+        "inventory_before": 382,
+        "fraction": 0.35267940163612366,
+        "requested": 135,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 80
+          },
+          {
+            "price_ticks": 99800,
+            "qty": 55
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 80
+          },
+          {
+            "price_ticks": 99800,
+            "qty": 55
+          }
+        ],
+        "trade_frames": 2,
+        "filled": 135,
+        "unfilled": 0,
+        "inventory_after": 247,
+        "notional_tick_shares": 13481000
+      },
+      {
+        "bin": 3,
+        "time_remaining": 0.7692307692307692,
+        "inventory_before": 247,
+        "fraction": 0.3267589807510376,
+        "requested": 81,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 80
+          },
+          {
+            "price_ticks": 99800,
+            "qty": 1
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 80
+          },
+          {
+            "price_ticks": 99800,
+            "qty": 1
+          }
+        ],
+        "trade_frames": 2,
+        "filled": 81,
+        "unfilled": 0,
+        "inventory_after": 166,
+        "notional_tick_shares": 8091800
+      },
+      {
+        "bin": 4,
+        "time_remaining": 0.6923076923076923,
+        "inventory_before": 166,
+        "fraction": 0.31048932671546936,
+        "requested": 52,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 52
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 52
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 52,
+        "unfilled": 0,
+        "inventory_after": 114,
+        "notional_tick_shares": 5194800
+      },
+      {
+        "bin": 5,
+        "time_remaining": 0.6153846153846154,
+        "inventory_before": 114,
+        "fraction": 0.30092427134513855,
+        "requested": 34,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 34
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 34
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 34,
+        "unfilled": 0,
+        "inventory_after": 80,
+        "notional_tick_shares": 3396600
+      },
+      {
+        "bin": 6,
+        "time_remaining": 0.5384615384615384,
+        "inventory_before": 80,
+        "fraction": 0.29611682891845703,
+        "requested": 24,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 24
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 24
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 24,
+        "unfilled": 0,
+        "inventory_after": 56,
+        "notional_tick_shares": 2397600
+      },
+      {
+        "bin": 7,
+        "time_remaining": 0.46153846153846156,
+        "inventory_before": 56,
+        "fraction": 0.2940903306007385,
+        "requested": 16,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 16
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 16
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 16,
+        "unfilled": 0,
+        "inventory_after": 40,
+        "notional_tick_shares": 1598400
+      },
+      {
+        "bin": 8,
+        "time_remaining": 0.3846153846153846,
+        "inventory_before": 40,
+        "fraction": 0.294363796710968,
+        "requested": 12,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 12
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 12
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 12,
+        "unfilled": 0,
+        "inventory_after": 28,
+        "notional_tick_shares": 1198800
+      },
+      {
+        "bin": 9,
+        "time_remaining": 0.3076923076923077,
+        "inventory_before": 28,
+        "fraction": 0.29574254155158997,
+        "requested": 8,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 8
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 8
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 8,
+        "unfilled": 0,
+        "inventory_after": 20,
+        "notional_tick_shares": 799200
+      },
+      {
+        "bin": 10,
+        "time_remaining": 0.23076923076923073,
+        "inventory_before": 20,
+        "fraction": 0.2982195317745209,
+        "requested": 6,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 6
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 6
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 6,
+        "unfilled": 0,
+        "inventory_after": 14,
+        "notional_tick_shares": 599400
+      },
+      {
+        "bin": 11,
+        "time_remaining": 0.15384615384615385,
+        "inventory_before": 14,
+        "fraction": 0.30116188526153564,
+        "requested": 4,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 4
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 4
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 4,
+        "unfilled": 0,
+        "inventory_after": 10,
+        "notional_tick_shares": 399600
+      },
+      {
+        "bin": 12,
+        "time_remaining": 0.07692307692307687,
+        "inventory_before": 10,
+        "fraction": 0.3045482635498047,
+        "requested": 10,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 10
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 10
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 10,
+        "unfilled": 0,
+        "inventory_after": 0,
+        "notional_tick_shares": 999000
+      }
+    ]
+  },
+  "realised": {
+    "parent": 1000,
+    "side": "S",
+    "arrival_mid_ticks": 100000.0,
+    "filled": 1000,
+    "complete": true,
+    "vwap_ticks": 99771.5,
+    "bins": [
+      {
+        "bin": 0,
+        "time_remaining": 1.0,
+        "inventory_before": 1000,
+        "fraction": 0.4205181300640106,
+        "requested": 421,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 80
+          },
+          {
+            "price_ticks": 99800,
+            "qty": 70
+          },
+          {
+            "price_ticks": 99700,
+            "qty": 60
+          },
+          {
+            "price_ticks": 99600,
+            "qty": 50
+          },
+          {
+            "price_ticks": 99500,
+            "qty": 40
+          },
+          {
+            "price_ticks": 99400,
+            "qty": 30
+          },
+          {
+            "price_ticks": 99300,
+            "qty": 25
+          },
+          {
+            "price_ticks": 99200,
+            "qty": 20
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 80
+          },
+          {
+            "price_ticks": 99800,
+            "qty": 70
+          },
+          {
+            "price_ticks": 99700,
+            "qty": 60
+          },
+          {
+            "price_ticks": 99600,
+            "qty": 50
+          },
+          {
+            "price_ticks": 99500,
+            "qty": 40
+          },
+          {
+            "price_ticks": 99400,
+            "qty": 30
+          },
+          {
+            "price_ticks": 99300,
+            "qty": 25
+          },
+          {
+            "price_ticks": 99200,
+            "qty": 20
+          }
+        ],
+        "trade_frames": 8,
+        "filled": 375,
+        "unfilled": 46,
+        "inventory_after": 625,
+        "notional_tick_shares": 37368500,
+        "order_id": "oh"
+      },
+      {
+        "bin": 1,
+        "time_remaining": 0.9230769230769231,
+        "inventory_before": 625,
+        "fraction": 0.388978511095047,
+        "requested": 243,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 80
+          },
+          {
+            "price_ticks": 99800,
+            "qty": 70
+          },
+          {
+            "price_ticks": 99700,
+            "qty": 60
+          },
+          {
+            "price_ticks": 99600,
+            "qty": 33
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 80
+          },
+          {
+            "price_ticks": 99800,
+            "qty": 70
+          },
+          {
+            "price_ticks": 99700,
+            "qty": 60
+          },
+          {
+            "price_ticks": 99600,
+            "qty": 33
+          }
+        ],
+        "trade_frames": 4,
+        "filled": 243,
+        "unfilled": 0,
+        "inventory_after": 382,
+        "notional_tick_shares": 24246800,
+        "order_id": "oq"
+      },
+      {
+        "bin": 2,
+        "time_remaining": 0.8461538461538461,
+        "inventory_before": 382,
+        "fraction": 0.35267940163612366,
+        "requested": 135,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 80
+          },
+          {
+            "price_ticks": 99800,
+            "qty": 55
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 80
+          },
+          {
+            "price_ticks": 99800,
+            "qty": 55
+          }
+        ],
+        "trade_frames": 2,
+        "filled": 135,
+        "unfilled": 0,
+        "inventory_after": 247,
+        "notional_tick_shares": 13481000,
+        "order_id": "ov"
+      },
+      {
+        "bin": 3,
+        "time_remaining": 0.7692307692307692,
+        "inventory_before": 247,
+        "fraction": 0.3267589807510376,
+        "requested": 81,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 80
+          },
+          {
+            "price_ticks": 99800,
+            "qty": 1
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 80
+          },
+          {
+            "price_ticks": 99800,
+            "qty": 1
+          }
+        ],
+        "trade_frames": 2,
+        "filled": 81,
+        "unfilled": 0,
+        "inventory_after": 166,
+        "notional_tick_shares": 8091800,
+        "order_id": "oy"
+      },
+      {
+        "bin": 4,
+        "time_remaining": 0.6923076923076923,
+        "inventory_before": 166,
+        "fraction": 0.31048932671546936,
+        "requested": 52,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 52
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 52
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 52,
+        "unfilled": 0,
+        "inventory_after": 114,
+        "notional_tick_shares": 5194800,
+        "order_id": "o11"
+      },
+      {
+        "bin": 5,
+        "time_remaining": 0.6153846153846154,
+        "inventory_before": 114,
+        "fraction": 0.30092427134513855,
+        "requested": 34,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 28
+          },
+          {
+            "price_ticks": 99900,
+            "qty": 6
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 34
+          }
+        ],
+        "trade_frames": 2,
+        "filled": 34,
+        "unfilled": 0,
+        "inventory_after": 80,
+        "notional_tick_shares": 3396600,
+        "order_id": "o13"
+      },
+      {
+        "bin": 6,
+        "time_remaining": 0.5384615384615384,
+        "inventory_before": 80,
+        "fraction": 0.29611682891845703,
+        "requested": 24,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 24
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 24
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 24,
+        "unfilled": 0,
+        "inventory_after": 56,
+        "notional_tick_shares": 2397600,
+        "order_id": "o15"
+      },
+      {
+        "bin": 7,
+        "time_remaining": 0.46153846153846156,
+        "inventory_before": 56,
+        "fraction": 0.2940903306007385,
+        "requested": 16,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 16
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 16
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 16,
+        "unfilled": 0,
+        "inventory_after": 40,
+        "notional_tick_shares": 1598400,
+        "order_id": "o17"
+      },
+      {
+        "bin": 8,
+        "time_remaining": 0.3846153846153846,
+        "inventory_before": 40,
+        "fraction": 0.294363796710968,
+        "requested": 12,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 6
+          },
+          {
+            "price_ticks": 99900,
+            "qty": 6
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 12
+          }
+        ],
+        "trade_frames": 2,
+        "filled": 12,
+        "unfilled": 0,
+        "inventory_after": 28,
+        "notional_tick_shares": 1198800,
+        "order_id": "o19"
+      },
+      {
+        "bin": 9,
+        "time_remaining": 0.3076923076923077,
+        "inventory_before": 28,
+        "fraction": 0.29574254155158997,
+        "requested": 8,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 8
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 8
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 8,
+        "unfilled": 0,
+        "inventory_after": 20,
+        "notional_tick_shares": 799200,
+        "order_id": "o1b"
+      },
+      {
+        "bin": 10,
+        "time_remaining": 0.23076923076923073,
+        "inventory_before": 20,
+        "fraction": 0.2982195317745209,
+        "requested": 6,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 6
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 6
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 6,
+        "unfilled": 0,
+        "inventory_after": 14,
+        "notional_tick_shares": 599400,
+        "order_id": "o1d"
+      },
+      {
+        "bin": 11,
+        "time_remaining": 0.15384615384615385,
+        "inventory_before": 14,
+        "fraction": 0.30116188526153564,
+        "requested": 4,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 4
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 4
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 4,
+        "unfilled": 0,
+        "inventory_after": 10,
+        "notional_tick_shares": 399600,
+        "order_id": "o1f"
+      },
+      {
+        "bin": 12,
+        "time_remaining": 0.07692307692307687,
+        "inventory_before": 10,
+        "fraction": 0.3045482635498047,
+        "requested": 10,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 10
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 10
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 10,
+        "unfilled": 0,
+        "inventory_after": 0,
+        "notional_tick_shares": 999000,
+        "order_id": "o1h"
+      }
+    ]
+  },
+  "reconciliation": {
+    "attributed": 1000,
+    "parent": 1000,
+    "third_party_fills": 0,
+    "fills_against_our_ladder": 0,
+    "void": false,
+    "reasons": []
+  },
+  "comparison": {
+    "matched": true,
+    "bins": [
+      {
+        "bin": 0,
+        "requested": [
+          421,
+          421
+        ],
+        "filled": [
+          375,
+          375
+        ],
+        "fills_match": true,
+        "levels": [
+          [
+            [
+              99900,
+              80
+            ],
+            [
+              99800,
+              70
+            ],
+            [
+              99700,
+              60
+            ],
+            [
+              99600,
+              50
+            ],
+            [
+              99500,
+              40
+            ],
+            [
+              99400,
+              30
+            ],
+            [
+              99300,
+              25
+            ],
+            [
+              99200,
+              20
+            ]
+          ],
+          [
+            [
+              99900,
+              80
+            ],
+            [
+              99800,
+              70
+            ],
+            [
+              99700,
+              60
+            ],
+            [
+              99600,
+              50
+            ],
+            [
+              99500,
+              40
+            ],
+            [
+              99400,
+              30
+            ],
+            [
+              99300,
+              25
+            ],
+            [
+              99200,
+              20
+            ]
+          ]
+        ],
+        "trade_frames": [
+          8,
+          8
+        ],
+        "notional_tick_shares": [
+          37368500,
+          37368500
+        ]
+      },
+      {
+        "bin": 1,
+        "requested": [
+          243,
+          243
+        ],
+        "filled": [
+          243,
+          243
+        ],
+        "fills_match": true,
+        "levels": [
+          [
+            [
+              99900,
+              80
+            ],
+            [
+              99800,
+              70
+            ],
+            [
+              99700,
+              60
+            ],
+            [
+              99600,
+              33
+            ]
+          ],
+          [
+            [
+              99900,
+              80
+            ],
+            [
+              99800,
+              70
+            ],
+            [
+              99700,
+              60
+            ],
+            [
+              99600,
+              33
+            ]
+          ]
+        ],
+        "trade_frames": [
+          4,
+          4
+        ],
+        "notional_tick_shares": [
+          24246800,
+          24246800
+        ]
+      },
+      {
+        "bin": 2,
+        "requested": [
+          135,
+          135
+        ],
+        "filled": [
+          135,
+          135
+        ],
+        "fills_match": true,
+        "levels": [
+          [
+            [
+              99900,
+              80
+            ],
+            [
+              99800,
+              55
+            ]
+          ],
+          [
+            [
+              99900,
+              80
+            ],
+            [
+              99800,
+              55
+            ]
+          ]
+        ],
+        "trade_frames": [
+          2,
+          2
+        ],
+        "notional_tick_shares": [
+          13481000,
+          13481000
+        ]
+      },
+      {
+        "bin": 3,
+        "requested": [
+          81,
+          81
+        ],
+        "filled": [
+          81,
+          81
+        ],
+        "fills_match": true,
+        "levels": [
+          [
+            [
+              99900,
+              80
+            ],
+            [
+              99800,
+              1
+            ]
+          ],
+          [
+            [
+              99900,
+              80
+            ],
+            [
+              99800,
+              1
+            ]
+          ]
+        ],
+        "trade_frames": [
+          2,
+          2
+        ],
+        "notional_tick_shares": [
+          8091800,
+          8091800
+        ]
+      },
+      {
+        "bin": 4,
+        "requested": [
+          52,
+          52
+        ],
+        "filled": [
+          52,
+          52
+        ],
+        "fills_match": true,
+        "levels": [
+          [
+            [
+              99900,
+              52
+            ]
+          ],
+          [
+            [
+              99900,
+              52
+            ]
+          ]
+        ],
+        "trade_frames": [
+          1,
+          1
+        ],
+        "notional_tick_shares": [
+          5194800,
+          5194800
+        ]
+      },
+      {
+        "bin": 5,
+        "requested": [
+          34,
+          34
+        ],
+        "filled": [
+          34,
+          34
+        ],
+        "fills_match": true,
+        "levels": [
+          [
+            [
+              99900,
+              34
+            ]
+          ],
+          [
+            [
+              99900,
+              34
+            ]
+          ]
+        ],
+        "trade_frames": [
+          1,
+          2
+        ],
+        "notional_tick_shares": [
+          3396600,
+          3396600
+        ]
+      },
+      {
+        "bin": 6,
+        "requested": [
+          24,
+          24
+        ],
+        "filled": [
+          24,
+          24
+        ],
+        "fills_match": true,
+        "levels": [
+          [
+            [
+              99900,
+              24
+            ]
+          ],
+          [
+            [
+              99900,
+              24
+            ]
+          ]
+        ],
+        "trade_frames": [
+          1,
+          1
+        ],
+        "notional_tick_shares": [
+          2397600,
+          2397600
+        ]
+      },
+      {
+        "bin": 7,
+        "requested": [
+          16,
+          16
+        ],
+        "filled": [
+          16,
+          16
+        ],
+        "fills_match": true,
+        "levels": [
+          [
+            [
+              99900,
+              16
+            ]
+          ],
+          [
+            [
+              99900,
+              16
+            ]
+          ]
+        ],
+        "trade_frames": [
+          1,
+          1
+        ],
+        "notional_tick_shares": [
+          1598400,
+          1598400
+        ]
+      },
+      {
+        "bin": 8,
+        "requested": [
+          12,
+          12
+        ],
+        "filled": [
+          12,
+          12
+        ],
+        "fills_match": true,
+        "levels": [
+          [
+            [
+              99900,
+              12
+            ]
+          ],
+          [
+            [
+              99900,
+              12
+            ]
+          ]
+        ],
+        "trade_frames": [
+          1,
+          2
+        ],
+        "notional_tick_shares": [
+          1198800,
+          1198800
+        ]
+      },
+      {
+        "bin": 9,
+        "requested": [
+          8,
+          8
+        ],
+        "filled": [
+          8,
+          8
+        ],
+        "fills_match": true,
+        "levels": [
+          [
+            [
+              99900,
+              8
+            ]
+          ],
+          [
+            [
+              99900,
+              8
+            ]
+          ]
+        ],
+        "trade_frames": [
+          1,
+          1
+        ],
+        "notional_tick_shares": [
+          799200,
+          799200
+        ]
+      },
+      {
+        "bin": 10,
+        "requested": [
+          6,
+          6
+        ],
+        "filled": [
+          6,
+          6
+        ],
+        "fills_match": true,
+        "levels": [
+          [
+            [
+              99900,
+              6
+            ]
+          ],
+          [
+            [
+              99900,
+              6
+            ]
+          ]
+        ],
+        "trade_frames": [
+          1,
+          1
+        ],
+        "notional_tick_shares": [
+          599400,
+          599400
+        ]
+      },
+      {
+        "bin": 11,
+        "requested": [
+          4,
+          4
+        ],
+        "filled": [
+          4,
+          4
+        ],
+        "fills_match": true,
+        "levels": [
+          [
+            [
+              99900,
+              4
+            ]
+          ],
+          [
+            [
+              99900,
+              4
+            ]
+          ]
+        ],
+        "trade_frames": [
+          1,
+          1
+        ],
+        "notional_tick_shares": [
+          399600,
+          399600
+        ]
+      },
+      {
+        "bin": 12,
+        "requested": [
+          10,
+          10
+        ],
+        "filled": [
+          10,
+          10
+        ],
+        "fills_match": true,
+        "levels": [
+          [
+            [
+              99900,
+              10
+            ]
+          ],
+          [
+            [
+              99900,
+              10
+            ]
+          ]
+        ],
+        "trade_frames": [
+          1,
+          1
+        ],
+        "notional_tick_shares": [
+          999000,
+          999000
+        ]
+      }
+    ],
+    "predicted_filled": 1000,
+    "realised_filled": 1000,
+    "predicted_vwap_ticks": 99771.5,
+    "realised_vwap_ticks": 99771.5
+  },
+  "measurement": {
+    "arrival_mid_ticks": 100000.0,
+    "realised_vwap_ticks": 99771.5,
+    "realised_slippage_bps": 22.85,
+    "unreported_bps": null,
+    "predicted_slippage_bps": 22.85,
+    "void": false,
+    "reasons": [],
+    "label": "demo, not an evaluation (ARCHITECTURE.md \u00a77)"
+  },
+  "stream": {
+    "book_replaces": 1362,
+    "ping_seconds": [
+      0.0001809999994293321,
+      0.00022620000072492985,
+      0.00013479999961418798,
+      0.0002564000005804701,
+      0.00024560000019846484,
+      0.0002517000002626446,
+      0.0002491999994163052,
+      0.0002615000003061141,
+      0.00022820000049250666,
+      0.0002902999995058053,
+      0.0001677999998719315,
+      0.0006683000001430628,
+      0.00017969999953493243
+    ],
+    "note": "ping round-trip is the only true freshness signal the wire offers: the pong is queued behind whatever is already waiting for the socket, so it cannot overtake stale frames (vendored \u00a73, Keepalive). seq is used here as a dedupe key and nothing else \u2014 it cannot detect a gap (\u00a71, \u00a74)."
+  },
+  "events": [
+    {
+      "t": 1787435446.917,
+      "event": "health",
+      "status": "ok",
+      "wireVersion": 1
+    },
+    {
+      "t": 1787435447.123,
+      "event": "ladder_posted",
+      "shape": "thin",
+      "orders": 16,
+      "depth_per_side": 375
+    },
+    {
+      "t": 1787435448.639,
+      "event": "arrival",
+      "mid_ticks": 100000.0,
+      "best_bid": 99900,
+      "best_ask": 100100,
+      "bid_depth": 375,
+      "ask_depth": 375
+    },
+    {
+      "t": 1787435450.167,
+      "event": "worked",
+      "bin": 0,
+      "order": "oh",
+      "requested": 421,
+      "limit": "9.92",
+      "fills": 8
+    },
+    {
+      "t": 1787435450.183,
+      "event": "cancelled_remainder",
+      "bin": 0,
+      "order": "oh",
+      "remainder": 46,
+      "accepted": true,
+      "reason": ""
+    },
+    {
+      "t": 1787435456.753,
+      "event": "replenished",
+      "bin": 1,
+      "shares": 375
+    },
+    {
+      "t": 1787435458.27,
+      "event": "worked",
+      "bin": 1,
+      "order": "oq",
+      "requested": 243,
+      "limit": "9.92",
+      "fills": 4
+    },
+    {
+      "t": 1787435464.682,
+      "event": "replenished",
+      "bin": 2,
+      "shares": 243
+    },
+    {
+      "t": 1787435466.217,
+      "event": "worked",
+      "bin": 2,
+      "order": "ov",
+      "requested": 135,
+      "limit": "9.92",
+      "fills": 2
+    },
+    {
+      "t": 1787435472.69,
+      "event": "replenished",
+      "bin": 3,
+      "shares": 135
+    },
+    {
+      "t": 1787435474.222,
+      "event": "worked",
+      "bin": 3,
+      "order": "oy",
+      "requested": 81,
+      "limit": "9.92",
+      "fills": 2
+    },
+    {
+      "t": 1787435480.678,
+      "event": "replenished",
+      "bin": 4,
+      "shares": 81
+    },
+    {
+      "t": 1787435482.211,
+      "event": "worked",
+      "bin": 4,
+      "order": "o11",
+      "requested": 52,
+      "limit": "9.92",
+      "fills": 1
+    },
+    {
+      "t": 1787435488.679,
+      "event": "replenished",
+      "bin": 5,
+      "shares": 52
+    },
+    {
+      "t": 1787435490.216,
+      "event": "worked",
+      "bin": 5,
+      "order": "o13",
+      "requested": 34,
+      "limit": "9.92",
+      "fills": 2
+    },
+    {
+      "t": 1787435496.685,
+      "event": "replenished",
+      "bin": 6,
+      "shares": 34
+    },
+    {
+      "t": 1787435498.202,
+      "event": "worked",
+      "bin": 6,
+      "order": "o15",
+      "requested": 24,
+      "limit": "9.92",
+      "fills": 1
+    },
+    {
+      "t": 1787435504.68,
+      "event": "replenished",
+      "bin": 7,
+      "shares": 24
+    },
+    {
+      "t": 1787435506.195,
+      "event": "worked",
+      "bin": 7,
+      "order": "o17",
+      "requested": 16,
+      "limit": "9.92",
+      "fills": 1
+    },
+    {
+      "t": 1787435512.684,
+      "event": "replenished",
+      "bin": 8,
+      "shares": 16
+    },
+    {
+      "t": 1787435514.216,
+      "event": "worked",
+      "bin": 8,
+      "order": "o19",
+      "requested": 12,
+      "limit": "9.92",
+      "fills": 2
+    },
+    {
+      "t": 1787435520.697,
+      "event": "replenished",
+      "bin": 9,
+      "shares": 12
+    },
+    {
+      "t": 1787435522.23,
+      "event": "worked",
+      "bin": 9,
+      "order": "o1b",
+      "requested": 8,
+      "limit": "9.92",
+      "fills": 1
+    },
+    {
+      "t": 1787435528.715,
+      "event": "replenished",
+      "bin": 10,
+      "shares": 8
+    },
+    {
+      "t": 1787435530.248,
+      "event": "worked",
+      "bin": 10,
+      "order": "o1d",
+      "requested": 6,
+      "limit": "9.92",
+      "fills": 1
+    },
+    {
+      "t": 1787435536.724,
+      "event": "replenished",
+      "bin": 11,
+      "shares": 6
+    },
+    {
+      "t": 1787435538.252,
+      "event": "worked",
+      "bin": 11,
+      "order": "o1f",
+      "requested": 4,
+      "limit": "9.92",
+      "fills": 1
+    },
+    {
+      "t": 1787435544.708,
+      "event": "replenished",
+      "bin": 12,
+      "shares": 4
+    },
+    {
+      "t": 1787435546.225,
+      "event": "worked",
+      "bin": 12,
+      "order": "o1h",
+      "requested": 10,
+      "limit": "9.92",
+      "fills": 1
+    }
+  ]
+}

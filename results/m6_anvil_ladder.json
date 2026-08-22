@@ -1,0 +1,1511 @@
+{
+  "milestone": "M6",
+  "run": "ladder",
+  "label": "ladder run - measured, regenerable",
+  "claim": "A trained execution policy worked one parent order on a live Anvil book over the versioned wire, as PROTOCOL.md's third independent client, with zero changes to Anvil. This is plumbing evidence, not execution-quality evidence: the flow is synthetic, the sample is one order, and there is no baseline it can fairly be compared against (ARCHITECTURE.md \u00a77). No epsilon, no capture fraction and no oracle comparison appears here \u2014 none of them is defined on this venue.",
+  "provenance": {
+    "config": "m6_anvil.yaml",
+    "config_sha256": "2b1bd379a2055c946bac1606cb654219b0bc3e9e5fed04ff4bce1bc3c8ee4807",
+    "git_rev": "a217163f9d1bac43a427b01e4cbc5edf6b6611e8",
+    "git_dirty": false,
+    "python": "3.12.2"
+  },
+  "policy": {
+    "checkpoint": "results/m4a_power_law_policy.npz",
+    "name": "m4a-seed9",
+    "n_bins": 13,
+    "selection": {
+      "rule": "the sweep's seeds sorted ascending by graded objective (a cost, so best-first), index n // 2 \u2014 the upper of the two central ranks, which at an even seed count is the worse of the two. A tie-break that can only cost, so the exported policy is at or below the sweep's median and never above it.",
+      "ordinal": 9,
+      "n_seeds": 10,
+      "rank_from_best": 6,
+      "sweep_median_objective_bps": 2.38342975003669
+    },
+    "grade": {
+      "name": "seed9",
+      "encoding": "power_law",
+      "expected_bps": 1.4679385347113973,
+      "variance_bps2": 2895.071246682515,
+      "objective_bps": 2.383440447509391,
+      "excess_bps": 0.00022507451124953448,
+      "relative_excess": 9.444153214167354e-05,
+      "gap_fraction": 0.00015141068275771862,
+      "advantage_fraction": 0.006125667695377409,
+      "capture_fraction": 0.9938743323046226,
+      "deviation_shares": 702.4713045130367,
+      "red_flag": false,
+      "trajectory": [
+        100000.0,
+        57948.1840133667,
+        35762.9968582323,
+        23329.66409716237,
+        15786.620425786188,
+        10920.586946939104,
+        7649.614819730991,
+        5392.501621827512,
+        3810.0406939471445,
+        2690.729667775362,
+        1895.871862410368,
+        1331.0912556322337,
+        930.4965380207984,
+        0.0
+      ]
+    },
+    "source_result": {
+      "path": "results/m4a_power_law.json",
+      "sha256": "897e5cddecfc6f98b46869be667f6318b5856a926a91e2e50c8cf1eb9fddc3b7",
+      "git_rev": "9de3d7b782bbe60a6b2ee6a126343d80ab38ca6f"
+    }
+  },
+  "venue": {
+    "host": "127.0.0.1",
+    "port": 18080,
+    "scheme": "http",
+    "ticker": 101,
+    "wire_version": 1
+  },
+  "order": {
+    "side": "S",
+    "parent": 1000
+  },
+  "ladder": {
+    "name": "reference",
+    "built_by_client": true,
+    "centre_ticks": 100000,
+    "half_spread_ticks": 100,
+    "spacing_ticks": 100,
+    "quantities": [
+      300,
+      260,
+      220,
+      180,
+      150,
+      120,
+      100,
+      80
+    ],
+    "depth_per_side": 1410
+  },
+  "grid": {
+    "n_bins": 13,
+    "bin_seconds": 8.0,
+    "settle_seconds": 0.75,
+    "note": "13 bins, as the policy was trained on \u2014 the bin *count* is part of the observation's clock and is not a free choice. The wall-clock length is: the 6.5-hour grid compresses to minutes because no market parameter enters at inference."
+  },
+  "predicted": {
+    "parent": 1000,
+    "side": "S",
+    "arrival_mid_ticks": 100000.0,
+    "filled": 1000,
+    "complete": true,
+    "vwap_ticks": 99887.9,
+    "bins": [
+      {
+        "bin": 0,
+        "time_remaining": 1.0,
+        "inventory_before": 1000,
+        "fraction": 0.4205181300640106,
+        "requested": 421,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 300
+          },
+          {
+            "price_ticks": 99800,
+            "qty": 121
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 300
+          },
+          {
+            "price_ticks": 99800,
+            "qty": 121
+          }
+        ],
+        "trade_frames": 2,
+        "filled": 421,
+        "unfilled": 0,
+        "inventory_after": 579,
+        "notional_tick_shares": 42045800
+      },
+      {
+        "bin": 1,
+        "time_remaining": 0.9230769230769231,
+        "inventory_before": 579,
+        "fraction": 0.3827771246433258,
+        "requested": 222,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 222
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 222
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 222,
+        "unfilled": 0,
+        "inventory_after": 357,
+        "notional_tick_shares": 22177800
+      },
+      {
+        "bin": 2,
+        "time_remaining": 0.8461538461538461,
+        "inventory_before": 357,
+        "fraction": 0.3475264012813568,
+        "requested": 124,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 124
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 124
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 124,
+        "unfilled": 0,
+        "inventory_after": 233,
+        "notional_tick_shares": 12387600
+      },
+      {
+        "bin": 3,
+        "time_remaining": 0.7692307692307692,
+        "inventory_before": 233,
+        "fraction": 0.3232489228248596,
+        "requested": 75,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 75
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 75
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 75,
+        "unfilled": 0,
+        "inventory_after": 158,
+        "notional_tick_shares": 7492500
+      },
+      {
+        "bin": 4,
+        "time_remaining": 0.6923076923076923,
+        "inventory_before": 158,
+        "fraction": 0.30827510356903076,
+        "requested": 49,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 49
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 49
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 49,
+        "unfilled": 0,
+        "inventory_after": 109,
+        "notional_tick_shares": 4895100
+      },
+      {
+        "bin": 5,
+        "time_remaining": 0.6153846153846154,
+        "inventory_before": 109,
+        "fraction": 0.29946309328079224,
+        "requested": 33,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 33
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 33
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 33,
+        "unfilled": 0,
+        "inventory_after": 76,
+        "notional_tick_shares": 3296700
+      },
+      {
+        "bin": 6,
+        "time_remaining": 0.5384615384615384,
+        "inventory_before": 76,
+        "fraction": 0.2949126064777374,
+        "requested": 22,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 22
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 22
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 22,
+        "unfilled": 0,
+        "inventory_after": 54,
+        "notional_tick_shares": 2197800
+      },
+      {
+        "bin": 7,
+        "time_remaining": 0.46153846153846156,
+        "inventory_before": 54,
+        "fraction": 0.29347875714302063,
+        "requested": 16,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 16
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 16
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 16,
+        "unfilled": 0,
+        "inventory_after": 38,
+        "notional_tick_shares": 1598400
+      },
+      {
+        "bin": 8,
+        "time_remaining": 0.3846153846153846,
+        "inventory_before": 38,
+        "fraction": 0.29374831914901733,
+        "requested": 11,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 11
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 11
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 11,
+        "unfilled": 0,
+        "inventory_after": 27,
+        "notional_tick_shares": 1098900
+      },
+      {
+        "bin": 9,
+        "time_remaining": 0.3076923076923077,
+        "inventory_before": 27,
+        "fraction": 0.2954346239566803,
+        "requested": 8,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 8
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 8
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 8,
+        "unfilled": 0,
+        "inventory_after": 19,
+        "notional_tick_shares": 799200
+      },
+      {
+        "bin": 10,
+        "time_remaining": 0.23076923076923073,
+        "inventory_before": 19,
+        "fraction": 0.2979128956794739,
+        "requested": 6,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 6
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 6
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 6,
+        "unfilled": 0,
+        "inventory_after": 13,
+        "notional_tick_shares": 599400
+      },
+      {
+        "bin": 11,
+        "time_remaining": 0.15384615384615385,
+        "inventory_before": 13,
+        "fraction": 0.3008573353290558,
+        "requested": 4,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 4
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 4
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 4,
+        "unfilled": 0,
+        "inventory_after": 9,
+        "notional_tick_shares": 399600
+      },
+      {
+        "bin": 12,
+        "time_remaining": 0.07692307692307687,
+        "inventory_before": 9,
+        "fraction": 0.3042466342449188,
+        "requested": 9,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 9
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 9
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 9,
+        "unfilled": 0,
+        "inventory_after": 0,
+        "notional_tick_shares": 899100
+      }
+    ]
+  },
+  "realised": {
+    "parent": 1000,
+    "side": "S",
+    "arrival_mid_ticks": 100000.0,
+    "filled": 1000,
+    "complete": true,
+    "vwap_ticks": 99887.9,
+    "bins": [
+      {
+        "bin": 0,
+        "time_remaining": 1.0,
+        "inventory_before": 1000,
+        "fraction": 0.4205181300640106,
+        "requested": 421,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 300
+          },
+          {
+            "price_ticks": 99800,
+            "qty": 121
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 300
+          },
+          {
+            "price_ticks": 99800,
+            "qty": 121
+          }
+        ],
+        "trade_frames": 2,
+        "filled": 421,
+        "unfilled": 0,
+        "inventory_after": 579,
+        "notional_tick_shares": 42045800,
+        "order_id": "oh"
+      },
+      {
+        "bin": 1,
+        "time_remaining": 0.9230769230769231,
+        "inventory_before": 579,
+        "fraction": 0.3827771246433258,
+        "requested": 222,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 222
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 222
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 222,
+        "unfilled": 0,
+        "inventory_after": 357,
+        "notional_tick_shares": 22177800,
+        "order_id": "ok"
+      },
+      {
+        "bin": 2,
+        "time_remaining": 0.8461538461538461,
+        "inventory_before": 357,
+        "fraction": 0.3475264012813568,
+        "requested": 124,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 78
+          },
+          {
+            "price_ticks": 99900,
+            "qty": 46
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 124
+          }
+        ],
+        "trade_frames": 2,
+        "filled": 124,
+        "unfilled": 0,
+        "inventory_after": 233,
+        "notional_tick_shares": 12387600,
+        "order_id": "om"
+      },
+      {
+        "bin": 3,
+        "time_remaining": 0.7692307692307692,
+        "inventory_before": 233,
+        "fraction": 0.3232489228248596,
+        "requested": 75,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 75
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 75
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 75,
+        "unfilled": 0,
+        "inventory_after": 158,
+        "notional_tick_shares": 7492500,
+        "order_id": "oo"
+      },
+      {
+        "bin": 4,
+        "time_remaining": 0.6923076923076923,
+        "inventory_before": 158,
+        "fraction": 0.30827510356903076,
+        "requested": 49,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 49
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 49
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 49,
+        "unfilled": 0,
+        "inventory_after": 109,
+        "notional_tick_shares": 4895100,
+        "order_id": "oq"
+      },
+      {
+        "bin": 5,
+        "time_remaining": 0.6153846153846154,
+        "inventory_before": 109,
+        "fraction": 0.29946309328079224,
+        "requested": 33,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 33
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 33
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 33,
+        "unfilled": 0,
+        "inventory_after": 76,
+        "notional_tick_shares": 3296700,
+        "order_id": "os"
+      },
+      {
+        "bin": 6,
+        "time_remaining": 0.5384615384615384,
+        "inventory_before": 76,
+        "fraction": 0.2949126064777374,
+        "requested": 22,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 19
+          },
+          {
+            "price_ticks": 99900,
+            "qty": 3
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 22
+          }
+        ],
+        "trade_frames": 2,
+        "filled": 22,
+        "unfilled": 0,
+        "inventory_after": 54,
+        "notional_tick_shares": 2197800,
+        "order_id": "ou"
+      },
+      {
+        "bin": 7,
+        "time_remaining": 0.46153846153846156,
+        "inventory_before": 54,
+        "fraction": 0.29347875714302063,
+        "requested": 16,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 16
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 16
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 16,
+        "unfilled": 0,
+        "inventory_after": 38,
+        "notional_tick_shares": 1598400,
+        "order_id": "ow"
+      },
+      {
+        "bin": 8,
+        "time_remaining": 0.3846153846153846,
+        "inventory_before": 38,
+        "fraction": 0.29374831914901733,
+        "requested": 11,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 11
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 11
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 11,
+        "unfilled": 0,
+        "inventory_after": 27,
+        "notional_tick_shares": 1098900,
+        "order_id": "oy"
+      },
+      {
+        "bin": 9,
+        "time_remaining": 0.3076923076923077,
+        "inventory_before": 27,
+        "fraction": 0.2954346239566803,
+        "requested": 8,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 8
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 8
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 8,
+        "unfilled": 0,
+        "inventory_after": 19,
+        "notional_tick_shares": 799200,
+        "order_id": "o10"
+      },
+      {
+        "bin": 10,
+        "time_remaining": 0.23076923076923073,
+        "inventory_before": 19,
+        "fraction": 0.2979128956794739,
+        "requested": 6,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 6
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 6
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 6,
+        "unfilled": 0,
+        "inventory_after": 13,
+        "notional_tick_shares": 599400,
+        "order_id": "o12"
+      },
+      {
+        "bin": 11,
+        "time_remaining": 0.15384615384615385,
+        "inventory_before": 13,
+        "fraction": 0.3008573353290558,
+        "requested": 4,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 4
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 4
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 4,
+        "unfilled": 0,
+        "inventory_after": 9,
+        "notional_tick_shares": 399600,
+        "order_id": "o14"
+      },
+      {
+        "bin": 12,
+        "time_remaining": 0.07692307692307687,
+        "inventory_before": 9,
+        "fraction": 0.3042466342449188,
+        "requested": 9,
+        "limit_ticks": 99200,
+        "fills": [
+          {
+            "price_ticks": 99900,
+            "qty": 9
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99900,
+            "qty": 9
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 9,
+        "unfilled": 0,
+        "inventory_after": 0,
+        "notional_tick_shares": 899100,
+        "order_id": "o16"
+      }
+    ]
+  },
+  "reconciliation": {
+    "attributed": 1000,
+    "parent": 1000,
+    "third_party_fills": 0,
+    "fills_against_our_ladder": 0,
+    "void": false,
+    "reasons": []
+  },
+  "comparison": {
+    "matched": true,
+    "bins": [
+      {
+        "bin": 0,
+        "requested": [
+          421,
+          421
+        ],
+        "filled": [
+          421,
+          421
+        ],
+        "fills_match": true,
+        "levels": [
+          [
+            [
+              99900,
+              300
+            ],
+            [
+              99800,
+              121
+            ]
+          ],
+          [
+            [
+              99900,
+              300
+            ],
+            [
+              99800,
+              121
+            ]
+          ]
+        ],
+        "trade_frames": [
+          2,
+          2
+        ],
+        "notional_tick_shares": [
+          42045800,
+          42045800
+        ]
+      },
+      {
+        "bin": 1,
+        "requested": [
+          222,
+          222
+        ],
+        "filled": [
+          222,
+          222
+        ],
+        "fills_match": true,
+        "levels": [
+          [
+            [
+              99900,
+              222
+            ]
+          ],
+          [
+            [
+              99900,
+              222
+            ]
+          ]
+        ],
+        "trade_frames": [
+          1,
+          1
+        ],
+        "notional_tick_shares": [
+          22177800,
+          22177800
+        ]
+      },
+      {
+        "bin": 2,
+        "requested": [
+          124,
+          124
+        ],
+        "filled": [
+          124,
+          124
+        ],
+        "fills_match": true,
+        "levels": [
+          [
+            [
+              99900,
+              124
+            ]
+          ],
+          [
+            [
+              99900,
+              124
+            ]
+          ]
+        ],
+        "trade_frames": [
+          1,
+          2
+        ],
+        "notional_tick_shares": [
+          12387600,
+          12387600
+        ]
+      },
+      {
+        "bin": 3,
+        "requested": [
+          75,
+          75
+        ],
+        "filled": [
+          75,
+          75
+        ],
+        "fills_match": true,
+        "levels": [
+          [
+            [
+              99900,
+              75
+            ]
+          ],
+          [
+            [
+              99900,
+              75
+            ]
+          ]
+        ],
+        "trade_frames": [
+          1,
+          1
+        ],
+        "notional_tick_shares": [
+          7492500,
+          7492500
+        ]
+      },
+      {
+        "bin": 4,
+        "requested": [
+          49,
+          49
+        ],
+        "filled": [
+          49,
+          49
+        ],
+        "fills_match": true,
+        "levels": [
+          [
+            [
+              99900,
+              49
+            ]
+          ],
+          [
+            [
+              99900,
+              49
+            ]
+          ]
+        ],
+        "trade_frames": [
+          1,
+          1
+        ],
+        "notional_tick_shares": [
+          4895100,
+          4895100
+        ]
+      },
+      {
+        "bin": 5,
+        "requested": [
+          33,
+          33
+        ],
+        "filled": [
+          33,
+          33
+        ],
+        "fills_match": true,
+        "levels": [
+          [
+            [
+              99900,
+              33
+            ]
+          ],
+          [
+            [
+              99900,
+              33
+            ]
+          ]
+        ],
+        "trade_frames": [
+          1,
+          1
+        ],
+        "notional_tick_shares": [
+          3296700,
+          3296700
+        ]
+      },
+      {
+        "bin": 6,
+        "requested": [
+          22,
+          22
+        ],
+        "filled": [
+          22,
+          22
+        ],
+        "fills_match": true,
+        "levels": [
+          [
+            [
+              99900,
+              22
+            ]
+          ],
+          [
+            [
+              99900,
+              22
+            ]
+          ]
+        ],
+        "trade_frames": [
+          1,
+          2
+        ],
+        "notional_tick_shares": [
+          2197800,
+          2197800
+        ]
+      },
+      {
+        "bin": 7,
+        "requested": [
+          16,
+          16
+        ],
+        "filled": [
+          16,
+          16
+        ],
+        "fills_match": true,
+        "levels": [
+          [
+            [
+              99900,
+              16
+            ]
+          ],
+          [
+            [
+              99900,
+              16
+            ]
+          ]
+        ],
+        "trade_frames": [
+          1,
+          1
+        ],
+        "notional_tick_shares": [
+          1598400,
+          1598400
+        ]
+      },
+      {
+        "bin": 8,
+        "requested": [
+          11,
+          11
+        ],
+        "filled": [
+          11,
+          11
+        ],
+        "fills_match": true,
+        "levels": [
+          [
+            [
+              99900,
+              11
+            ]
+          ],
+          [
+            [
+              99900,
+              11
+            ]
+          ]
+        ],
+        "trade_frames": [
+          1,
+          1
+        ],
+        "notional_tick_shares": [
+          1098900,
+          1098900
+        ]
+      },
+      {
+        "bin": 9,
+        "requested": [
+          8,
+          8
+        ],
+        "filled": [
+          8,
+          8
+        ],
+        "fills_match": true,
+        "levels": [
+          [
+            [
+              99900,
+              8
+            ]
+          ],
+          [
+            [
+              99900,
+              8
+            ]
+          ]
+        ],
+        "trade_frames": [
+          1,
+          1
+        ],
+        "notional_tick_shares": [
+          799200,
+          799200
+        ]
+      },
+      {
+        "bin": 10,
+        "requested": [
+          6,
+          6
+        ],
+        "filled": [
+          6,
+          6
+        ],
+        "fills_match": true,
+        "levels": [
+          [
+            [
+              99900,
+              6
+            ]
+          ],
+          [
+            [
+              99900,
+              6
+            ]
+          ]
+        ],
+        "trade_frames": [
+          1,
+          1
+        ],
+        "notional_tick_shares": [
+          599400,
+          599400
+        ]
+      },
+      {
+        "bin": 11,
+        "requested": [
+          4,
+          4
+        ],
+        "filled": [
+          4,
+          4
+        ],
+        "fills_match": true,
+        "levels": [
+          [
+            [
+              99900,
+              4
+            ]
+          ],
+          [
+            [
+              99900,
+              4
+            ]
+          ]
+        ],
+        "trade_frames": [
+          1,
+          1
+        ],
+        "notional_tick_shares": [
+          399600,
+          399600
+        ]
+      },
+      {
+        "bin": 12,
+        "requested": [
+          9,
+          9
+        ],
+        "filled": [
+          9,
+          9
+        ],
+        "fills_match": true,
+        "levels": [
+          [
+            [
+              99900,
+              9
+            ]
+          ],
+          [
+            [
+              99900,
+              9
+            ]
+          ]
+        ],
+        "trade_frames": [
+          1,
+          1
+        ],
+        "notional_tick_shares": [
+          899100,
+          899100
+        ]
+      }
+    ],
+    "predicted_filled": 1000,
+    "realised_filled": 1000,
+    "predicted_vwap_ticks": 99887.9,
+    "realised_vwap_ticks": 99887.9
+  },
+  "measurement": {
+    "arrival_mid_ticks": 100000.0,
+    "realised_vwap_ticks": 99887.9,
+    "realised_slippage_bps": 11.210000000000582,
+    "unreported_bps": null,
+    "predicted_slippage_bps": 11.210000000000582,
+    "void": false,
+    "reasons": [],
+    "label": "demo, not an evaluation (ARCHITECTURE.md \u00a77)"
+  },
+  "stream": {
+    "book_replaces": 1334,
+    "ping_seconds": [
+      0.00019470000006549526,
+      0.00021720000040659215,
+      0.00021490000017365674,
+      0.00017870000010589138,
+      0.0002227000004495494,
+      0.00020260000019334257,
+      0.00021550000019487925,
+      0.0002932999996119179,
+      0.00020909999966534087,
+      0.00031960000069375383,
+      0.00027570000020205043,
+      0.00023390000023937318,
+      0.00020760000006703194
+    ],
+    "note": "ping round-trip is the only true freshness signal the wire offers: the pong is queued behind whatever is already waiting for the socket, so it cannot overtake stale frames (vendored \u00a73, Keepalive). seq is used here as a dedupe key and nothing else \u2014 it cannot detect a gap (\u00a71, \u00a74)."
+  },
+  "events": [
+    {
+      "t": 1787435324.962,
+      "event": "health",
+      "status": "ok",
+      "wireVersion": 1
+    },
+    {
+      "t": 1787435325.098,
+      "event": "ladder_posted",
+      "shape": "reference",
+      "orders": 16,
+      "depth_per_side": 1410
+    },
+    {
+      "t": 1787435326.614,
+      "event": "arrival",
+      "mid_ticks": 100000.0,
+      "best_bid": 99900,
+      "best_ask": 100100,
+      "bid_depth": 1410,
+      "ask_depth": 1410
+    },
+    {
+      "t": 1787435328.132,
+      "event": "worked",
+      "bin": 0,
+      "order": "oh",
+      "requested": 421,
+      "limit": "9.92",
+      "fills": 2
+    },
+    {
+      "t": 1787435334.651,
+      "event": "replenished",
+      "bin": 1,
+      "shares": 421
+    },
+    {
+      "t": 1787435336.168,
+      "event": "worked",
+      "bin": 1,
+      "order": "ok",
+      "requested": 222,
+      "limit": "9.92",
+      "fills": 1
+    },
+    {
+      "t": 1787435342.643,
+      "event": "replenished",
+      "bin": 2,
+      "shares": 222
+    },
+    {
+      "t": 1787435344.177,
+      "event": "worked",
+      "bin": 2,
+      "order": "om",
+      "requested": 124,
+      "limit": "9.92",
+      "fills": 2
+    },
+    {
+      "t": 1787435350.646,
+      "event": "replenished",
+      "bin": 3,
+      "shares": 124
+    },
+    {
+      "t": 1787435352.18,
+      "event": "worked",
+      "bin": 3,
+      "order": "oo",
+      "requested": 75,
+      "limit": "9.92",
+      "fills": 1
+    },
+    {
+      "t": 1787435358.654,
+      "event": "replenished",
+      "bin": 4,
+      "shares": 75
+    },
+    {
+      "t": 1787435360.187,
+      "event": "worked",
+      "bin": 4,
+      "order": "oq",
+      "requested": 49,
+      "limit": "9.92",
+      "fills": 1
+    },
+    {
+      "t": 1787435366.646,
+      "event": "replenished",
+      "bin": 5,
+      "shares": 49
+    },
+    {
+      "t": 1787435368.161,
+      "event": "worked",
+      "bin": 5,
+      "order": "os",
+      "requested": 33,
+      "limit": "9.92",
+      "fills": 1
+    },
+    {
+      "t": 1787435374.668,
+      "event": "replenished",
+      "bin": 6,
+      "shares": 33
+    },
+    {
+      "t": 1787435376.2,
+      "event": "worked",
+      "bin": 6,
+      "order": "ou",
+      "requested": 22,
+      "limit": "9.92",
+      "fills": 2
+    },
+    {
+      "t": 1787435382.675,
+      "event": "replenished",
+      "bin": 7,
+      "shares": 22
+    },
+    {
+      "t": 1787435384.204,
+      "event": "worked",
+      "bin": 7,
+      "order": "ow",
+      "requested": 16,
+      "limit": "9.92",
+      "fills": 1
+    },
+    {
+      "t": 1787435390.68,
+      "event": "replenished",
+      "bin": 8,
+      "shares": 16
+    },
+    {
+      "t": 1787435392.198,
+      "event": "worked",
+      "bin": 8,
+      "order": "oy",
+      "requested": 11,
+      "limit": "9.92",
+      "fills": 1
+    },
+    {
+      "t": 1787435398.668,
+      "event": "replenished",
+      "bin": 9,
+      "shares": 11
+    },
+    {
+      "t": 1787435400.183,
+      "event": "worked",
+      "bin": 9,
+      "order": "o10",
+      "requested": 8,
+      "limit": "9.92",
+      "fills": 1
+    },
+    {
+      "t": 1787435406.683,
+      "event": "replenished",
+      "bin": 10,
+      "shares": 8
+    },
+    {
+      "t": 1787435408.201,
+      "event": "worked",
+      "bin": 10,
+      "order": "o12",
+      "requested": 6,
+      "limit": "9.92",
+      "fills": 1
+    },
+    {
+      "t": 1787435414.677,
+      "event": "replenished",
+      "bin": 11,
+      "shares": 6
+    },
+    {
+      "t": 1787435416.198,
+      "event": "worked",
+      "bin": 11,
+      "order": "o14",
+      "requested": 4,
+      "limit": "9.92",
+      "fills": 1
+    },
+    {
+      "t": 1787435422.704,
+      "event": "replenished",
+      "bin": 12,
+      "shares": 4
+    },
+    {
+      "t": 1787435424.22,
+      "event": "worked",
+      "bin": 12,
+      "order": "o16",
+      "requested": 9,
+      "limit": "9.92",
+      "fills": 1
+    }
+  ]
+}
