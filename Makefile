@@ -14,7 +14,7 @@ M3_VALIDATE ?= configs/m3_antithetic_validation.yaml
 M3_FRONTIER ?= configs/m3_frontier.yaml
 M4A_CONFIG  ?= configs/m4a_power_law.yaml
 
-.PHONY: help test test-verbose differential smoke sweep reference validate frontier frontier-figure frontier-check m4a-reference m4a-guarantees m4a-regression m4a m4a-figure goldens clean
+.PHONY: help test test-verbose differential smoke sweep reference validate frontier frontier-figure frontier-check m4a-reference m4a-guarantees m4a-regression m4a m4a-figure checkpoint goldens clean
 
 help:
 	@echo "make test          run the pytest suite (the gate); excludes the marked tiers"
@@ -31,6 +31,7 @@ help:
 	@echo "make m4a-regression M4a task 2: one M3 seed retrained bitwise - ~20 min"
 	@echo "make m4a           M4a task 5: ten seeds in the power-law world - ~3 h"
 	@echo "make m4a-figure    redraw results/m4a_degradation.* from the committed result"
+	@echo "make checkpoint    M6 prerequisite: export M4a's median seed as a policy .npz - ~15 min"
 	@echo "make goldens       re-export the FrontierView fixtures (read-only there)"
 	@echo "                   override the checkout with FRONTIERVIEW=/path/to/FrontierView"
 	@echo "make clean         remove caches and scratch results"
@@ -133,6 +134,14 @@ m4a-regression:
 # unattended: 512 envs x 8 threads saturates the reference box.
 m4a:
 	$(PYTHON) tools/train.py --config $(M4A_CONFIG) --quiet --expect pass
+
+# M6's prerequisite — the exported policy. Retrains *one* seed of the committed
+# M4a sweep (the median rule picks it; see docs/briefs/M6-anvil-live-leg.md) and
+# writes results/m4a_power_law_policy.npz with provenance. ~15 min, and it must
+# run from a committed tree: the artefact carries `git_dirty: false` or it is not
+# an artefact (invariant 1).
+checkpoint:
+	$(PYTHON) tools/train.py --config $(M4A_CONFIG) --quiet --export-checkpoint
 
 # M4a task 6 — the degradation figure. Oracle curves are free; the agent's ten
 # seeds are read off the committed result, so this redraws without retraining.

@@ -88,10 +88,14 @@ _pin_thread_env(sys.argv[1:])
 
 import numpy as np  # noqa: E402
 
+from temper.agents.checkpoint import network_description, save_policy  # noqa: E402
+from temper.agents.execution import fraction_to_shares  # noqa: E402
 from temper.eval.experiment import Experiment, load_experiment  # noqa: E402
 from temper.eval.figures import trajectory_overlay  # noqa: E402
-from temper.eval.provenance import Provenance  # noqa: E402
-from temper.eval.sweep import build_document, run_sweep  # noqa: E402
+from temper.eval.grading import median_ordinal  # noqa: E402
+from temper.eval.provenance import Provenance, config_digest  # noqa: E402
+from temper.eval.sweep import build_document, grade, run_sweep, train_seed  # noqa: E402
+from temper.seeding import pool_seeds  # noqa: E402
 
 #: How each reward regime reads in a header and a figure caption.
 REGIME_LABELS = {
@@ -374,6 +378,280 @@ def write_outputs(experiment: Experiment, document: dict) -> None:
     write_figure(experiment, document)
 
 
+# ---------------------------------------------------------------------------
+# Checkpoint export: one named seed, retrained and written down
+# ---------------------------------------------------------------------------
+
+#: How the exported policy is named beside its results JSON —
+#: ``results/m4a_power_law.json`` -> ``results/m4a_power_law_policy.npz``.
+CHECKPOINT_SUFFIX = "_policy.npz"
+
+#: The rule that decides *which* seed gets exported, stated here rather than
+#: chosen at export time. See :func:`~temper.eval.grading.median_ordinal`: the
+#: seed at the upper of the two central ranks, which at an even seed count is
+#: the worse of the pair. Recorded verbatim into the checkpoint's metadata, so
+#: the artefact carries the rule it was selected by and not merely its result.
+MEDIAN_RULE = (
+    "the sweep's seeds sorted ascending by graded objective (a cost, so "
+    "best-first), index n // 2 — the upper of the two central ranks, which at "
+    "an even seed count is the worse of the two. A tie-break that can only "
+    "cost, so the exported policy is at or below the sweep's median and never "
+    "above it."
+)
+
+
+class _Recorder:
+    """A policy that remembers every ``(observation, fraction)`` it was asked for.
+
+    Wrapped around the trained :class:`~temper.agents.execution.PPOPolicy` for
+    the grading rollout, so the observations and actions written into the
+    checkpoint are the ones the *graded* schedule was actually produced from
+    rather than a second rollout that ought to agree with it. It delegates the
+    fraction and re-does the same conversion
+    (:func:`~temper.agents.execution.fraction_to_shares`), so the env sees
+    exactly what it would have seen without the wrapper.
+    """
+
+    def __init__(self, policy) -> None:
+        self._policy = policy
+        self.name = policy.name
+        self.order_size = policy.order_size
+        self.episodes: list[list[tuple[np.ndarray, float]]] = []
+
+    def reset(self) -> None:
+        self.episodes.append([])
+
+    def act(self, observation) -> float:
+        fraction = self._policy.fraction(observation)
+        self.episodes[-1].append(
+            (np.asarray(observation, dtype=np.float64).copy(), float(fraction))
+        )
+        return fraction_to_shares(fraction, observation, self.order_size)
+
+
+def _checkpoint_path(experiment: Experiment, given: str | None) -> Path:
+    if given:
+        return Path(given)
+    metrics = experiment.results_metrics
+    return metrics.with_name(metrics.stem + CHECKPOINT_SUFFIX)
+
+
+def _selected_ordinal(document: dict, requested: str) -> tuple[int, str]:
+    """``(ordinal, how)`` — the seed to export, and the rule that chose it."""
+    objectives = [record["grade"]["objective_bps"] for record in document["seeds"]]
+    if requested == "median":
+        return median_ordinal(objectives), MEDIAN_RULE
+    ordinal = int(requested)
+    if not 0 <= ordinal < len(objectives):
+        raise SystemExit(
+            f"--ordinal {ordinal} is outside the {len(objectives)} seeds the "
+            "committed sweep recorded"
+        )
+    return ordinal, "named explicitly on the command line, not by the median rule"
+
+
+def run_export(experiment: Experiment, args) -> int:
+    """Retrain one seed of a committed sweep and write its policy to ``.npz``.
+
+    Not a sweep: a sweep's number is a median over ten seeds and takes hours,
+    while an *artefact* is one policy and takes one seed. The seed is chosen by
+    :data:`MEDIAN_RULE` off the committed results JSON, so the export names a
+    seed the sweep already reported rather than a fresh draw, and the grade the
+    reloaded weights earn can be compared with the grade that seed was
+    committed under.
+
+    What is checked before the file is written is the *verdict*, not the digits.
+    Torch's CPU reductions depend on the thread count and PPO compounds that
+    over 751 updates, so bitwise agreement is a property of this host rather
+    than of the pipeline (``tests/test_m2_rediscovery.py`` records the
+    measurement). Whether it reproduced bitwise is recorded in the metadata
+    either way; what would stop the write is the retrained seed missing M4a's
+    per-seed bar or raising a red flag, which would mean the artefact does not
+    represent the result it claims to.
+    """
+    import torch  # local: the top of this file stays importable without it
+
+    metrics_path = experiment.results_metrics
+    if not metrics_path.exists():
+        print(
+            f"{metrics_path.relative_to(REPO_ROOT)} does not exist; the export "
+            "picks its seed off a committed sweep, so run the sweep first"
+        )
+        return 1
+    document = json.loads(metrics_path.read_text(encoding="utf-8"))
+    ordinal, how = _selected_ordinal(document, args.ordinal)
+    committed = document["seeds"][ordinal]["grade"]
+    target = _checkpoint_path(experiment, args.export_checkpoint)
+
+    provenance = experiment.provenance(REPO_ROOT)
+    if provenance.git_dirty:
+        print(
+            "  WARNING: the source tree is dirty, so this checkpoint's recorded "
+            "revision will not contain the code that produced it (invariant 1). "
+            "Commit before the export run."
+        )
+
+    _header(experiment)
+    print(
+        f"  exporting seed {ordinal} of {len(document['seeds'])} — {how}\n"
+        f"  committed grade: J {committed['objective_bps']:.9f} bps · capture "
+        f"{committed['capture_fraction']:.6f} · excess "
+        f"{committed['excess_bps']:+.8f} bps"
+    )
+
+    with _KeepAwake():
+        result, policy = train_seed(
+            experiment, ordinal, progress=None if args.quiet else _progress(experiment)
+        )
+    recorder = _Recorder(policy)
+    regrade = grade(experiment, recorder, name=f"seed{ordinal}")
+
+    # `grade` rolls the policy out once per eval stream and has already required
+    # the two trajectories to be bitwise equal; this requires the same of the
+    # *actions*, which is the stronger statement and the one `client/` will lean
+    # on when it replays these observations without an env at all.
+    episodes = recorder.episodes
+    head = episodes[0]
+    for index, other in enumerate(episodes[1:], start=1):
+        if [f for _, f in other] != [f for _, f in head]:
+            print(
+                f"  eval stream {index} produced different actions from stream 0 "
+                "— the policy is not open-loop and nothing here is gradable"
+            )
+            return 1
+    observations = np.array([obs for obs, _ in head], dtype=np.float64)
+    fractions = np.array([f for _, f in head], dtype=np.float64)
+
+    bitwise = regrade.objective == committed["objective_bps"]
+    drift = regrade.objective - committed["objective_bps"]
+    print(
+        f"  retrained grade:  J {regrade.objective:.9f} bps · capture "
+        f"{regrade.capture_fraction:.6f} · excess {regrade.excess:+.8f} bps · "
+        f"‖δ‖₂ {regrade.deviation:,.0f} shares · {result.seconds:.0f}s"
+    )
+    print(
+        "  reproduced the committed objective bitwise"
+        if bitwise
+        else f"  differs from the committed objective by {drift:+.3e} bps "
+        "(not bitwise — recorded, not hidden)"
+    )
+
+    per_seed_bar = experiment.tolerances.per_seed_fraction
+    graded_value = getattr(regrade, experiment.tolerances.graded_attribute)
+    if regrade.red_flag or graded_value > per_seed_bar:
+        print(
+            f"  REFUSING to write: the retrained seed scored "
+            f"{graded_value:.4f} of the "
+            f"{experiment.tolerances.denominator.replace('_', ' ')} against a "
+            f"per-seed floor of {per_seed_bar:g}"
+            + (" and raised a RED FLAG" if regrade.red_flag else "")
+            + ". An artefact that misses the bar its sweep was reported under "
+            "does not represent that result."
+        )
+        return 1
+
+    ordering = np.argsort(
+        [record["grade"]["objective_bps"] for record in document["seeds"]],
+        kind="stable",
+    ).tolist()
+    metadata = {
+        "name": f"{experiment.milestone.lower()}-seed{ordinal}",
+        "milestone": experiment.milestone,
+        "brief": "docs/briefs/M6-anvil-live-leg.md (prerequisite)",
+        "written_by": "tools/train.py --export-checkpoint",
+        "torch": torch.__version__,
+        "provenance": provenance.as_dict(),
+        "source_result": {
+            "path": str(metrics_path.relative_to(REPO_ROOT)).replace("\\", "/"),
+            "sha256": config_digest(metrics_path),
+            "git_rev": document["provenance"]["git_rev"],
+        },
+        "selection": {
+            "rule": how,
+            "ordinal": ordinal,
+            "n_seeds": len(document["seeds"]),
+            "rank_from_best": ordering.index(ordinal) + 1,
+            "sweep_median_objective_bps": document["summary"]["objective"]["median"],
+        },
+        "seed": {
+            "root_seed": experiment.seeds.root_seed,
+            "train_pool": experiment.seeds.train_pool,
+            "eval_pool": experiment.seeds.eval_pool,
+            "n_seeds": experiment.seeds.n_seeds,
+            "ordinal": ordinal,
+            "torch_seed": int(
+                pool_seeds(
+                    experiment.seeds.root_seed,
+                    experiment.seeds.train_pool,
+                    experiment.seeds.n_seeds,
+                )[ordinal]
+            ),
+            "env_streams": list(
+                experiment.seeds.env_streams(ordinal, experiment.ppo.num_envs)[:1]
+            ),
+            "eval_streams": list(experiment.seeds.eval_streams),
+        },
+        "world": {
+            "cost_encoding": experiment.cost_encoding,
+            "lambda_risk": experiment.lambda_risk,
+            "order_size": experiment.case.order_size,
+            "n_bins": experiment.case.market.n_bins,
+            "horizon_hours": experiment.case.market.horizon_hours,
+            "symbol": experiment.case.symbol,
+            "case_id": experiment.case.case_id,
+            "params_from": experiment.case.params_from,
+            "note": (
+                "the world the weights were trained in, recorded so a reader "
+                "knows what they are. Nothing about it enters inference: the "
+                "observation is (time remaining fraction, inventory remaining "
+                "fraction) and no market parameter reaches the network, which "
+                "is why this policy is portable to a venue it has never seen."
+            ),
+        },
+        "network": network_description(result.agent, experiment.ppo.hidden_sizes),
+        "grade": regrade.as_dict(),
+        "committed_grade": committed,
+        "reproduced_bitwise": bool(bitwise),
+        "training": {
+            "updates": result.updates,
+            "global_step": result.global_step,
+            "seconds": result.seconds,
+            "timed_out": result.timed_out,
+            "torch_threads": experiment.ppo.torch_threads,
+        },
+        "eval": {
+            "streams": list(experiment.seeds.eval_streams),
+            "arrays": {
+                "eval_observations": "(n_bins, 2) float64 — one per decision",
+                "eval_fractions": "(n_bins,) float64 — the squashed mean action",
+                "eval_trajectory": "(n_bins + 1,) float64 — inventory, shares",
+            },
+            "note": (
+                "one deterministic evaluation episode; every eval stream "
+                "produced the same observations and actions bitwise. A second "
+                "implementation of the forward pass is pinned by replaying "
+                "`eval_observations` and matching `eval_fractions`, which needs "
+                "neither an env nor torch."
+            ),
+        },
+    }
+
+    written = save_policy(
+        target,
+        result.agent,
+        metadata,
+        extra={
+            "eval_observations": observations,
+            "eval_fractions": fractions,
+            "eval_trajectory": np.asarray(regrade.trajectory, dtype=np.float64),
+        },
+    )
+    resolved = written.resolve()
+    inside = resolved.is_relative_to(REPO_ROOT)
+    print(f"  wrote {resolved.relative_to(REPO_ROOT) if inside else resolved}")
+    return 0
+
+
 def main() -> int:
     _stdout_utf8()
     parser = argparse.ArgumentParser(description=__doc__)
@@ -391,6 +669,27 @@ def main() -> int:
         "--figure-only",
         action="store_true",
         help="redraw the figure from the committed metrics JSON; train nothing",
+    )
+    parser.add_argument(
+        "--export-checkpoint",
+        nargs="?",
+        const="",
+        default=None,
+        metavar="PATH",
+        help=(
+            "train one seed of the committed sweep and write its policy as a "
+            "provenance-stamped .npz beside the results JSON; no sweep, no "
+            "figure. PATH overrides the default location"
+        ),
+    )
+    parser.add_argument(
+        "--ordinal",
+        default="median",
+        help=(
+            "which seed --export-checkpoint exports. `median` (the default) "
+            "reads the committed sweep and applies the median rule; an integer "
+            "names a seed explicitly and is recorded as such in the artefact"
+        ),
     )
     parser.add_argument(
         "--expect",
@@ -415,6 +714,8 @@ def main() -> int:
             return 1
         write_figure(experiment, json.loads(path.read_text(encoding="utf-8")))
         return 0
+    if args.export_checkpoint is not None:
+        return run_export(experiment, args)
     if args.dry_run:
         reference = experiment.verify_lambda_rule()
         gate_reference = experiment.verify_gate_reference()

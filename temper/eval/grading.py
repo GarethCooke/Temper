@@ -372,3 +372,27 @@ def summarise(name: str, values: Sequence[float]) -> SeedSummary:
         q3=q3,
         worst=float(np.max(array)),
     )
+
+
+def median_ordinal(values: Sequence[float]) -> int:
+    """Which seed *is* the median — the index of the upper central rank.
+
+    :func:`summarise` reports the median as a number, and at an even seed count
+    that number belongs to no seed: M4a's ten seeds have a median objective
+    exactly halfway between two of them, and the two are 1e-17 apart in their
+    distance from it, so "the seed nearest the median" is decided by float noise
+    rather than by a rule. This picks by *rank* instead — sort ascending, take
+    index ``n // 2`` — which is numpy's own upper-median position and is the
+    **worse** of the two central seeds at even ``n``.
+
+    That direction is the point. Anything selected out of a sweep and then
+    shipped is a choice that could flatter the artefact, and the cheapest
+    defence is a tie-break that can only ever cost: the exported policy is at or
+    below the sweep's median, never above it. Every quantity this repo
+    summarises is a cost (see :func:`summarise`), so ascending order is
+    best-to-worst and no per-metric direction is needed here either.
+    """
+    array = np.asarray(list(values), dtype=float)
+    if array.size == 0:
+        raise ValueError("no seeds to take a median of")
+    return int(np.argsort(array, kind="stable")[array.size // 2])

@@ -5,3 +5,10 @@
 # now reproduces the committed digests instead of failing the invariant-1 checks
 # on an invisible byte. Everything else follows the platform default.
 configs/*.yaml text eol=crlf
+
+# The exported policy is a binary archive whose bytes are hashed nowhere but are
+# read back array-for-array. Marked explicitly rather than left to git's content
+# detection: on a Windows checkout an autocrlf pass over a `.npz` that happened
+# to look textual would corrupt it silently, and the failure would surface as a
+# wrong policy rather than as a broken file.
+*.npz binary
