@@ -21,10 +21,18 @@ Temper is the controlled treatment that follows forging.
    and AC still on every chart.
 3. **The wire (stretch)** — the trained policy works a parent order on the live
    [Anvil](https://anvil.garethcooke.com) book as `PROTOCOL.md`'s third independent
-   client. A demo that the policy speaks a real venue wire; performance claims stay in the
-   simulator.
+   client, and the venue does what a closed form said it would. A demo that the policy
+   speaks a real venue wire; performance claims stay in the simulator.
 
-**Status:** M4a done — the first *earned* advantage, and it is bounded on both sides.
+**Status:** M6 done — the stretch leg is off the roadmap and on a wire. The trained
+policy worked a parent order on a live Anvil book as `PROTOCOL.md`'s third independent
+client, with zero changes upstream, and the fills matched a closed-form prediction
+computed from the committed ladder before anything was sent: 11.21 bps of arrival
+slippage, level for level, across three ladder shapes and two revisions. That is
+*plumbing* evidence and the artefacts say so — see the Phase 3 rung below, and
+`docs/briefs/M6-anvil-live-leg.md`.
+
+Before it: **M4a** — the first *earned* advantage, and it is bounded on both sides.
 FrontierView's temporary impact is a 0.6-power law, which Almgren–Chriss has no closed form
 for; the vendored library linearises at the tangent and solves that instead. M4a makes the
 power law the world, and the agent has to find *that* world's optimum while the tangent-derived
@@ -123,10 +131,43 @@ is deliberately narrower than it might sound.
   makes liquidity a second, *independent* noise source, which is what actually breaks
   analytic grading and the antithetic pairing — M4a deliberately left the observation
   untouched so that a red result could be attributed to one thing.
-- **Phase 3 — it runs on a wire against synthetic data.** The stretch leg (M6) works a parent
-  order on the live Anvil book. That is plumbing evidence — the policy speaks a versioned
-  venue protocol end to end — and not execution-quality evidence: the flow it trades
-  against is a synthetic feeder, non-adversarial by construction.
+- **Phase 3 — it ran on a wire, and the venue did exactly what was predicted.** The
+  stretch leg (M6) is done. The trained policy — M4a's median seed, exported as a
+  committed `.npz` and run through a numpy forward pass with no torch on the client's
+  import path — worked a 1,000-share parent order over 13 bins on a live
+  [Anvil](https://anvil.garethcooke.com) book, as `PROTOCOL.md`'s **third independent
+  client** after the browser UI and DepthCharge, with **zero changes to Anvil**. It
+  reports **11.21 bps of arrival slippage** against a $10.0000 book-snapshot mid.
+  **The number is not the result.** It was *predicted first*: a committed counterparty
+  ladder plus a deterministic policy plus deterministic matching makes every fill price
+  and quantity computable in closed form before anything is sent, and three ladder shapes
+  came back matching level for level — reference 11.21 bps, a deliberately thin book
+  22.85, a wide-spread book 33.63, each to the digit and each reproduced across two
+  revisions. A dozen lines of Python on one side, Anvil's C++ matching engine over a wire
+  on the other: M1's differential-oracle pattern applied to the wire leg. Arrival slippage
+  from a book the client built was never going to say anything about execution quality;
+  this makes it say something about client correctness, which is the one thing it can
+  certify. The demo trades against its own liquidity and says so.
+  The thin ladder is where the closed loop is *exercised* rather than merely present: the
+  simulator's `step` clips to `[0, inventory]` and has always filled exactly what was
+  asked, so a partial fill is a state the policy has never seen. Bin one asked for 421
+  against 375 of depth, swept all eight levels, was filled short, had its resting
+  remainder cancelled — **accepted is not filled**, since Anvil has no market orders and a
+  mispriced limit rests silently — and carried the shortfall into the next observation.
+  A separate demonstration run against Anvil's own feeder took 641 third-party fills on
+  the ticker while it worked, saw its limit price move 675 ticks between bins, and still
+  filled and reconciled: 12.36 bps, reported separately because it is reproducible only in
+  the weak sense. With the feeder seed pinned and the server restarted each time it gave
+  12.3820, 12.3752, 12.3752 and 12.3587 bps across four attempts, which is what that
+  caveat means measured rather than asserted.
+  Every run reconciles or is void: the quantity attributed by `takerId` must equal the
+  parent order, and there is no reconciliation path. Deleting one `trade` frame from a
+  live run — the exact loss the wire cannot signal — voids the measurement, with the
+  number written down under a name nothing could mistake for the reported one.
+  It is still plumbing evidence and not execution-quality evidence: the flow is synthetic
+  and non-adversarial, the sample is one order, and there is no baseline it could fairly
+  be compared against. No ε, no capture fraction and no oracle comparison appears beside
+  an Anvil number — none of them is defined on this venue.
 
 **None of this establishes real-market performance.** That would need real fills, or
 historical order-book data to replay against, and neither is in the portfolio. Every number
@@ -145,7 +186,7 @@ temper/     the package: oracle/ (AC closed forms), env/ (seeded market models),
 configs/    one committed config per experiment/figure
 tests/      pytest; golden/vendor/ holds FrontierView-generated fixtures (provenance-stamped)
 results/    committed metrics JSON + figures — regenerable from config + seed
-client/     (M6) the Anvil participant — the only networked code
+client/     the Anvil participant — the only networked code, stdlib + numpy, no torch
 tools/      dev scripts
 docs/       milestone briefs (the work orders) + vendored contract snapshots
 ```
@@ -153,8 +194,10 @@ docs/       milestone briefs (the work orders) + vendored contract snapshots
 Orientation docs at root: `ARCHITECTURE.md` (the constitution — read first),
 `ROADMAP.md` (milestones and status). Practices that outgrew the milestone that found
 them live in [`docs/house-notes.md`](docs/house-notes.md) — currently *thread count is a
-reproducibility axis* and *below n ≈ 10, draw every trace*, both measured here and both
-applying to any project in the portfolio that reports a trained or sampled number.
+reproducibility axis*, *below n ≈ 10, draw every trace*, *the artefact writer is tested on
+fabricated data, not on the run*, and *a clock that cannot see the interval reports zero,
+not an error* — each measured here and each applying to any project in the portfolio that
+reports a trained, sampled or timed number.
 
 ## Build (host)
 
@@ -170,6 +213,9 @@ make validate      # M3 task 1: antithetic pairing at M2's λ, 10 seeds — a ni
 make frontier      # M3 tasks 4–5: the nine-λ sweep, then the frontier figure — a day
 make m4a-reference # M4a task 0: the power-law table and its three gates — minutes
 make m4a           # M4a task 5: ten seeds in the power-law world — ~2 h
+make checkpoint    # M6's prerequisite: export M4a's median seed as a policy .npz — ~15 min
+make m6-predict    # M6 task 4: the closed-form prediction; no server needed
+make m6            # M6 task 5: the measured ladder run against a live anvil_server
 ```
 
 `make test` is the per-commit gate and stays evening-sized (~15 s; the brief's ceiling is
@@ -209,6 +255,21 @@ the per-commit loop never waits on them:
   power-law world, everything except the world and the graded encoding identical to M3's
   point at the same λ. ~2 h, unattended. `make m4a-figure` redraws
   `results/m4a_degradation.png` from the committed JSON without training.
+
+- `make checkpoint` — M6's prerequisite, and a repo gap rather than an M6 one: until it
+  landed, every network this project trained was discarded the moment it had been graded.
+  It retrains **one** named seed of the committed M4a sweep and writes
+  `results/m4a_power_law_policy.npz` — plain numpy arrays, no pickle, provenance-stamped.
+  Which seed is a rule and not a choice: sort ascending by graded objective, take index
+  `n // 2`, which at an even seed count is the *worse* of the two central ranks, so the
+  tie-break can only cost. `tests/test_policy_checkpoint.py` re-applies that rule to the
+  committed sweep rather than trusting the file's own claim. ~15 min.
+- `make m6` and its siblings — the four Anvil runs, each needing a live `anvil_server`
+  (`make anvil-check` reads Anvil's documented behaviour back against one first). The
+  three measured runs build their own committed ladder with the feeder off and are
+  accepted on *realised matches predicted*; the demonstration run lets Anvil's feeder own
+  the book and is reported separately, with its seed and its caveat. `make m6-predict`
+  computes the prediction without a server, which is the order the milestone requires.
 
 Everything regenerates from a committed config plus one root seed. Every entry in
 `results/` carries the config's SHA-256 and the git revision that produced it, and the

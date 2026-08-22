@@ -168,7 +168,7 @@ M6_CONFIG ?= configs/m6_anvil.yaml
 # vendored snapshot is a set of predictions about somebody else's software; this
 # is what keeps them honest. Needs the feeder OFF.
 anvil-check:
-	$(PYTHON) -m pytest tests/test_anvil_live.py -m anvil -v
+	$(PYTHON) -m pytest tests/test_anvil_live.py tests/test_m6_void.py -m anvil -v
 
 # The prediction, computed from the committed ladder before anything is sent.
 # No server needed, and it is the order the brief requires.

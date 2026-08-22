@@ -355,18 +355,18 @@ softening.
 
 ## Definition of done
 
-- ☐ Checkpoint export committed as its own change; `.npz` + provenance + grade-reproducing test.
-- ☐ `docs/vendor/anvil-protocol.md` placed with provenance; ladder and parent order recorded.
-- ☐ numpy inference pinned against the training-time policy, no network needed.
-- ☐ `client/` speaks session, order entry and the stream; `temper/` untouched.
-- ☐ Repo-invariant test asserts the network seam from both sides.
-- ☐ Attribution by `takerId`; end-of-run reconciliation; an induced mismatch shown to void a run.
-- ☐ Arrival mid from the snapshot, with the `summary.last` reason at the call site.
-- ☐ Prediction computed before the run; realised matches predicted.
-- ☐ Ladder run complete, artefact committed and regenerable.
-- ☐ Feeder run complete, reported separately with its seed and its caveat.
-- ☐ README Phase-3 rung rewritten from promise to result.
-- ☐ `ROADMAP.md` M6 row flipped; MP Stage 2 noted unblocked; anything structural → §9.
+- ☑ Checkpoint export committed as its own change; `.npz` + provenance + grade-reproducing test.
+- ☑ `docs/vendor/anvil-protocol.md` placed with provenance; ladder and parent order recorded.
+- ☑ numpy inference pinned against the training-time policy, no network needed.
+- ☑ `client/` speaks session, order entry and the stream; `temper/` untouched.
+- ☑ Repo-invariant test asserts the network seam from both sides.
+- ☑ Attribution by `takerId`; end-of-run reconciliation; an induced mismatch shown to void a run.
+- ☑ Arrival mid from the snapshot, with the `summary.last` reason at the call site.
+- ☑ Prediction computed before the run; realised matches predicted.
+- ☑ Ladder run complete, artefact committed and regenerable.
+- ☑ Feeder run complete, reported separately with its seed and its caveat.
+- ☑ README Phase-3 rung rewritten from promise to result.
+- ☑ `ROADMAP.md` M6 row flipped; MP Stage 2 noted unblocked; anything structural → §9.
 
 ## Out of scope (resist)
 
@@ -376,6 +376,92 @@ logic — v2. Multiple parent orders or tickers, or any attempt to turn one demo
 sample. A second policy on the wire: vary the ladder instead. Retraining or touching
 `temper/agents/`. A latency claim — this is a Python client over HTTP against a demo
 transport, and quoting microseconds beside Anvil's own numbers would be embarrassing.
+
+## What happened — 2026-08-22
+
+Every pre-stated item met, nothing loosened, nothing void.
+
+| | |
+| --- | --- |
+| Prerequisite | `results/m4a_power_law_policy.npz` — ordinal 9 by amendment 1's rank rule, retrained on the reference box at 8 torch threads and **reproducing the committed objective bitwise** (J 2.383440447509 bps, capture 0.993874). Its own commit, before M6 started. |
+| Vendored contract | `docs/vendor/anvil-protocol.md`, Anvil `4801ed8`, wire version 1, body re-hashed on every commit |
+| Inference | plain numpy, matching the training-time actions to **3.0e-8** on the committed eval trajectory; importing the whole client — driver included — loads no torch, asserted in a subprocess |
+| **Ladder run (the measurement)** | filled 1,000 / 1,000, VWAP 99,887.9 ticks, arrival mid 100,000.0, **arrival slippage 11.2100 bps** — matching the closed-form prediction to the digit, bin for bin |
+| Thin ladder | 22.8500 bps, predicted; bin one filled 375 of 421 across all eight levels, remainder of 46 cancelled |
+| Wide ladder | 33.6300 bps, predicted |
+| Feeder run | 12.3587 bps; 641 third-party fills during the run, limit price moving 675 ticks between bins, 1,343 full replaces applied, whole order filled and reconciled |
+| Reconciliation | 1,000 attributed by `takerId` on every run; no third-party fill in any measured run; nothing void |
+| Suite | 1,246 tests, 48 s — the 3-minute ceiling untouched; live-server tests behind the `anvil` marker |
+
+**The prediction is the result; the bps figure is the demonstration.** All three
+measured runs were computed in closed form from the committed ladder *before* anything
+was sent, and re-run at a second revision reproduced both the prediction and the
+realisation to the digit. A dozen lines of Python (`Book.walk`) on one side and Anvil's
+C++ matching engine over a wire on the other — M1's differential-oracle pattern applied
+to the wire leg, and the only thing arrival slippage from a book the client built could
+ever certify.
+
+**Two kinds of reproducibility, measured rather than asserted.** The measured runs
+reproduce exactly across revisions. The feeder run, with `ANVIL_FEEDER_SEED` pinned to
+20260822 and the server restarted each time, gave **12.3820 / 12.3752 / 12.3752 /
+12.3587 bps** across four attempts: a pinned seed fixes the feeder's *draw sequence*, not
+when each draw lands relative to the client's bins. That is what "weak" means, in numbers.
+
+**Three things the brief predicted from the source and the run confirmed**, all recorded
+in task 0's gate: the six-field New with a blank id, the uniform ownership reject, and a
+marketable sell resting its remainder while still returning `accepted: true`. **Two it did
+not**: the book publishes on the ~14 Hz tick, so `GET /api/book` lags a POST verdict by up
+to ~70 ms; and a measured run must start on an empty book, because an order left by a
+dead session cannot be cancelled and silently changes the ladder the prediction was
+computed from.
+
+**Three bugs found by running it, none by reading it.** The WebSocket reader consumed a
+frame header before its payload arrived, so a zero-timeout poll — the client's steady
+state — would resume mid-frame and read a body as a header. `time.monotonic()` on Windows
+is `GetTickCount64` at ~15.6 ms, so thirteen consecutive ping round-trips measured exactly
+0.0 (`perf_counter` puts them at ~0.23 ms). And the prediction and the venue speak at
+different granularities, both correctly: a prediction is computed from the published book,
+which aggregates by price, while a `trade` frame is one fill against one *maker order* —
+the client's own replenishment leaves several orders at a price, so bin two of the first
+run came back as 78 + 46 at 9.99 where the prediction said 124. The comparison merges by
+price and the frame counts travel beside it, because which resting order supplies a share
+is queue position and that is v2.
+
+**Void was demonstrated rather than described.** Deleting one `trade` frame from the final
+bin of a live run — the exact loss the wire cannot signal, since ring overflow is
+unsignalled and the `seq` gap is undetectable — voids the measurement with the reason
+recorded, end to end (`tests/test_m6_void.py`, `anvil` marker). The frame is dropped in the
+*last* bin deliberately: drop one earlier and the client re-sells shares it has already
+sold, and the totals can coincidentally reconcile, which is itself the argument for
+checking attributed quantity against the parent order rather than against anything the
+client believes about itself.
+
+**Not done, and deliberately.** The deployment run against `anvil.garethcooke.com` was
+optional and was not taken: the demo book is a shared, unauthenticated floor, so a
+third-party fill would make it a successful demonstration and a void measurement, and the
+local runs already establish both halves. It stays available as a one-command run against
+the same client.
+
+### What this hands MP Stage 2
+
+One paragraph a portfolio page can quote without softening:
+
+> The trained execution policy works a parent order on a live Anvil book over the venue's
+> versioned wire, as `PROTOCOL.md`'s third independent client after the browser UI and
+> DepthCharge, with zero changes to Anvil. It reports 11.21 bps of arrival slippage
+> against a $10.0000 book mid — and the number was *predicted before it was measured*: a
+> committed counterparty ladder, a deterministic policy and deterministic matching make
+> every fill price and quantity computable in closed form beforehand, and three ladder
+> shapes came back matching level for level, to the digit, across two revisions. That is
+> plumbing evidence, not execution-quality evidence: the flow is synthetic, the sample is
+> one order, and there is no baseline it could fairly be compared against. What it
+> certifies is that the client is correct — which is the only thing arrival slippage from
+> a book the client built ever could.
+
+Artefacts: `results/m6_anvil_ladder.json` (the measurement), `_thin` and `_wide` (the
+prediction machinery), `_feeder` (the demonstration, weak reproducibility, reported
+separately). The schedule figure the portal wants is the per-bin fill table in each
+artefact; nothing new needs generating.
 
 ## Session notes
 

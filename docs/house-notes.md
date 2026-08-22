@@ -103,3 +103,37 @@ input is not a compromise — the reporter's contract is over data, not over how
 obtained — and it converts "found after the run" into "found before it". A useful smell:
 if a function's only test is marked slow, ask whether the function is actually slow or
 merely *downstream* of something that is.
+
+---
+
+## A clock that cannot see the interval reports zero, not an error
+
+**Rule.** Any measurement of a short interval uses `time.perf_counter()` (or the platform's
+high-resolution counter), never `time.monotonic()`. Both are monotonic and only one is
+*fine*, and the difference is silent: a clock too coarse to see the interval does not fail,
+it returns `0.0`. Before reporting a timing, look at the distribution — a column of exact
+zeros, or of values that are all multiples of one number, is a measurement of the clock
+rather than of the thing.
+
+**Measured (M6, 2026-08-22).** The Anvil client pings its WebSocket once a bin and records
+the round-trip, because a pong is queued behind whatever is already waiting for the socket
+and is therefore the only true end-to-end freshness signal the wire offers. Thirteen
+consecutive bins reported **exactly `0.0` seconds**. Nothing was wrong with the ping: on
+Windows CPython implements `time.monotonic()` as `GetTickCount64`, whose resolution is
+~15.6 ms, and a loopback round-trip is ~0.23 ms. Switching to `perf_counter` produced
+0.20–0.50 ms with one 15.6 ms outlier — which is, of course, the old clock's tick showing
+through the scheduler.
+
+**How it is applied here.** `client/wire.py` and `client/run.py` time everything with
+`perf_counter`, and `temper/eval/sweep.py` already did. The M6 artefacts carry the per-bin
+ping series, and `tests/test_m6_runs.py` asserts a bound on it — a run that priced against
+a stale book would still have produced a number, so the freshness series is evidence rather
+than decoration.
+
+**Why it generalises.** It is the same shape as a benchmark that reports 0 ns because the
+compiler removed the loop: the instrument returns a plausible value for "too small to see",
+and a plausible value is exactly what nobody investigates. The tell is *implausible
+regularity* — repeated exact zeros, or a quantised column — and it costs nothing to look
+for. Anvil's latency work and Crucible's benchmark captures both live or die on this, and
+both already use high-resolution counters; the note exists so the next Python tool in the
+portfolio does not have to rediscover which of the two obvious clocks is the right one.
