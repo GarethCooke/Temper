@@ -6,7 +6,7 @@
   "provenance": {
     "config": "m6_anvil.yaml",
     "config_sha256": "2b1bd379a2055c946bac1606cb654219b0bc3e9e5fed04ff4bce1bc3c8ee4807",
-    "git_rev": "ac98357121f99d7018871f3fdefbcbe97f0d230f",
+    "git_rev": "798dad6a15d7fb64c443e184f1c77fc9dcd8c17c",
     "git_dirty": false,
     "python": "3.12.2"
   },
@@ -64,7 +64,7 @@
     "ticker": 101,
     "wire_version": 1
   },
-  "operator_note": "anvil_server from Anvil 864ee2f (build-msvc/Release): ANVIL_TICKERS=101 ANVIL_DEFAULT_TICKER=101 ANVIL_FEEDER=1 ANVIL_FEEDER_SEED=20260822 ANVIL_PORT=18080; feeder defaults otherwise (rate 200/s aggregate, cross_frac 0.10, depth_levels 8, max_resting 256, centre 10.0000)",
+  "operator_note": "anvil_server from Anvil 864ee2f (build-msvc/Release): ANVIL_TICKERS=101 ANVIL_DEFAULT_TICKER=101 ANVIL_FEEDER=1 ANVIL_FEEDER_SEED=20260822 ANVIL_PORT=18080, restarted immediately before this run; feeder defaults otherwise (rate 200/s aggregate, cross_frac 0.10, depth_levels 8, max_resting 256, centre 10.0000)",
   "order": {
     "side": "S",
     "parent": 1000
@@ -101,7 +101,7 @@
     "arrival_mid_ticks": 100001.0,
     "filled": 1000,
     "complete": true,
-    "vwap_ticks": 99877.247,
+    "vwap_ticks": 99877.412,
     "bins": [
       {
         "bin": 0,
@@ -193,7 +193,7 @@
         "unfilled": 0,
         "inventory_after": 357,
         "notional_tick_shares": 22172764,
-        "order_id": "obg"
+        "order_id": "obh"
       },
       {
         "bin": 2,
@@ -227,7 +227,7 @@
         "unfilled": 0,
         "inventory_after": 233,
         "notional_tick_shares": 12399444,
-        "order_id": "oip"
+        "order_id": "oio"
       },
       {
         "bin": 3,
@@ -279,7 +279,7 @@
         "unfilled": 0,
         "inventory_after": 109,
         "notional_tick_shares": 4896472,
-        "order_id": "ox4"
+        "order_id": "ox3"
       },
       {
         "bin": 5,
@@ -305,7 +305,7 @@
         "unfilled": 0,
         "inventory_after": 76,
         "notional_tick_shares": 3297195,
-        "order_id": "o14c"
+        "order_id": "o14b"
       },
       {
         "bin": 6,
@@ -331,7 +331,7 @@
         "unfilled": 0,
         "inventory_after": 54,
         "notional_tick_shares": 2197294,
-        "order_id": "o1bj"
+        "order_id": "o1bi"
       },
       {
         "bin": 7,
@@ -357,7 +357,7 @@
         "unfilled": 0,
         "inventory_after": 38,
         "notional_tick_shares": 1598576,
-        "order_id": "o1ir"
+        "order_id": "o1iq"
       },
       {
         "bin": 8,
@@ -368,13 +368,13 @@
         "limit_ticks": 99215,
         "fills": [
           {
-            "price_ticks": 100043,
+            "price_ticks": 100058,
             "qty": 11
           }
         ],
         "levels": [
           {
-            "price_ticks": 100043,
+            "price_ticks": 100058,
             "qty": 11
           }
         ],
@@ -382,8 +382,8 @@
         "filled": 11,
         "unfilled": 0,
         "inventory_after": 27,
-        "notional_tick_shares": 1100473,
-        "order_id": "o1pz"
+        "notional_tick_shares": 1100638,
+        "order_id": "o1px"
       },
       {
         "bin": 9,
@@ -409,7 +409,7 @@
         "unfilled": 0,
         "inventory_after": 19,
         "notional_tick_shares": 797832,
-        "order_id": "o1x6"
+        "order_id": "o1x4"
       },
       {
         "bin": 10,
@@ -435,7 +435,7 @@
         "unfilled": 0,
         "inventory_after": 13,
         "notional_tick_shares": 599550,
-        "order_id": "o24e"
+        "order_id": "o24c"
       },
       {
         "bin": 11,
@@ -461,7 +461,7 @@
         "unfilled": 0,
         "inventory_after": 9,
         "notional_tick_shares": 399108,
-        "order_id": "o2bl"
+        "order_id": "o2bk"
       },
       {
         "bin": 12,
@@ -487,7 +487,7 @@
         "unfilled": 0,
         "inventory_after": 0,
         "notional_tick_shares": 898416,
-        "order_id": "o2iu"
+        "order_id": "o2ir"
       }
     ]
   },
@@ -501,8 +501,8 @@
   },
   "measurement": {
     "arrival_mid_ticks": 100001.0,
-    "realised_vwap_ticks": 99877.247,
-    "realised_slippage_bps": 12.375176248237215,
+    "realised_vwap_ticks": 99877.412,
+    "realised_slippage_bps": 12.358676413236205,
     "unreported_bps": null,
     "predicted_slippage_bps": null,
     "void": false,
@@ -510,47 +510,48 @@
     "label": "demo, not an evaluation (ARCHITECTURE.md \u00a77)"
   },
   "stream": {
-    "book_replaces": 1343,
+    "book_replaces": 1347,
+    "reconnects": 0,
     "ping_seconds": [
-      0.00015559999974357197,
-      0.0003356000006533577,
-      0.00035959999968326883,
-      0.0001872000002549612,
-      0.0004994000000806409,
-      0.0002580999998826883,
-      0.00021160000051168026,
-      0.0002919999997175182,
-      0.00020490000042627798,
-      0.0002506000000721542,
-      0.0001812999998946907,
-      0.0002733000001171604,
-      0.0001581999995323713
+      0.0002119999999194988,
+      0.00020880000010947697,
+      0.0003087999994022539,
+      0.00037929999962216243,
+      0.00021770000057586003,
+      0.0002829999993991805,
+      0.0002440999996906612,
+      0.00018420000014884863,
+      0.0002730999995037564,
+      0.0002523000002838671,
+      0.0002539999995860853,
+      0.00021780000042781467,
+      0.0002658000003066263
     ],
     "note": "ping round-trip is the only true freshness signal the wire offers: the pong is queued behind whatever is already waiting for the socket, so it cannot overtake stale frames (vendored \u00a73, Keepalive). seq is used here as a dedupe key and nothing else \u2014 it cannot detect a gap (\u00a71, \u00a74)."
   },
   "events": [
     {
-      "t": 1787436266.08,
+      "t": 1787436927.324,
       "event": "health",
       "status": "ok",
       "wireVersion": 1
     },
     {
-      "t": 1787436266.29,
+      "t": 1787436927.539,
       "event": "warmup",
-      "seconds": 0.209
+      "seconds": 0.214
     },
     {
-      "t": 1787436266.801,
+      "t": 1787436928.05,
       "event": "arrival",
       "mid_ticks": 100001.0,
       "best_bid": 99952,
       "best_ask": 100050,
-      "bid_depth": 1784,
+      "bid_depth": 1826,
       "ask_depth": 1676
     },
     {
-      "t": 1787436267.573,
+      "t": 1787436928.821,
       "event": "worked",
       "bin": 0,
       "order": "o1e",
@@ -559,25 +560,25 @@
       "fills": 4
     },
     {
-      "t": 1787436275.563,
+      "t": 1787436936.823,
       "event": "worked",
       "bin": 1,
-      "order": "obg",
+      "order": "obh",
       "requested": 222,
       "limit": "9.9015",
       "fills": 3
     },
     {
-      "t": 1787436283.596,
+      "t": 1787436944.839,
       "event": "worked",
       "bin": 2,
-      "order": "oip",
+      "order": "oio",
       "requested": 124,
       "limit": "9.9023",
       "fills": 2
     },
     {
-      "t": 1787436291.584,
+      "t": 1787436952.839,
       "event": "worked",
       "bin": 3,
       "order": "opw",
@@ -586,82 +587,82 @@
       "fills": 1
     },
     {
-      "t": 1787436299.611,
+      "t": 1787436960.83,
       "event": "worked",
       "bin": 4,
-      "order": "ox4",
+      "order": "ox3",
       "requested": 49,
       "limit": "9.8915",
       "fills": 1
     },
     {
-      "t": 1787436307.621,
+      "t": 1787436968.843,
       "event": "worked",
       "bin": 5,
-      "order": "o14c",
+      "order": "o14b",
       "requested": 33,
       "limit": "9.8764",
       "fills": 1
     },
     {
-      "t": 1787436315.623,
+      "t": 1787436976.829,
       "event": "worked",
       "bin": 6,
-      "order": "o1bj",
+      "order": "o1bi",
       "requested": 22,
       "limit": "9.8778",
       "fills": 1
     },
     {
-      "t": 1787436323.63,
+      "t": 1787436984.856,
       "event": "worked",
       "bin": 7,
-      "order": "o1ir",
+      "order": "o1iq",
       "requested": 16,
       "limit": "9.9003",
       "fills": 1
     },
     {
-      "t": 1787436331.644,
+      "t": 1787436992.857,
       "event": "worked",
       "bin": 8,
-      "order": "o1pz",
+      "order": "o1px",
       "requested": 11,
       "limit": "9.9215",
       "fills": 1
     },
     {
-      "t": 1787436339.647,
+      "t": 1787437000.849,
       "event": "worked",
       "bin": 9,
-      "order": "o1x6",
+      "order": "o1x4",
       "requested": 8,
       "limit": "9.8633",
       "fills": 1
     },
     {
-      "t": 1787436347.661,
+      "t": 1787437008.855,
       "event": "worked",
       "bin": 10,
-      "order": "o24e",
+      "order": "o24c",
       "requested": 6,
       "limit": "9.854",
       "fills": 1
     },
     {
-      "t": 1787436355.65,
+      "t": 1787437016.874,
       "event": "worked",
       "bin": 11,
-      "order": "o2bl",
+      "order": "o2bk",
       "requested": 4,
       "limit": "9.8603",
       "fills": 1
     },
     {
-      "t": 1787436363.679,
+      "t": 1787437024.881,
       "event": "worked",
       "bin": 12,
-      "order": "o2iu",
+      "order": "o2ir",
       "requested": 9,
       "limit": "9.8686",
       "fills": 1

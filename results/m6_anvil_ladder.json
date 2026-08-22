@@ -6,7 +6,7 @@
   "provenance": {
     "config": "m6_anvil.yaml",
     "config_sha256": "2b1bd379a2055c946bac1606cb654219b0bc3e9e5fed04ff4bce1bc3c8ee4807",
-    "git_rev": "a217163f9d1bac43a427b01e4cbc5edf6b6611e8",
+    "git_rev": "798dad6a15d7fb64c443e184f1c77fc9dcd8c17c",
     "git_dirty": false,
     "python": "3.12.2"
   },
@@ -64,6 +64,7 @@
     "ticker": 101,
     "wire_version": 1
   },
+  "operator_note": "anvil_server from Anvil 864ee2f (build-msvc/Release): ANVIL_TICKERS=101 ANVIL_DEFAULT_TICKER=101 ANVIL_FEEDER=0 ANVIL_PORT=18080, restarted immediately before this run so the book was empty",
   "order": {
     "side": "S",
     "parent": 1000
@@ -1277,40 +1278,41 @@
     "label": "demo, not an evaluation (ARCHITECTURE.md \u00a77)"
   },
   "stream": {
-    "book_replaces": 1334,
+    "book_replaces": 1346,
+    "reconnects": 0,
     "ping_seconds": [
-      0.00019470000006549526,
-      0.00021720000040659215,
-      0.00021490000017365674,
-      0.00017870000010589138,
-      0.0002227000004495494,
-      0.00020260000019334257,
-      0.00021550000019487925,
-      0.0002932999996119179,
-      0.00020909999966534087,
-      0.00031960000069375383,
-      0.00027570000020205043,
-      0.00023390000023937318,
-      0.00020760000006703194
+      0.0002331000005142414,
+      0.0003011999997397652,
+      0.00023580000015499536,
+      0.0001733999997668434,
+      0.0002463999999235966,
+      0.000178799999957846,
+      0.00017889999980980065,
+      0.00018909999926108867,
+      0.0002303000001120381,
+      0.00030030000016267877,
+      0.00023179999971034704,
+      0.0002372999997533043,
+      0.000206100000468723
     ],
     "note": "ping round-trip is the only true freshness signal the wire offers: the pong is queued behind whatever is already waiting for the socket, so it cannot overtake stale frames (vendored \u00a73, Keepalive). seq is used here as a dedupe key and nothing else \u2014 it cannot detect a gap (\u00a71, \u00a74)."
   },
   "events": [
     {
-      "t": 1787435324.962,
+      "t": 1787436555.737,
       "event": "health",
       "status": "ok",
       "wireVersion": 1
     },
     {
-      "t": 1787435325.098,
+      "t": 1787436555.917,
       "event": "ladder_posted",
       "shape": "reference",
       "orders": 16,
       "depth_per_side": 1410
     },
     {
-      "t": 1787435326.614,
+      "t": 1787436557.432,
       "event": "arrival",
       "mid_ticks": 100000.0,
       "best_bid": 99900,
@@ -1319,7 +1321,7 @@
       "ask_depth": 1410
     },
     {
-      "t": 1787435328.132,
+      "t": 1787436558.951,
       "event": "worked",
       "bin": 0,
       "order": "oh",
@@ -1328,13 +1330,13 @@
       "fills": 2
     },
     {
-      "t": 1787435334.651,
+      "t": 1787436565.465,
       "event": "replenished",
       "bin": 1,
       "shares": 421
     },
     {
-      "t": 1787435336.168,
+      "t": 1787436566.983,
       "event": "worked",
       "bin": 1,
       "order": "ok",
@@ -1343,13 +1345,13 @@
       "fills": 1
     },
     {
-      "t": 1787435342.643,
+      "t": 1787436573.442,
       "event": "replenished",
       "bin": 2,
       "shares": 222
     },
     {
-      "t": 1787435344.177,
+      "t": 1787436574.971,
       "event": "worked",
       "bin": 2,
       "order": "om",
@@ -1358,13 +1360,13 @@
       "fills": 2
     },
     {
-      "t": 1787435350.646,
+      "t": 1787436581.47,
       "event": "replenished",
       "bin": 3,
       "shares": 124
     },
     {
-      "t": 1787435352.18,
+      "t": 1787436583.001,
       "event": "worked",
       "bin": 3,
       "order": "oo",
@@ -1373,13 +1375,13 @@
       "fills": 1
     },
     {
-      "t": 1787435358.654,
+      "t": 1787436589.476,
       "event": "replenished",
       "bin": 4,
       "shares": 75
     },
     {
-      "t": 1787435360.187,
+      "t": 1787436591.007,
       "event": "worked",
       "bin": 4,
       "order": "oq",
@@ -1388,13 +1390,13 @@
       "fills": 1
     },
     {
-      "t": 1787435366.646,
+      "t": 1787436597.489,
       "event": "replenished",
       "bin": 5,
       "shares": 49
     },
     {
-      "t": 1787435368.161,
+      "t": 1787436599.003,
       "event": "worked",
       "bin": 5,
       "order": "os",
@@ -1403,13 +1405,13 @@
       "fills": 1
     },
     {
-      "t": 1787435374.668,
+      "t": 1787436605.505,
       "event": "replenished",
       "bin": 6,
       "shares": 33
     },
     {
-      "t": 1787435376.2,
+      "t": 1787436607.036,
       "event": "worked",
       "bin": 6,
       "order": "ou",
@@ -1418,13 +1420,13 @@
       "fills": 2
     },
     {
-      "t": 1787435382.675,
+      "t": 1787436613.508,
       "event": "replenished",
       "bin": 7,
       "shares": 22
     },
     {
-      "t": 1787435384.204,
+      "t": 1787436615.022,
       "event": "worked",
       "bin": 7,
       "order": "ow",
@@ -1433,13 +1435,13 @@
       "fills": 1
     },
     {
-      "t": 1787435390.68,
+      "t": 1787436621.498,
       "event": "replenished",
       "bin": 8,
       "shares": 16
     },
     {
-      "t": 1787435392.198,
+      "t": 1787436623.014,
       "event": "worked",
       "bin": 8,
       "order": "oy",
@@ -1448,13 +1450,13 @@
       "fills": 1
     },
     {
-      "t": 1787435398.668,
+      "t": 1787436629.514,
       "event": "replenished",
       "bin": 9,
       "shares": 11
     },
     {
-      "t": 1787435400.183,
+      "t": 1787436631.035,
       "event": "worked",
       "bin": 9,
       "order": "o10",
@@ -1463,13 +1465,13 @@
       "fills": 1
     },
     {
-      "t": 1787435406.683,
+      "t": 1787436637.534,
       "event": "replenished",
       "bin": 10,
       "shares": 8
     },
     {
-      "t": 1787435408.201,
+      "t": 1787436639.054,
       "event": "worked",
       "bin": 10,
       "order": "o12",
@@ -1478,13 +1480,13 @@
       "fills": 1
     },
     {
-      "t": 1787435414.677,
+      "t": 1787436645.54,
       "event": "replenished",
       "bin": 11,
       "shares": 6
     },
     {
-      "t": 1787435416.198,
+      "t": 1787436647.057,
       "event": "worked",
       "bin": 11,
       "order": "o14",
@@ -1493,13 +1495,13 @@
       "fills": 1
     },
     {
-      "t": 1787435422.704,
+      "t": 1787436653.529,
       "event": "replenished",
       "bin": 12,
       "shares": 4
     },
     {
-      "t": 1787435424.22,
+      "t": 1787436655.048,
       "event": "worked",
       "bin": 12,
       "order": "o16",
