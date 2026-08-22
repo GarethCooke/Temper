@@ -493,6 +493,7 @@ def build_document(
     realised: Execution | None,
     tape: TradeTape | None,
     session: Session | None,
+    note: str = "",
 ) -> dict:
     provenance = stamp(config.path, REPO_ROOT)
     ladder = config.ladder
@@ -522,6 +523,11 @@ def build_document(
             "source_result": policy.metadata.get("source_result"),
         },
         "venue": dict(config.venue),
+        # How the *server* was configured, which the client cannot read off the
+        # wire: the feeder's seed lives in anvil_server's environment. Recorded
+        # verbatim rather than parsed, because it is the operator's statement
+        # about a thing outside this repo.
+        "operator_note": note,
         "order": {"side": config.side, "parent": config.parent},
         "ladder": {
             "name": ladder.name,
@@ -691,6 +697,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--no-write", action="store_true", help="report, but write no artefact"
     )
+    parser.add_argument(
+        "--note",
+        default="",
+        help=(
+            "free text recorded verbatim in the artefact. For the feeder run "
+            "this is where the server's own configuration goes — the client "
+            "cannot read ANVIL_FEEDER_SEED, and a demonstration whose only "
+            "reproducibility hook is a seed should carry it"
+        ),
+    )
     args = parser.parse_args(argv)
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
@@ -714,7 +730,9 @@ def main(argv: list[str] | None = None) -> int:
         else None
     )
     if args.dry_run:
-        document = build_document(config, policy, predicted, None, None, None)
+        document = build_document(
+            config, policy, predicted, None, None, None, note=args.note
+        )
         _report(document)
         if not args.no_write:
             _write(config, document, suffix="_prediction")
@@ -726,7 +744,9 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         if session.stream is not None:
             session.teardown()
-    document = build_document(config, policy, predicted, realised, session.tape, session)
+    document = build_document(
+        config, policy, predicted, realised, session.tape, session, note=args.note
+    )
     _report(document)
     if not args.no_write:
         _write(config, document)

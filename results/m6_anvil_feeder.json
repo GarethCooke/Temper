@@ -1,0 +1,669 @@
+{
+  "milestone": "M6",
+  "run": "feeder",
+  "label": "feeder run - demonstration, weak reproducibility",
+  "claim": "A trained execution policy worked one parent order on a live Anvil book over the versioned wire, as PROTOCOL.md's third independent client, with zero changes to Anvil. This is plumbing evidence, not execution-quality evidence: the flow is synthetic, the sample is one order, and there is no baseline it can fairly be compared against (ARCHITECTURE.md \u00a77). No epsilon, no capture fraction and no oracle comparison appears here \u2014 none of them is defined on this venue.",
+  "provenance": {
+    "config": "m6_anvil.yaml",
+    "config_sha256": "2b1bd379a2055c946bac1606cb654219b0bc3e9e5fed04ff4bce1bc3c8ee4807",
+    "git_rev": "ce38a372aada9956d523536dd37832bf497a763a",
+    "git_dirty": false,
+    "python": "3.12.2"
+  },
+  "policy": {
+    "checkpoint": "results/m4a_power_law_policy.npz",
+    "name": "m4a-seed9",
+    "n_bins": 13,
+    "selection": {
+      "rule": "the sweep's seeds sorted ascending by graded objective (a cost, so best-first), index n // 2 \u2014 the upper of the two central ranks, which at an even seed count is the worse of the two. A tie-break that can only cost, so the exported policy is at or below the sweep's median and never above it.",
+      "ordinal": 9,
+      "n_seeds": 10,
+      "rank_from_best": 6,
+      "sweep_median_objective_bps": 2.38342975003669
+    },
+    "grade": {
+      "name": "seed9",
+      "encoding": "power_law",
+      "expected_bps": 1.4679385347113973,
+      "variance_bps2": 2895.071246682515,
+      "objective_bps": 2.383440447509391,
+      "excess_bps": 0.00022507451124953448,
+      "relative_excess": 9.444153214167354e-05,
+      "gap_fraction": 0.00015141068275771862,
+      "advantage_fraction": 0.006125667695377409,
+      "capture_fraction": 0.9938743323046226,
+      "deviation_shares": 702.4713045130367,
+      "red_flag": false,
+      "trajectory": [
+        100000.0,
+        57948.1840133667,
+        35762.9968582323,
+        23329.66409716237,
+        15786.620425786188,
+        10920.586946939104,
+        7649.614819730991,
+        5392.501621827512,
+        3810.0406939471445,
+        2690.729667775362,
+        1895.871862410368,
+        1331.0912556322337,
+        930.4965380207984,
+        0.0
+      ]
+    },
+    "source_result": {
+      "path": "results/m4a_power_law.json",
+      "sha256": "897e5cddecfc6f98b46869be667f6318b5856a926a91e2e50c8cf1eb9fddc3b7",
+      "git_rev": "9de3d7b782bbe60a6b2ee6a126343d80ab38ca6f"
+    }
+  },
+  "venue": {
+    "host": "127.0.0.1",
+    "port": 18080,
+    "scheme": "http",
+    "ticker": 101,
+    "wire_version": 1
+  },
+  "order": {
+    "side": "S",
+    "parent": 1000
+  },
+  "ladder": {
+    "name": "reference",
+    "built_by_client": false,
+    "centre_ticks": 100000,
+    "half_spread_ticks": 100,
+    "spacing_ticks": 100,
+    "quantities": [
+      300,
+      260,
+      220,
+      180,
+      150,
+      120,
+      100,
+      80
+    ],
+    "depth_per_side": 1410
+  },
+  "grid": {
+    "n_bins": 13,
+    "bin_seconds": 8.0,
+    "settle_seconds": 0.75,
+    "note": "13 bins, as the policy was trained on \u2014 the bin *count* is part of the observation's clock and is not a free choice. The wall-clock length is: the 6.5-hour grid compresses to minutes because no market parameter enters at inference."
+  },
+  "predicted": null,
+  "reproducibility": "weak. This run does not build its own book: Anvil's feeder does, and keeps trading it. Book state is wall-clock dependent, so the run is not byte-regenerable and there is no closed-form prediction to check it against \u2014 there cannot be. It is a demonstration that the client survives a book that moves between its bins because of somebody else's flow, which is the one thing the measured runs cannot show, and it is reported separately for that reason.",
+  "realised": {
+    "parent": 1000,
+    "side": "S",
+    "arrival_mid_ticks": 100001.0,
+    "filled": 1000,
+    "complete": true,
+    "vwap_ticks": 99877.247,
+    "bins": [
+      {
+        "bin": 0,
+        "time_remaining": 1.0,
+        "inventory_before": 1000,
+        "fraction": 0.4205181300640106,
+        "requested": 421,
+        "limit_ticks": 99168,
+        "fills": [
+          {
+            "price_ticks": 99840,
+            "qty": 54
+          },
+          {
+            "price_ticks": 99789,
+            "qty": 181
+          },
+          {
+            "price_ticks": 99780,
+            "qty": 74
+          },
+          {
+            "price_ticks": 99707,
+            "qty": 112
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99840,
+            "qty": 54
+          },
+          {
+            "price_ticks": 99789,
+            "qty": 181
+          },
+          {
+            "price_ticks": 99780,
+            "qty": 74
+          },
+          {
+            "price_ticks": 99707,
+            "qty": 112
+          }
+        ],
+        "trade_frames": 4,
+        "filled": 421,
+        "unfilled": 0,
+        "inventory_after": 579,
+        "notional_tick_shares": 42004073,
+        "order_id": "o1e"
+      },
+      {
+        "bin": 1,
+        "time_remaining": 0.9230769230769231,
+        "inventory_before": 579,
+        "fraction": 0.3827771246433258,
+        "requested": 222,
+        "limit_ticks": 99015,
+        "fills": [
+          {
+            "price_ticks": 99899,
+            "qty": 8
+          },
+          {
+            "price_ticks": 99891,
+            "qty": 148
+          },
+          {
+            "price_ticks": 99844,
+            "qty": 66
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99899,
+            "qty": 8
+          },
+          {
+            "price_ticks": 99891,
+            "qty": 148
+          },
+          {
+            "price_ticks": 99844,
+            "qty": 66
+          }
+        ],
+        "trade_frames": 3,
+        "filled": 222,
+        "unfilled": 0,
+        "inventory_after": 357,
+        "notional_tick_shares": 22172764,
+        "order_id": "obh"
+      },
+      {
+        "bin": 2,
+        "time_remaining": 0.8461538461538461,
+        "inventory_before": 357,
+        "fraction": 0.3475264012813568,
+        "requested": 124,
+        "limit_ticks": 99023,
+        "fills": [
+          {
+            "price_ticks": 99999,
+            "qty": 16
+          },
+          {
+            "price_ticks": 99995,
+            "qty": 108
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99999,
+            "qty": 16
+          },
+          {
+            "price_ticks": 99995,
+            "qty": 108
+          }
+        ],
+        "trade_frames": 2,
+        "filled": 124,
+        "unfilled": 0,
+        "inventory_after": 233,
+        "notional_tick_shares": 12399444,
+        "order_id": "oio"
+      },
+      {
+        "bin": 3,
+        "time_remaining": 0.7692307692307692,
+        "inventory_before": 233,
+        "fraction": 0.3232489228248596,
+        "requested": 75,
+        "limit_ticks": 99130,
+        "fills": [
+          {
+            "price_ticks": 100214,
+            "qty": 75
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 100214,
+            "qty": 75
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 75,
+        "unfilled": 0,
+        "inventory_after": 158,
+        "notional_tick_shares": 7516050,
+        "order_id": "opw"
+      },
+      {
+        "bin": 4,
+        "time_remaining": 0.6923076923076923,
+        "inventory_before": 158,
+        "fraction": 0.30827510356903076,
+        "requested": 49,
+        "limit_ticks": 98915,
+        "fills": [
+          {
+            "price_ticks": 99928,
+            "qty": 49
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99928,
+            "qty": 49
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 49,
+        "unfilled": 0,
+        "inventory_after": 109,
+        "notional_tick_shares": 4896472,
+        "order_id": "ox3"
+      },
+      {
+        "bin": 5,
+        "time_remaining": 0.6153846153846154,
+        "inventory_before": 109,
+        "fraction": 0.29946309328079224,
+        "requested": 33,
+        "limit_ticks": 98764,
+        "fills": [
+          {
+            "price_ticks": 99915,
+            "qty": 33
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99915,
+            "qty": 33
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 33,
+        "unfilled": 0,
+        "inventory_after": 76,
+        "notional_tick_shares": 3297195,
+        "order_id": "o14b"
+      },
+      {
+        "bin": 6,
+        "time_remaining": 0.5384615384615384,
+        "inventory_before": 76,
+        "fraction": 0.2949126064777374,
+        "requested": 22,
+        "limit_ticks": 98778,
+        "fills": [
+          {
+            "price_ticks": 99877,
+            "qty": 22
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99877,
+            "qty": 22
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 22,
+        "unfilled": 0,
+        "inventory_after": 54,
+        "notional_tick_shares": 2197294,
+        "order_id": "o1bj"
+      },
+      {
+        "bin": 7,
+        "time_remaining": 0.46153846153846156,
+        "inventory_before": 54,
+        "fraction": 0.29347875714302063,
+        "requested": 16,
+        "limit_ticks": 99003,
+        "fills": [
+          {
+            "price_ticks": 99911,
+            "qty": 16
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99911,
+            "qty": 16
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 16,
+        "unfilled": 0,
+        "inventory_after": 38,
+        "notional_tick_shares": 1598576,
+        "order_id": "o1iq"
+      },
+      {
+        "bin": 8,
+        "time_remaining": 0.3846153846153846,
+        "inventory_before": 38,
+        "fraction": 0.29374831914901733,
+        "requested": 11,
+        "limit_ticks": 99215,
+        "fills": [
+          {
+            "price_ticks": 100043,
+            "qty": 11
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 100043,
+            "qty": 11
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 11,
+        "unfilled": 0,
+        "inventory_after": 27,
+        "notional_tick_shares": 1100473,
+        "order_id": "o1py"
+      },
+      {
+        "bin": 9,
+        "time_remaining": 0.3076923076923077,
+        "inventory_before": 27,
+        "fraction": 0.2954346239566803,
+        "requested": 8,
+        "limit_ticks": 98633,
+        "fills": [
+          {
+            "price_ticks": 99729,
+            "qty": 8
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99729,
+            "qty": 8
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 8,
+        "unfilled": 0,
+        "inventory_after": 19,
+        "notional_tick_shares": 797832,
+        "order_id": "o1x6"
+      },
+      {
+        "bin": 10,
+        "time_remaining": 0.23076923076923073,
+        "inventory_before": 19,
+        "fraction": 0.2979128956794739,
+        "requested": 6,
+        "limit_ticks": 98540,
+        "fills": [
+          {
+            "price_ticks": 99925,
+            "qty": 6
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99925,
+            "qty": 6
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 6,
+        "unfilled": 0,
+        "inventory_after": 13,
+        "notional_tick_shares": 599550,
+        "order_id": "o24e"
+      },
+      {
+        "bin": 11,
+        "time_remaining": 0.15384615384615385,
+        "inventory_before": 13,
+        "fraction": 0.3008573353290558,
+        "requested": 4,
+        "limit_ticks": 98603,
+        "fills": [
+          {
+            "price_ticks": 99777,
+            "qty": 4
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99777,
+            "qty": 4
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 4,
+        "unfilled": 0,
+        "inventory_after": 9,
+        "notional_tick_shares": 399108,
+        "order_id": "o2bm"
+      },
+      {
+        "bin": 12,
+        "time_remaining": 0.07692307692307687,
+        "inventory_before": 9,
+        "fraction": 0.3042466342449188,
+        "requested": 9,
+        "limit_ticks": 98686,
+        "fills": [
+          {
+            "price_ticks": 99824,
+            "qty": 9
+          }
+        ],
+        "levels": [
+          {
+            "price_ticks": 99824,
+            "qty": 9
+          }
+        ],
+        "trade_frames": 1,
+        "filled": 9,
+        "unfilled": 0,
+        "inventory_after": 0,
+        "notional_tick_shares": 898416,
+        "order_id": "o2iu"
+      }
+    ]
+  },
+  "reconciliation": {
+    "attributed": 1000,
+    "parent": 1000,
+    "third_party_fills": 641,
+    "fills_against_our_ladder": 0,
+    "void": false,
+    "reasons": []
+  },
+  "measurement": {
+    "arrival_mid_ticks": 100001.0,
+    "realised_vwap_ticks": 99877.247,
+    "realised_slippage_bps": 12.375176248237215,
+    "unreported_bps": null,
+    "predicted_slippage_bps": null,
+    "void": false,
+    "reasons": [],
+    "label": "demo, not an evaluation (ARCHITECTURE.md \u00a77)"
+  },
+  "stream": {
+    "book_replaces": 1348,
+    "ping_seconds": [
+      0.00018590000036056153,
+      0.0003577999996196013,
+      0.00011720000020432053,
+      0.0001430000002073939,
+      0.00041200000032404205,
+      0.00021319999996194383,
+      0.00013190000026952475,
+      0.00017520000074000563,
+      0.00018319999981031287,
+      0.0001818999999159132,
+      0.0002334000000701053,
+      0.0002903000004153,
+      0.00017860000025393674
+    ],
+    "note": "ping round-trip is the only true freshness signal the wire offers: the pong is queued behind whatever is already waiting for the socket, so it cannot overtake stale frames (vendored \u00a73, Keepalive). seq is used here as a dedupe key and nothing else \u2014 it cannot detect a gap (\u00a71, \u00a74)."
+  },
+  "events": [
+    {
+      "t": 1787436053.905,
+      "event": "health",
+      "status": "ok",
+      "wireVersion": 1
+    },
+    {
+      "t": 1787436054.147,
+      "event": "warmup",
+      "seconds": 0.217
+    },
+    {
+      "t": 1787436054.659,
+      "event": "arrival",
+      "mid_ticks": 100001.0,
+      "best_bid": 99952,
+      "best_ask": 100050,
+      "bid_depth": 1662,
+      "ask_depth": 1618
+    },
+    {
+      "t": 1787436055.433,
+      "event": "worked",
+      "bin": 0,
+      "order": "o1e",
+      "requested": 421,
+      "limit": "9.9168",
+      "fills": 4
+    },
+    {
+      "t": 1787436063.434,
+      "event": "worked",
+      "bin": 1,
+      "order": "obh",
+      "requested": 222,
+      "limit": "9.9015",
+      "fills": 3
+    },
+    {
+      "t": 1787436071.436,
+      "event": "worked",
+      "bin": 2,
+      "order": "oio",
+      "requested": 124,
+      "limit": "9.9023",
+      "fills": 2
+    },
+    {
+      "t": 1787436079.442,
+      "event": "worked",
+      "bin": 3,
+      "order": "opw",
+      "requested": 75,
+      "limit": "9.913",
+      "fills": 1
+    },
+    {
+      "t": 1787436087.435,
+      "event": "worked",
+      "bin": 4,
+      "order": "ox3",
+      "requested": 49,
+      "limit": "9.8915",
+      "fills": 1
+    },
+    {
+      "t": 1787436095.46,
+      "event": "worked",
+      "bin": 5,
+      "order": "o14b",
+      "requested": 33,
+      "limit": "9.8764",
+      "fills": 1
+    },
+    {
+      "t": 1787436103.473,
+      "event": "worked",
+      "bin": 6,
+      "order": "o1bj",
+      "requested": 22,
+      "limit": "9.8778",
+      "fills": 1
+    },
+    {
+      "t": 1787436111.479,
+      "event": "worked",
+      "bin": 7,
+      "order": "o1iq",
+      "requested": 16,
+      "limit": "9.9003",
+      "fills": 1
+    },
+    {
+      "t": 1787436119.49,
+      "event": "worked",
+      "bin": 8,
+      "order": "o1py",
+      "requested": 11,
+      "limit": "9.9215",
+      "fills": 1
+    },
+    {
+      "t": 1787436127.488,
+      "event": "worked",
+      "bin": 9,
+      "order": "o1x6",
+      "requested": 8,
+      "limit": "9.8633",
+      "fills": 1
+    },
+    {
+      "t": 1787436135.513,
+      "event": "worked",
+      "bin": 10,
+      "order": "o24e",
+      "requested": 6,
+      "limit": "9.854",
+      "fills": 1
+    },
+    {
+      "t": 1787436143.518,
+      "event": "worked",
+      "bin": 11,
+      "order": "o2bm",
+      "requested": 4,
+      "limit": "9.8603",
+      "fills": 1
+    },
+    {
+      "t": 1787436151.534,
+      "event": "worked",
+      "bin": 12,
+      "order": "o2iu",
+      "requested": 9,
+      "limit": "9.8686",
+      "fills": 1
+    }
+  ]
+}
