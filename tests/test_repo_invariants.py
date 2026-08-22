@@ -70,6 +70,66 @@ def test_package_imports_nothing_that_can_reach_a_network():
         )
 
 
+#: Directories whose sources are checked for the *other* half of invariant 8.
+#: `tests/` is excluded and the exclusion is the point: this module imports
+#: `socket` in order to ban it, and the client's own tests stand up loopback
+#: servers to drive the wire. The checking apparatus cannot be subject to the
+#: rule it checks without the rule becoming unenforceable.
+SEAM_ROOTS = ("temper", "tools", "client")
+
+#: Where network code is allowed to live, and the only place.
+NETWORK_HOME = "client"
+
+
+def _seam_sources() -> list[Path]:
+    return sorted(
+        source
+        for root in SEAM_ROOTS
+        for source in (REPO_ROOT / root).rglob("*.py")
+    )
+
+
+def test_client_is_the_only_place_networking_appears():
+    """Invariant 8 from the other side.
+
+    The existing check says `temper/` is clean, which is a statement about one
+    directory and is satisfied by moving a socket into `tools/`. This says where
+    the code *is*: every module in the repo that can reach a network lives under
+    `client/`. Stated from both sides, the seam is a location rather than a
+    prohibition — which is what `ARCHITECTURE.md` §3 means by giving `client/` a
+    row of its own.
+    """
+    for source in _seam_sources():
+        offenders = _imported_roots(source) & NETWORK_MODULES
+        if not offenders:
+            continue
+        relative = source.relative_to(REPO_ROOT)
+        assert relative.parts[0] == NETWORK_HOME, (
+            f"{relative} imports {', '.join(sorted(offenders))}; the Anvil "
+            f"participant is the only networked code in this repo, and it lives "
+            f"under {NETWORK_HOME}/"
+        )
+
+
+def test_the_network_seam_is_not_vacuous():
+    """A seam nothing crosses is a seam nobody is keeping.
+
+    Without this, deleting `client/` would leave every assertion above green and
+    the property untested. From M6 the client exists and speaks a wire, so the
+    imports are *required* to be there.
+    """
+    client_root = REPO_ROOT / NETWORK_HOME
+    sources = sorted(client_root.rglob("*.py"))
+    assert sources, f"{NETWORK_HOME}/ has no sources"
+    found = set()
+    for source in sources:
+        found |= _imported_roots(source) & NETWORK_MODULES
+    assert found, (
+        f"nothing under {NETWORK_HOME}/ imports a networking module, so the "
+        "seam above asserts nothing"
+    )
+
+
 @pytest.mark.parametrize("package", ["oracle", "env"])
 def test_the_oracle_and_the_env_do_not_import_torch(package):
     """Pure numpy below the agents.

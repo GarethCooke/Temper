@@ -1,0 +1,139 @@
+# M6 — the Anvil live leg. One config, four runs, and the reason they share bytes.
+#
+# `ARCHITECTURE.md` §3 asks for one committed config per experiment. The four runs
+# here differ in three fields — which ladder shape, whether the client builds the
+# book, whether Anvil's feeder is running — and share everything that decides what
+# the client does. Four files would have duplicated the shapes block four times and
+# invited exactly the drift M3's generated frontier configs exist to prevent. So the
+# runs live in one file and each artefact records the run name beside the config
+# digest: `(config_sha256, run)` identifies a run as completely as a filename would,
+# and cannot disagree with itself.
+#
+# Nothing here is a tuning knob. Every number was fixed in task 0's gate, against a
+# local Anvil build, before the client existed — see docs/briefs/M6-anvil-live-leg.md.
+
+milestone: M6
+brief: docs/briefs/M6-anvil-live-leg.md
+
+# --- the venue --------------------------------------------------------------
+# A single-ticker roster, because roster membership is the only control Anvil
+# offers: it publishes books only for ANVIL_TICKERS and the feeder drives exactly
+# that roster. A ticker with a published book is a ticker the feeder trades, so
+# "dedicated ticker, quiet feeder" is not a configuration that exists — the
+# measured runs turn the feeder off instead (ANVIL_FEEDER=0).
+#
+# `wire_version` is checked against GET /api/health before a socket is opened or
+# an order is sent. A bump is a breaking change by Anvil's own definition, so the
+# client refuses rather than parsing hopefully.
+venue:
+  host: 127.0.0.1
+  port: 18080
+  scheme: http
+  ticker: 101
+  wire_version: 1
+
+# --- the parent order -------------------------------------------------------
+# 1,000 shares, sell. Fixed together with the ladder in task 0 and for one
+# reason: the policy front-loads 42.05 % of the parent into bin one, so with the
+# reference ladder's 1,410 shares a side the largest bin is 29.9 % of posted
+# depth. Large enough to walk more than one level, small enough that the run is
+# not a sweep of the book — because being unable to fill is a venue fact, not an
+# agent result, and a degenerate run would report one as the other.
+order:
+  side: S
+  parent: 1000
+
+# --- the grid ---------------------------------------------------------------
+# Thirteen bins because that is what the policy was trained on, and the bin
+# *count* is not a free choice: the observation's clock is 1 - k/N, so a policy
+# asked for its action on a different N is being asked off-distribution.
+#
+# The wall-clock length *is* free, and this is the clearest demonstration of why
+# the policy is portable at all: no market parameter enters at inference, so
+# FrontierView's 6.5-hour grid compresses to eight seconds a bin without changing
+# a single number the network sees. The whole run is under two minutes.
+#
+# `settle_seconds` exists because the book is published on the server's ~14 Hz
+# tick, so GET /api/book and the `book` frame lag a POST verdict by up to ~70 ms
+# (measured in task 0). Pricing against a book that predates your own ladder
+# top-up is how a client crosses a level that is no longer there.
+grid:
+  n_bins: 13
+  bin_seconds: 8.0
+  settle_seconds: 0.75
+
+# --- the policy -------------------------------------------------------------
+# M4a's median seed by the rank rule (brief amendment 1), read by plain numpy.
+# The checkpoint carries its own selection rule, its graded objective and the
+# sweep it came from by content hash; client/inference.py refuses any other
+# format and pins its forward pass against the training-time one on the
+# checkpoint's committed evaluation trajectory.
+policy:
+  checkpoint: results/m4a_power_law_policy.npz
+
+# --- the ladders ------------------------------------------------------------
+# Prices in ticks: 10,000 ticks = 1.0000 of price, which is the engine's own
+# scale. Every shape is symmetric about `centre`, so the arrival mid is exactly
+# the centre — one fewer thing a reader has to trust.
+#
+# Three shapes rather than three policies, deliberately (brief task 4): the
+# prediction is computed *from the ladder*, so varying the ladder tests the
+# pricing and attribution logic directly, while a second policy would only re-run
+# the same arithmetic on different numbers.
+ladder:
+  shapes:
+    # The measured run's book, shaped like the feeder's own — larger at the
+    # touch, thinning with depth. Best bid 9.99, worst bid 9.92, 1,410 a side.
+    reference:
+      centre_ticks: 100000
+      half_spread_ticks: 100
+      spacing_ticks: 100
+      quantities: [300, 260, 220, 180, 150, 120, 100, 80]
+    # 375 a side, so bin one's 421 shares cannot fill: it sweeps all eight
+    # levels, leaves 46, and the client cancels the resting remainder. The only
+    # way to exercise the partial-fill and cancel path deterministically — and
+    # the reason this shape is a machinery check and never the reported number.
+    thin:
+      centre_ticks: 100000
+      half_spread_ticks: 100
+      spacing_ticks: 100
+      quantities: [80, 70, 60, 50, 40, 30, 25, 20]
+    # Same depth, three times the spread and the spacing. Same quantities walked
+    # at different prices, which moves the predicted VWAP and nothing else.
+    wide:
+      centre_ticks: 100000
+      half_spread_ticks: 300
+      spacing_ticks: 300
+      quantities: [300, 260, 220, 180, 150, 120, 100, 80]
+
+# --- the runs ---------------------------------------------------------------
+# `build: true` means the client posts and replenishes the ladder, which requires
+# ANVIL_FEEDER=0 and an empty book at the start — the client checks both and
+# refuses rather than predicting from a book it did not build.
+runs:
+  ladder:
+    shape: reference
+    build: true
+    label: "ladder run - measured, regenerable"
+    metrics: results/m6_anvil_ladder.json
+  thin:
+    shape: thin
+    build: true
+    label: "thin ladder - prediction machinery, partial fills"
+    metrics: results/m6_anvil_thin.json
+  wide:
+    shape: wide
+    build: true
+    label: "wide ladder - prediction machinery, spread"
+    metrics: results/m6_anvil_wide.json
+  # The demonstration. The feeder builds the book and keeps trading it, so this
+  # is the only condition that shows the client surviving a book that moves
+  # between its bins because of someone else's flow, and the only one that
+  # exercises snapshot-healing under real churn. It is NOT byte-regenerable —
+  # book state is wall-clock dependent — and it is reported separately with that
+  # said out loud. There is no prediction for it and there cannot be.
+  feeder:
+    shape: reference
+    build: false
+    label: "feeder run - demonstration, weak reproducibility"
+    metrics: results/m6_anvil_feeder.json

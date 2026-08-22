@@ -24,10 +24,11 @@ pythonpath = ["."]
 # minutes is opt-in. `make differential` runs M1's deep tier, `make smoke` the PPO
 # convergence check, `make sweep` M2's 5-seed regeneration; all three are
 # milestone acceptance gates rather than per-commit ones.
-addopts = "-q --strict-markers --strict-config -m 'not deep and not training'"
+addopts = "-q --strict-markers --strict-config -m 'not deep and not training and not anvil'"
 markers = [
   "deep: the acceptance-gate differential tier — minutes, not seconds (make differential)",
   "training: runs a training loop — minutes to hours (make smoke, make sweep)",
+  "anvil: needs a live anvil_server on the configured port (make anvil-check)",
 ]
 # A warning in the reference engine is a defect in the reference engine.
 filterwarnings = ["error"]

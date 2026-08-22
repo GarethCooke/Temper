@@ -192,6 +192,55 @@ Then, against a local build:
 
 **Gate:** both recorded here before a client exists.
 
+#### Gate record — 2026-08-22, against a local build
+
+Anvil at `4801ed8` (clean tree), server built from `864ee2f` — the last commit to
+touch `server/`; the three since are documentation. MSVC 19.44, Crow 1.2.1, Boost
+1.86, `NDEBUG`. Started as `ANVIL_TICKERS=101 ANVIL_DEFAULT_TICKER=101
+ANVIL_FEEDER=0 ANVIL_PORT=18080`.
+
+**1. Wire version.** `GET /api/health` → `{"status":"ok","wireVersion":1,...}`,
+matching `docs/vendor/anvil-protocol.md`'s header. The client refuses any other
+value before it opens a socket or sends an order.
+
+**2. Ladder and parent order, fixed together.**
+
+| | |
+| --- | --- |
+| Parent order | **1,000 shares, sell**, ticker 101, 13 bins |
+| Reference ladder | centre 100,000 ticks ($10.0000), half-spread 100 ticks, spacing 100 ticks, quantities `[300, 260, 220, 180, 150, 120, 100, 80]` per side |
+| Posted depth | 1,410 a side; best bid 9.99, worst bid 9.92; arrival mid exactly $10.0000 by symmetry |
+| Largest bin | 421 shares — **42.1 % of the parent, 29.9 % of posted depth**, crossing two levels |
+| Also committed | `thin` (375 a side: bin one cannot fill, exercising the partial-fill and cancel path) and `wide` (three times the spread and spacing) — machinery checks, never the reported number |
+
+Everything above lives in `configs/m6_anvil.yaml`, which holds all four runs
+because they differ in three fields and share everything that decides what the
+client does. Each artefact records the run name beside the config digest, so
+`(config_sha256, run)` identifies a run as completely as a filename would.
+
+**3. What the probe confirmed, and one thing the brief did not anticipate.**
+Every venue fact the brief predicted from the source held: the six-field New with
+a blank id is accepted and the server mints the id (five fields earns *wrong
+column count*); `POST /api/order` mints `anvil_session` on first contact; a
+cancel from another session and a cancel of an unknown id are refused with the
+*identical* reason; a marketable sell larger than the book fills what it can and
+**rests the remainder** while still returning `accepted: true`; `summary.last`
+was `""` under a two-sided resting book and became `9.99` only after the first
+trade. `Book.walk` and Anvil's matching engine agreed level for level on an
+eight-level sweep of 1,289 shares.
+
+Two things the brief did not say, both found by running it:
+
+* **The book publishes on the ~14 Hz tick**, so `GET /api/book` and the `book`
+  frame lag a `POST /api/order` verdict by up to ~70 ms. A client that priced
+  immediately after topping up its ladder would cross a book that predates its
+  own orders. Hence `grid.settle_seconds`.
+* **A measured run must start on an empty book.** A 300-share bid survived from
+  an earlier probe process, could not be cancelled — ownership is the session
+  cookie, and that session had gone — and silently doubled the touch level. The
+  client now refuses to build a ladder on a non-empty book, and the Makefile says
+  to restart the server between measured runs.
+
 *(The first draft's third gate question — does the feeder aggress — is answered: it does,
 `cross_frac = 0.10` through two levels, on exactly the roster tickers. That answer is what
 produced context §5.)*

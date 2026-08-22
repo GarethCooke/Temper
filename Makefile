@@ -14,7 +14,7 @@ M3_VALIDATE ?= configs/m3_antithetic_validation.yaml
 M3_FRONTIER ?= configs/m3_frontier.yaml
 M4A_CONFIG  ?= configs/m4a_power_law.yaml
 
-.PHONY: help test test-verbose differential smoke sweep reference validate frontier frontier-figure frontier-check m4a-reference m4a-guarantees m4a-regression m4a m4a-figure checkpoint goldens clean
+.PHONY: help test test-verbose differential smoke sweep reference validate frontier frontier-figure frontier-check m4a-reference m4a-guarantees m4a-regression m4a m4a-figure checkpoint anvil-check m6-predict m6 m6-thin m6-wide m6-feeder goldens clean
 
 help:
 	@echo "make test          run the pytest suite (the gate); excludes the marked tiers"
@@ -32,6 +32,10 @@ help:
 	@echo "make m4a           M4a task 5: ten seeds in the power-law world - ~3 h"
 	@echo "make m4a-figure    redraw results/m4a_degradation.* from the committed result"
 	@echo "make checkpoint    M6 prerequisite: export M4a's median seed as a policy .npz - ~15 min"
+	@echo "make anvil-check   M6 task 0: Anvil's documented behaviour, against a live server"
+	@echo "make m6-predict    M6 task 4: the closed-form prediction, no server needed"
+	@echo "make m6            M6 task 5: the measured ladder run (live anvil_server, feeder off)"
+	@echo "make m6-thin / m6-wide / m6-feeder  the other three M6 runs"
 	@echo "make goldens       re-export the FrontierView fixtures (read-only there)"
 	@echo "                   override the checkout with FRONTIERVIEW=/path/to/FrontierView"
 	@echo "make clean         remove caches and scratch results"
@@ -147,6 +151,46 @@ checkpoint:
 # seeds are read off the committed result, so this redraws without retraining.
 m4a-figure:
 	$(PYTHON) tools/m4a_degradation.py --config $(M4A_CONFIG)
+
+# M6 — the Anvil live leg. All four runs need a live anvil_server; start one on a
+# single-ticker roster with the feeder off, and RESTART IT between measured runs.
+# A measured run predicts from the committed ladder and nothing else, so it
+# refuses to build on a book that already has orders resting:
+#
+#   ANVIL_TICKERS=101 ANVIL_DEFAULT_TICKER=101 ANVIL_FEEDER=0 ANVIL_PORT=18080 #       anvil_server
+#
+# The demonstration run wants the opposite: the feeder on, its seed pinned.
+#
+#   ANVIL_TICKERS=101 ANVIL_DEFAULT_TICKER=101 ANVIL_FEEDER=1 #       ANVIL_FEEDER_SEED=20260822 ANVIL_PORT=18080 anvil_server
+M6_CONFIG ?= configs/m6_anvil.yaml
+
+# Anvil's documented behaviour, read back against the thing it documents. The
+# vendored snapshot is a set of predictions about somebody else's software; this
+# is what keeps them honest. Needs the feeder OFF.
+anvil-check:
+	$(PYTHON) -m pytest tests/test_anvil_live.py -m anvil -v
+
+# The prediction, computed from the committed ladder before anything is sent.
+# No server needed, and it is the order the brief requires.
+m6-predict:
+	$(PYTHON) -m client.run --config $(M6_CONFIG) --run ladder --dry-run
+
+# The measured run: client-built ladder, feeder off, regenerable.
+m6:
+	$(PYTHON) -m client.run --config $(M6_CONFIG) --run ladder
+
+# The prediction machinery, harder: a ladder too thin to fill bin one (partial
+# fills and the cancel path) and one with three times the spread.
+m6-thin:
+	$(PYTHON) -m client.run --config $(M6_CONFIG) --run thin
+
+m6-wide:
+	$(PYTHON) -m client.run --config $(M6_CONFIG) --run wide
+
+# The demonstration: Anvil's feeder builds and trades the book. Reported
+# separately, and reproducible only in the weak sense.
+m6-feeder:
+	$(PYTHON) -m client.run --config $(M6_CONFIG) --run feeder
 
 # Regenerates $(GOLDENS) from a FrontierView checkout. Writes nothing into that
 # repo — the export imports its `api` package and nothing more (constitution §7).
