@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import json
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -190,8 +190,24 @@ def run_sweep(
     repo_root: Path | None = None,
     on_seed: Callable[..., None] | None = None,
     progress: Callable[[int, dict], None] | None = None,
+    ordinals: Sequence[int] | None = None,
 ) -> SweepResult:
-    """Every seed, trained and graded. Verifies the lambda rule first."""
+    """Every seed, trained and graded. Verifies the lambda rule first.
+
+    `ordinals` restricts the run to a subset of the config's seeds, addressed
+    exactly as the full sweep addresses them — seed 9 of a ten-seed config is the
+    same object whether it is run first, ninth or alone, because its torch seed
+    and its env streams both come from its ordinal and neither depends on what
+    ran before it (:func:`train_seed`). ``tests/test_m4a_phase1_regression.py``
+    is the standing evidence: one seed, retrained in isolation, reproduces its
+    committed grade bitwise.
+
+    The result of a subset run is **not** an acceptance artefact — a median over
+    one seed is not a median, and invariant 4 asks for dispersion. It exists so a
+    single seed's *policy* can be re-derived without spending the whole sweep
+    again; the caller is expected to write a checkpoint rather than a metrics
+    file, and ``tools/train.py --only-seed`` refuses to write one.
+    """
     experiment.verify_lambda_rule()
     experiment.verify_gate_reference()
     # Stamped *before* any training, not after. A sweep runs for hours; the
@@ -207,7 +223,16 @@ def run_sweep(
     grades: list[Grade] = []
     training: list[TrainResult] = []
     pairs: list[tuple[PairUpdateStats, ...]] = []
-    for ordinal in range(experiment.seeds.n_seeds):
+    selected = (
+        range(experiment.seeds.n_seeds) if ordinals is None else tuple(ordinals)
+    )
+    for ordinal in selected:
+        if not 0 <= ordinal < experiment.seeds.n_seeds:
+            raise ValueError(
+                f"seed ordinal {ordinal} is outside the config's "
+                f"{experiment.seeds.n_seeds} seeds; an ordinal is an address into "
+                "the committed seed pool, not a free-running counter"
+            )
         ledger = PairLedger()
         result, policy = train_seed(
             experiment, ordinal, progress=progress, ledger=ledger
