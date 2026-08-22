@@ -357,6 +357,12 @@ POOL_ALLOWANCE: dict[str, frozenset[str]] = {
     # it, so it legitimately holds both reserved pools — the same grant, for the
     # same reason, as the two sweep regenerators above.
     "test_m4a_phase1_regression.py": frozenset({"train", "eval"}),
+    # The committed policy checkpoint holds M4a's median seed, so verifying it
+    # means rolling that policy out on the streams it was *graded* on and
+    # nowhere else. `eval` only, and deliberately not `train`: the checkpoint is
+    # checked against the grade it earned, never retrained here — a test that
+    # needed `train` would be a training run wearing a test's clothes.
+    "test_policy_checkpoint.py": frozenset({"eval"}),
 }
 
 #: The modules that regenerate a committed result and so legitimately hold both
