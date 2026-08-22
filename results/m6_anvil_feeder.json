@@ -6,7 +6,7 @@
   "provenance": {
     "config": "m6_anvil.yaml",
     "config_sha256": "2b1bd379a2055c946bac1606cb654219b0bc3e9e5fed04ff4bce1bc3c8ee4807",
-    "git_rev": "ce38a372aada9956d523536dd37832bf497a763a",
+    "git_rev": "ac98357121f99d7018871f3fdefbcbe97f0d230f",
     "git_dirty": false,
     "python": "3.12.2"
   },
@@ -64,6 +64,7 @@
     "ticker": 101,
     "wire_version": 1
   },
+  "operator_note": "anvil_server from Anvil 864ee2f (build-msvc/Release): ANVIL_TICKERS=101 ANVIL_DEFAULT_TICKER=101 ANVIL_FEEDER=1 ANVIL_FEEDER_SEED=20260822 ANVIL_PORT=18080; feeder defaults otherwise (rate 200/s aggregate, cross_frac 0.10, depth_levels 8, max_resting 256, centre 10.0000)",
   "order": {
     "side": "S",
     "parent": 1000
@@ -192,7 +193,7 @@
         "unfilled": 0,
         "inventory_after": 357,
         "notional_tick_shares": 22172764,
-        "order_id": "obh"
+        "order_id": "obg"
       },
       {
         "bin": 2,
@@ -226,7 +227,7 @@
         "unfilled": 0,
         "inventory_after": 233,
         "notional_tick_shares": 12399444,
-        "order_id": "oio"
+        "order_id": "oip"
       },
       {
         "bin": 3,
@@ -278,7 +279,7 @@
         "unfilled": 0,
         "inventory_after": 109,
         "notional_tick_shares": 4896472,
-        "order_id": "ox3"
+        "order_id": "ox4"
       },
       {
         "bin": 5,
@@ -304,7 +305,7 @@
         "unfilled": 0,
         "inventory_after": 76,
         "notional_tick_shares": 3297195,
-        "order_id": "o14b"
+        "order_id": "o14c"
       },
       {
         "bin": 6,
@@ -356,7 +357,7 @@
         "unfilled": 0,
         "inventory_after": 38,
         "notional_tick_shares": 1598576,
-        "order_id": "o1iq"
+        "order_id": "o1ir"
       },
       {
         "bin": 8,
@@ -382,7 +383,7 @@
         "unfilled": 0,
         "inventory_after": 27,
         "notional_tick_shares": 1100473,
-        "order_id": "o1py"
+        "order_id": "o1pz"
       },
       {
         "bin": 9,
@@ -460,7 +461,7 @@
         "unfilled": 0,
         "inventory_after": 9,
         "notional_tick_shares": 399108,
-        "order_id": "o2bm"
+        "order_id": "o2bl"
       },
       {
         "bin": 12,
@@ -509,47 +510,47 @@
     "label": "demo, not an evaluation (ARCHITECTURE.md \u00a77)"
   },
   "stream": {
-    "book_replaces": 1348,
+    "book_replaces": 1343,
     "ping_seconds": [
-      0.00018590000036056153,
-      0.0003577999996196013,
-      0.00011720000020432053,
-      0.0001430000002073939,
-      0.00041200000032404205,
-      0.00021319999996194383,
-      0.00013190000026952475,
-      0.00017520000074000563,
-      0.00018319999981031287,
-      0.0001818999999159132,
-      0.0002334000000701053,
-      0.0002903000004153,
-      0.00017860000025393674
+      0.00015559999974357197,
+      0.0003356000006533577,
+      0.00035959999968326883,
+      0.0001872000002549612,
+      0.0004994000000806409,
+      0.0002580999998826883,
+      0.00021160000051168026,
+      0.0002919999997175182,
+      0.00020490000042627798,
+      0.0002506000000721542,
+      0.0001812999998946907,
+      0.0002733000001171604,
+      0.0001581999995323713
     ],
     "note": "ping round-trip is the only true freshness signal the wire offers: the pong is queued behind whatever is already waiting for the socket, so it cannot overtake stale frames (vendored \u00a73, Keepalive). seq is used here as a dedupe key and nothing else \u2014 it cannot detect a gap (\u00a71, \u00a74)."
   },
   "events": [
     {
-      "t": 1787436053.905,
+      "t": 1787436266.08,
       "event": "health",
       "status": "ok",
       "wireVersion": 1
     },
     {
-      "t": 1787436054.147,
+      "t": 1787436266.29,
       "event": "warmup",
-      "seconds": 0.217
+      "seconds": 0.209
     },
     {
-      "t": 1787436054.659,
+      "t": 1787436266.801,
       "event": "arrival",
       "mid_ticks": 100001.0,
       "best_bid": 99952,
       "best_ask": 100050,
-      "bid_depth": 1662,
-      "ask_depth": 1618
+      "bid_depth": 1784,
+      "ask_depth": 1676
     },
     {
-      "t": 1787436055.433,
+      "t": 1787436267.573,
       "event": "worked",
       "bin": 0,
       "order": "o1e",
@@ -558,25 +559,25 @@
       "fills": 4
     },
     {
-      "t": 1787436063.434,
+      "t": 1787436275.563,
       "event": "worked",
       "bin": 1,
-      "order": "obh",
+      "order": "obg",
       "requested": 222,
       "limit": "9.9015",
       "fills": 3
     },
     {
-      "t": 1787436071.436,
+      "t": 1787436283.596,
       "event": "worked",
       "bin": 2,
-      "order": "oio",
+      "order": "oip",
       "requested": 124,
       "limit": "9.9023",
       "fills": 2
     },
     {
-      "t": 1787436079.442,
+      "t": 1787436291.584,
       "event": "worked",
       "bin": 3,
       "order": "opw",
@@ -585,25 +586,25 @@
       "fills": 1
     },
     {
-      "t": 1787436087.435,
+      "t": 1787436299.611,
       "event": "worked",
       "bin": 4,
-      "order": "ox3",
+      "order": "ox4",
       "requested": 49,
       "limit": "9.8915",
       "fills": 1
     },
     {
-      "t": 1787436095.46,
+      "t": 1787436307.621,
       "event": "worked",
       "bin": 5,
-      "order": "o14b",
+      "order": "o14c",
       "requested": 33,
       "limit": "9.8764",
       "fills": 1
     },
     {
-      "t": 1787436103.473,
+      "t": 1787436315.623,
       "event": "worked",
       "bin": 6,
       "order": "o1bj",
@@ -612,25 +613,25 @@
       "fills": 1
     },
     {
-      "t": 1787436111.479,
+      "t": 1787436323.63,
       "event": "worked",
       "bin": 7,
-      "order": "o1iq",
+      "order": "o1ir",
       "requested": 16,
       "limit": "9.9003",
       "fills": 1
     },
     {
-      "t": 1787436119.49,
+      "t": 1787436331.644,
       "event": "worked",
       "bin": 8,
-      "order": "o1py",
+      "order": "o1pz",
       "requested": 11,
       "limit": "9.9215",
       "fills": 1
     },
     {
-      "t": 1787436127.488,
+      "t": 1787436339.647,
       "event": "worked",
       "bin": 9,
       "order": "o1x6",
@@ -639,7 +640,7 @@
       "fills": 1
     },
     {
-      "t": 1787436135.513,
+      "t": 1787436347.661,
       "event": "worked",
       "bin": 10,
       "order": "o24e",
@@ -648,16 +649,16 @@
       "fills": 1
     },
     {
-      "t": 1787436143.518,
+      "t": 1787436355.65,
       "event": "worked",
       "bin": 11,
-      "order": "o2bm",
+      "order": "o2bl",
       "requested": 4,
       "limit": "9.8603",
       "fills": 1
     },
     {
-      "t": 1787436151.534,
+      "t": 1787436363.679,
       "event": "worked",
       "bin": 12,
       "order": "o2iu",

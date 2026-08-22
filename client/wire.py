@@ -365,6 +365,21 @@ class Stream:
                 pass
             self._socket = None
 
+    def reconnect(self) -> None:
+        """Drop everything and open a fresh socket.
+
+        Recovery is **transport-driven** (vendored §4): a reconnect is triggered
+        by the socket closing and never by an unexpected `seq`, which a client
+        could not detect anyway. The buffer and any pending frames go with the
+        old socket — anything half-read is half of a frame nobody will finish,
+        and anything whole is superseded by the `snapshot` the server sends on
+        connect, which is the new baseline by definition.
+        """
+        self.close()
+        self._buffer = b""
+        self.pending = []
+        self.connect()
+
     # -- reading ------------------------------------------------------------
 
     def _read_until(self, terminator: bytes) -> bytes:

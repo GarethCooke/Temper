@@ -51,6 +51,7 @@ from client.ladder import ladder_from_mapping  # noqa: E402
 from client.plan import BinPlan, Execution, compare, predict, requested_quantity  # noqa: E402
 from client.wire import (  # noqa: E402
     Stream,
+    StreamClosed,
     TransportFault,
     Venue,
     cancel_line,
@@ -164,6 +165,9 @@ class Session:
         self.ladder_ids: list[str] = []
         self.freshness: list[float] = []
         self.events: list[dict] = []
+        #: How many times the socket dropped and was re-baselined. Reported,
+        #: because a measured run that reconnected has a hole in its trade tape.
+        self.reconnects = 0
 
     # -- plumbing -----------------------------------------------------------
 
@@ -178,8 +182,37 @@ class Session:
             self.tape.apply(frame)
 
     def refresh(self, seconds: float = 0.0) -> None:
-        self.absorb(self.stream.take_pending())
-        self.absorb(self.stream.drain(timeout=seconds))
+        """Drain the stream into the book and the tape, reconnecting if it drops.
+
+        The one place the recovery path lives, because it is the one place frames
+        are read. Vendored §4: a reconnect is triggered by the socket closing and
+        never by an unexpected `seq` — a single-ticker socket's subsequence is
+        sparse and non-monotonic, so there is no such thing as an unexpected one.
+        The fresh `snapshot` is the new baseline, which needs no reconciliation
+        because every book frame is a full replace.
+
+        What is *not* recovered is the trade tape. Fills that happened while the
+        socket was down are gone — the tape is best-effort by Anvil's own design
+        and there is no replay buffer — so a reconnect during a measured run will
+        surface at the end as an attribution shortfall and void the measurement.
+        That is the correct outcome and the reason the reconnect is recorded:
+        void with a reason beats a number with a hole in it.
+        """
+        try:
+            self.absorb(self.stream.take_pending())
+            self.absorb(self.stream.drain(timeout=seconds))
+        except (StreamClosed, OSError) as error:
+            self.note(event="stream_closed", error=repr(error))
+            self.stream.reconnect()
+            self.reconnects += 1
+            baseline = self.stream.read(timeout=10.0)
+            self.absorb([baseline])
+            self.note(
+                event="reconnected",
+                baseline_seq=baseline.get("seq"),
+                bid_depth=self.book.depth("B"),
+                ask_depth=self.book.depth("S"),
+            )
 
     def post(self, line: str) -> str:
         """Send one order line; return the minted id, or raise on a rejection.
@@ -367,7 +400,7 @@ class Session:
             remaining = deadline - time.perf_counter()
             if remaining <= 0:
                 return
-            self.absorb(self.stream.drain(timeout=min(remaining, 0.05)))
+            self.refresh(min(remaining, 0.05))
 
     # -- the run ------------------------------------------------------------
 
@@ -583,6 +616,7 @@ def build_document(
     if session is not None:
         document["stream"] = {
             "book_replaces": session.book.replaces,
+            "reconnects": session.reconnects,
             "ping_seconds": session.freshness,
             "note": (
                 "ping round-trip is the only true freshness signal the wire "

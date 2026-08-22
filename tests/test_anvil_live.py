@@ -271,3 +271,38 @@ def test_the_summary_last_is_a_traded_price_and_not_a_mid(venue, stream):
     assert not book.two_sided or book.best_bid is None or True
     # The mid is read off the book; `last` is a historical fact that outlives it.
     assert row["last"] != "", "a traded price persists after the book empties"
+
+
+def test_the_stream_reconnects_and_re_baselines_from_a_fresh_snapshot(venue):
+    """Recovery is transport-driven: the socket closes, you reconnect (§4).
+
+    Driven against the real server because the thing being tested is the
+    handshake and the on-connect `snapshot`, which a fake would have to
+    reimplement in order to check.
+
+    The client's own recovery path is `Session.refresh`, and this exercises the
+    same `Stream.reconnect` it calls. The book is a full replace on arrival, so
+    there is nothing to reconcile — which is the whole reason a client that
+    cannot detect a dropped frame is nevertheless safe.
+    """
+    from client.book import Book
+    from client.wire import Stream, StreamClosed
+
+    book = Book(ticker=TICKER)
+    with Stream(str(VENUE["host"]), int(VENUE["port"]), TICKER) as stream:
+        first = stream.read(timeout=10.0)
+        assert first["type"] == "snapshot"
+        book.apply(first)
+
+        # Drop the socket underneath the reader, the way a server restart or a
+        # proxy timeout would.
+        stream._socket.close()
+        with pytest.raises((StreamClosed, OSError)):
+            stream.read(timeout=5.0)
+
+        stream.reconnect()
+        baseline = stream.read(timeout=10.0)
+        assert baseline["type"] == "snapshot", "the fresh snapshot is the new baseline"
+        assert int(baseline["ticker"]) == TICKER
+        assert book.apply(baseline) is True
+        assert stream.read(timeout=10.0)["type"] == "summary"
