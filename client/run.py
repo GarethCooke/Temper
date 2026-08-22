@@ -331,6 +331,35 @@ class Session:
             reason=result.reason,
         )
 
+    def wait_for_two_sided(self, timeout: float) -> float:
+        """Block until the book has both sides, or give up. Feeder run only.
+
+        Anvil's feeder is gated on a live WebSocket client — it is wired to the
+        registry's 0↔1 hook, so a server with nobody watching publishes an empty
+        book. The demonstration run therefore *arrives before its market does*:
+        the snapshot on connect is empty, and there is no mid to take an arrival
+        price from.
+
+        Waiting is the honest reading of "the book snapshot at t = 0": t = 0 is
+        when the parent order starts, and a parent order cannot start on a book
+        that does not exist yet. How long it waited goes into the artefact, since
+        it is part of what happened.
+
+        A measured run never reaches this — it builds its own book and refuses to
+        start on one it did not build.
+        """
+        started = time.perf_counter()
+        deadline = started + timeout
+        while time.perf_counter() < deadline:
+            self.refresh(0.1)
+            if self.book.two_sided:
+                return time.perf_counter() - started
+        raise TransportFault(
+            f"no two-sided book on ticker {self.config.ticker} after {timeout:g}s. "
+            "A run that does not build its own book needs Anvil's feeder "
+            "running (ANVIL_FEEDER=1); with it off, nothing ever rests."
+        )
+
     def settle(self, seconds: float) -> None:
         """Drain the stream for `seconds`, applying everything that arrives."""
         deadline = time.perf_counter() + seconds
@@ -354,6 +383,9 @@ class Session:
             if config.builds_ladder:
                 self.build_ladder()
                 self.settle(max(config.settle_seconds, 1.0))
+            else:
+                waited = self.wait_for_two_sided(timeout=60.0)
+                self.note(event="warmup", seconds=round(waited, 3))
             self.refresh(0.5)
 
             # The arrival price, and the one place it comes from. NOT
