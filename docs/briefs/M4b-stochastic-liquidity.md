@@ -333,31 +333,31 @@ liquidity model is invented in the same sentence that reports what it bought.
 
 ## Definition of done
 
-- [ ] Liquidity reference table committed; all four task-0 gates recorded green, or the
+- [x] Liquidity reference table committed; all four task-0 gates recorded green, or the
       milestone re-shaped here with the reason.
-- [ ] DP oracle landed: grid and quadrature convergence reported, σ_L → 0 returning M4a's
+- [x] DP oracle landed: grid and quadrature convergence reported, σ_L → 0 returning M4a's
       certified value, feasible upper bound inside its 2 % band, clairvoyant lower bound
       committed, `lower ≤ J_DP ≤ upper` asserted with CIs.
-- [ ] Sufficiency check green — augmented state does not improve the value.
-- [ ] Liquidity seam landed with its own seed stream; config must name its liquidity model;
+- [x] Sufficiency check green — augmented state does not improve the value.
+- [x] Liquidity seam landed with its own seed stream; config must name its liquidity model;
       one `step` loop still.
-- [ ] **Bitwise regression across two worlds**: one M3 seed and one M4a seed identical; every
+- [x] **Bitwise regression across two worlds**: one M3 seed and one M4a seed identical; every
       committed figure byte-identical.
-- [ ] `mirror_of` hands over impact model, liquidity model and liquidity stream; the pair's
+- [x] `mirror_of` hands over impact model, liquidity model and liquidity stream; the pair's
       third per-step assertion live and shown to be live.
-- [ ] Conditional grading landed; `deterministic_schedule` generalised and still refusing a
+- [x] Conditional grading landed; `deterministic_schedule` generalised and still refusing a
       price-bearing policy; `cost_moments(liquidity=None)` bit-identical to today.
-- [ ] Differential green: the process's moments and the world's E[cost] at M1's tiers, with
+- [x] Differential green: the process's moments and the world's E[cost] at M1's tiers, with
       `step_count` asserted; the "graded `V` is price-only" distinction written down.
-- [ ] Ten seeds; median and per-seed capture fraction against the pre-stated bars; absolute
+- [x] Ten seeds; median and per-seed capture fraction against the pre-stated bars; absolute
       excess in bps beside every fraction; level shift reported separately.
-- [ ] Paired CI reported with its achieved half-width; red-flag test green on every seed.
-- [ ] Liquidity-shuffled control run and inside its bar.
-- [ ] `results/m4b_adaptivity.*` with every seed drawn and the σ_L curve; `git_dirty: false`.
-- [ ] New artefact keys covered by `tests/test_sweep_document.py` on fabricated data
+- [x] Paired CI reported with its achieved half-width; red-flag test green on every seed.
+- [x] Liquidity-shuffled control run and inside its bar.
+- [x] `results/m4b_adaptivity.*` with every seed drawn and the σ_L curve; `git_dirty: false`.
+- [x] New artefact keys covered by `tests/test_sweep_document.py` on fabricated data
       *before* the training run (the house note exists for exactly this).
-- [ ] README Phase-2 rung completed, naming the liquidity model as Temper's own.
-- [ ] Clean clone through the documented interface; `ROADMAP.md` M4b row flipped; structural
+- [x] README Phase-2 rung completed, naming the liquidity model as Temper's own.
+- [x] Clean clone through the documented interface; `ROADMAP.md` M4b row flipped; structural
       findings → §9.
 
 ### §9 amendments this milestone is expected to yield
@@ -414,3 +414,186 @@ is the finding. New dependencies. The Anvil wire.
   invented liquidity process, seeing liquidity is worth 2.6 % of the objective and the agent
   captured most of it" — not "the agent adapts to real market liquidity". The invented
   parameter belongs in the same sentence as the result, every time it is stated.
+
+
+---
+
+# What happened
+
+Written after the fact, in the shape M4a's brief records its own. Everything above
+this line is the plan; everything below is the measurement.
+
+## Task 0 — the gate, and the one decision the brief left open
+
+**All four gates green, and every number the brief predicted reproduced on the
+reference box.** The brief's own warning — that its numbers were predictions made
+in a cloud container on unpinned numpy and none of them was a committed artefact —
+turned out to be a warning about a risk that did not materialise.
+
+| quantity | predicted | measured | gate |
+| --- | ---: | ---: | --- |
+| `J_M4a` re-priced | 2.49895 | 2.49895 | — |
+| `J_static*` | 2.49661 | 2.49661 | — |
+| `J_DP` | 2.43449 | 2.43449 | — |
+| adaptive advantage | 0.06212 | 0.06212 (2.55%) | ≥ 1 % ✓ |
+| level shift | 3.8 % of advantage | 3.8% | ≤ 10 % ✓ |
+| clairvoyant bracket | 8.5 % | 9.8% | ≤ 15 % ✓ |
+| σ_L → 0 vs M4a's certified value | 2.383218 | 2.383217 (+1.8e-06) | — |
+| λ selected | 10^−3.5 | 10^−3.5, every reading | must agree ✓ |
+
+**Gate 1 needed a decision, and the two candidate readings disagree.** The brief
+asked task 0 to *decide and record* how the selection rule applies in a world that
+is not a new encoding, and predicted the answer. The prediction was right and the
+alternative was not merely different — it was **knife-edge**:
+
+| reading | selects | margin on the 20 % TWAP-gap bar at 10^−4 |
+| --- | :---: | ---: |
+| static (`J_static*`, the schedule) | **10^−3.5** | −3.94 points — misses, and it is a closed form |
+| adaptive (`J_DP` and the DP's mean schedule) | 10^−4.0 | **+0.011 points** — clears, on the fifth digit of a numerical value function |
+
+The static reading was taken. The deciding argument is not the margin: both of the
+rule's conditions are properties of a **schedule** — condition (ii) asks for the
+largest single-bin fraction — and a policy has no single schedule. The DP's *mean*
+schedule is an average no episode ever executes. The rejected reading is recorded
+in the driver's gate-1 output, the config's comment, `LiquidityReferenceRow`'s
+docstring and a test that pins its margin, because a session that had quietly
+taken the agreeing reading would have made the choice unauditable.
+
+## Task 1 — the adaptive oracle, converged and bracketed
+
+The word *certified* is absent everywhere this reference is reported, and the
+results file says so in the field a reader would look for it in
+(`reference_kind: converged and bracketed, not certified`). M4a earned that word
+with a Cholesky factorisation and a 1.2e-15 KKT residual; a stochastic dynamic
+program has no such object.
+
+| check | result |
+| --- | --- |
+| grid convergence | second order, monotone from above; Richardson residual **1.96e-06 bps** |
+| quadrature | converged by **5** nodes; pinned at 15 |
+| σ_L → 0 vs M4a's *certified* optimum | **+1.8e-06 bps** — the single most valuable check in the milestone |
+| sufficiency (augmented state carrying `L_{k−1}`) | agrees to 4.4e-16; continuation spread across previous multipliers 4.4e-16 |
+| feasible upper bound (interpolated stage solve) | inside the 2 %-of-advantage band |
+| clairvoyant lower bound | `lower ≤ J_DP ≤ upper` with the CIs carried ✓ |
+
+**The 2 % band is a test of the action map, not of convergence**, and at any
+affordable path count it cannot be anything else: the estimate's own half-width
+dwarfs the gap it would have to resolve. So the comparison that resolves is made
+against a *snapped* stage solve on the same paths, where interpolating is worth
+**11 % of the advantage** — five times the band, resolved to 0.15 % because the
+comparison shares its liquidity.
+
+**The red-flag test came out sharper than the brief predicted.** Perfect
+information beats any policy on **every path**, not merely on average, because the
+clairvoyant solve is the per-path minimum over all schedules and the agent's
+realised schedule is one of them. So the hard failure is a *count* with no
+confidence interval in it at all.
+
+## Task 4's precondition — the guarantees, before a seed was spent
+
+`make m4b-guarantees`, run and recorded **before** task 5 started.
+
+| guarantee | worst observed | bar |
+| --- | ---: | ---: |
+| exact per-episode noise identity | 2.397e-14 relative | ≤ 1e-12 |
+| antithetic cancellation | 3.416e-16 bps per step | ≤ 1e-12 |
+| action identity across the pair | exact, through a **three**-coordinate observation | bitwise |
+| the two halves saw the same `L` | exact, and shown live | bitwise |
+| discriminative: the deterministic reference | misses by 1.4e-1 relative | ≫ band |
+
+**§9's M4a entry was half right, and the wrong half is the useful one.** It named
+"a second, independent noise source **or** a price-bearing observation" as what
+ends the pairing's exactness. The disjunction is too wide: what action identity
+needs is not a *poor* observation but one the two halves **agree about**. They
+share their liquidity, so they see the same three-vector, take the same action,
+and the price noise still cancels exactly given `(x, L)`.
+
+**Where the third identity had to be fired from is the interesting part.** A
+mirror on a wholly different liquidity path is refused at `reset` by the
+*pre-existing* observation check — in this world the multiplier is in the
+observation, so that check does new work for free. The dedicated one is therefore
+fired by perturbing only the **last** bin's multiplier: every observation still
+agrees (the terminal entry is 0.0 for both halves), the schedules are identical,
+and nothing but M4b's third identity is looking at the charge.
+
+## Task 5 — the training point
+
+Ten seeds, σ_L = 0.5 (**invented**), M4a's configuration verbatim, no
+hyperparameter search.
+
+| quantity | measured | bar |
+| --- | ---: | ---: |
+| capture fraction, median | **0.9896** | ≥ 0.90 ✓ |
+| capture fraction, IQR / worst seed | 0.0125 / 0.9628 | worst ≥ 0.75 ✓ |
+| median excess over `J_DP` | **+0.00064 bps** | ≤ 0.00621 ✓ |
+| liquidity-shuffled control, median capture | **-1.0086** (worst -0.8932) | ≤ 0.15 ✓ |
+| paths below perfect information | **zero**, on every seed | zero |
+| soft flags (below `J_DP`) | none | reported, not failed |
+| sweep wall-clock | 8,576 s | ≤ 14 000 ✓ |
+
+Per seed: 0.9777, 0.9919, 0.9906, 0.9905, 0.9947, 0.9741, 0.9888, 0.9628, 0.9830, 0.9947.
+
+**The control is the claim.** Re-graded with the observed liquidity drawn
+independently of the liquidity charged, the same policies capture
+-1.01 — they do *worse than not reacting at all*. The gap
+between 0.99 and -1.01 is what says the agent
+is using the signal rather than having found a better fixed schedule.
+
+**The reward noise the brief predicted was there, and the agent trained through
+it.** Averaged reward variance 3.269e-02
+bps² per update against M4a's 2.63e-07 — five orders larger, and 12.9 % of the
+effect per update at 512 envs against the predicted 12.7 %. The configuration was
+M4a's, unchanged; that it trains through this is the finding the brief asked for
+either way.
+
+## Task 2 — the seam's acceptance, across two worlds
+
+`make m4b-regression`, **both green**. One committed M3 seed (the Phase-1 world, `configs/m3_frontier/lambda_1e-3.5.yaml`) and one committed M4a seed (the power-law world) retrained through the second seam and reproduced their committed grades **bitwise** — objective to seventeen digits and every point of the trajectory — in ~40 min for the pair.
+
+Bitwise rather than `allclose`, for M4a's reason: `allclose` would pass on a seam that changed the order of a float addition, which is exactly the failure worth catching, because PPO compounds it over ~750 updates and M2 measured the same seed address landing at 0.165 and 0.066 of the TWAP gap under nothing worse than a different thread count.
+
+Three fast checks run in `make test` alongside them, because each names a way this could have gone wrong silently: neither committed config acquires a liquidity world by omission, the observation is still two-dimensional wherever liquidity is deterministic, and the two noise sources are addressed in **different pools** with the same root seed and index. That last one is the whole argument — a liquidity draw taken out of the price generator would shift every downstream shock, and every committed result would still regenerate perfectly from its own config against a different market.
+
+Every committed figure redraws byte-identically: `m2_trajectory_overlay`,
+`m3_antithetic_overlay`, `m3_frontier` (via `figure --redraw`; the plain `figure`
+subcommand re-aggregates and re-stamps by design), `m4a_degradation`,
+`m4a_trajectory_overlay`.
+
+## What the value of sight is worth, against the invented parameter
+
+| σ_L | E[L^−0.6] | adaptive advantage | % of `J_DP` | level shift / advantage |
+| ---: | ---: | ---: | ---: | ---: |
+| 0.25 | 1.03045 | 0.01474 bps | 0.62% | 0.9% |
+| 0.5 | 1.12750 | 0.06212 bps | 2.55% | 3.8% |
+| 0.75 | 1.30996 | 0.15223 bps | 6.09% | 8.5% |
+
+σ_L is **Temper's own invention**. FrontierView has no liquidity process, so the
+result is this curve and not any one row of it, and the claim is stated in the
+same sentence as the parameter every time it appears: *with a one-parameter
+invented liquidity process, seeing liquidity is worth 2.6%
+of the objective and the agent captured 99% of it.*
+
+## The house note, four times
+
+`docs/house-notes.md`'s *The artefact writer is tested on fabricated data, not on
+the run* was cited by this brief as a thing to obey. It was obeyed for
+`build_document` — the new artefact keys were covered on fabricated data before
+the training run, exactly as asked — and the same defect class then arrived
+**four more times** in code the brief had not named:
+
+1. `_on_seed` read `Grade` fields off a `LiquidityGrade`. Caught by watching the
+   first launch; cost 20 minutes instead of a night.
+2. `--dry-run` printed M4a's tangent advantage as M4b's bar — understating the
+   pre-stated bar by 1.7× in the *flattering* direction. Found at the same time.
+3. `tools/m4b_adaptivity.py`'s `main` died reporting where it had written the
+   figure. The figure existed; the process did not survive saying so.
+4. The closing summary read `summary['relative_excess']` and died **after** all
+   ten seeds were graded and both artefacts written. Nothing was lost only
+   because `write_outputs` runs before the printing does.
+
+All four are pure functions of data that were reachable only behind a producer.
+All four are now extracted and tested on fabricated inputs in milliseconds. The
+portable lesson the note already states is right; what M4b adds is that the
+*reporting* path is as much an artefact writer as the JSON assembly is, and a
+driver that dies while printing a grade has thrown away the run just as
+completely.
