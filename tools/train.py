@@ -147,7 +147,53 @@ class _KeepAwake:
         return False
 
 
+def _liquidity_header(experiment: Experiment) -> None:
+    """The liquidity world's header, from the *static* rungs only.
+
+    Deliberately no dynamic program here. The DP takes minutes and ``run_sweep``
+    computes it once for the whole sweep a moment later; solving it twice would be
+    two chances for the run and its own banner to disagree about the number every
+    grade is an excess over. What this can say cheaply it says: the invented
+    parameter, the level shift, and the fact that the reference is not certified.
+    """
+    from temper.eval.reference import static_liquidity_row
+
+    case = experiment.case
+    law = experiment.liquidity
+    row = static_liquidity_row(
+        case.market, case.order_size, experiment.lambda_risk, law
+    )
+    print(
+        f"  liquidity: INVENTED — {law.name}, sigma_log = {law.sigma_log:g}, "
+        f"E[L] = {law.mean_multiplier():g}, "
+        f"E[L^-{case.market.temp_exponent:g}] = "
+        f"{law.inverse_power_moment(case.market.temp_exponent):.5f}. "
+        "FrontierView has no liquidity process; this one is Temper's own."
+    )
+    print(
+        f"  J_static* {row.static.objective:.6f} bps (best fixed schedule that "
+        f"knows the law) · J_M4a {row.m4a.objective:.6f} · level shift "
+        f"{row.level_shift:.5f} bps — a re-solve, and NOT the agent's"
+    )
+    print(
+        "  J_DP is solved by the sweep, once: converged and bracketed by a "
+        "perfect-information relaxation, NOT certified."
+    )
+
+
 def _header(experiment: Experiment) -> None:
+    if experiment.liquidity.stochastic:
+        case = experiment.case
+        estimator = REGIME_LABELS[experiment.estimator.regime]
+        print(
+            f"{experiment.milestone} — {case.symbol}, X = {case.order_size:,.0f}, "
+            f"λ = {experiment.lambda_risk:.6e} (rule-selected), "
+            f"{experiment.seeds.n_seeds} seeds, {estimator}, "
+            f"{experiment.cost_encoding} world + stochastic liquidity"
+        )
+        _liquidity_header(experiment)
+        _reward_scale_check(experiment, experiment.reference())
+        return
     reference = experiment.reference()
     case = experiment.case
     estimator = REGIME_LABELS[experiment.estimator.regime]
@@ -246,21 +292,50 @@ def _progress(experiment: Experiment):
     return report
 
 
-def _on_seed(ordinal: int, grade, result, pairs=()) -> None:
+def _seed_line(ordinal: int, grade, result) -> str:
+    """One seed's line, in whichever grade shape this world produces.
+
+    Two grades exist and they are not interchangeable: a deterministic policy has
+    a trajectory, a deviation from the optimum and a TWAP gap, and a
+    liquidity-observing one has a *distribution* of schedules and a confidence
+    interval. Reading the second through the first's fields is an
+    ``AttributeError`` that only a training run can reach, which is exactly the
+    class of defect ``docs/house-notes.md``'s *The artefact writer is tested on
+    fabricated data* exists for — so the branch is here, in a pure function, and
+    ``tests/test_sweep_document.py`` calls it on a fabricated grade.
+    """
+    common = (
+        f"{result.seconds:.0f}s"
+        f"{' (TIMED OUT)' if result.timed_out else ''}"
+        f"{' · RED FLAG' if grade.red_flag else ''}"
+    )
+    if hasattr(grade, "paths"):  # LiquidityGrade — graded by conditional expectation
+        below = (
+            ""
+            if not grade.paths_below_clairvoyant
+            else f" · {grade.paths_below_clairvoyant} PATHS BELOW CLAIRVOYANT"
+        )
+        return (
+            f"  seed {ordinal}: J {grade.objective:.6f} ± {grade.half_width:.6f} bps "
+            f"· excess over J_DP {grade.excess:+.5f} bps · capture "
+            f"{grade.capture_fraction:.4f} · {grade.paths:,} paths{below}"
+            f"{' · soft flag' if grade.soft_flag else ''} · {common}"
+        )
     capture = (
         ""
         if grade.capture_fraction is None
         else f" · capture {grade.capture_fraction:.4f}"
     )
-    print(
+    return (
         f"  seed {ordinal}: J {grade.objective:.6f} bps · "
         f"excess {grade.excess:+.5f} bps = {grade.relative_excess:+.4%} = "
         f"{grade.gap_fraction:.1%} of the TWAP gap{capture} · "
-        f"‖δ‖₂ {grade.deviation:,.0f} shares · {result.seconds:.0f}s"
-        f"{' (TIMED OUT)' if result.timed_out else ''}"
-        f"{' · RED FLAG' if grade.red_flag else ''}",
-        flush=True,
+        f"‖δ‖₂ {grade.deviation:,.0f} shares · {common}"
     )
+
+
+def _on_seed(ordinal: int, grade, result, pairs=()) -> None:
+    print(_seed_line(ordinal, grade, result), flush=True)
     if pairs:
         sampled = float(np.nanmedian([u.sampled_variance for u in pairs]))
         averaged = float(np.nanmedian([u.averaged_variance for u in pairs]))
@@ -282,6 +357,9 @@ def write_figure(experiment: Experiment, document: dict) -> None:
     two hours of CPU would either not be applied or would silently produce a
     figure and a metrics file from different runs.
     """
+    if experiment.liquidity.stochastic:
+        _write_liquidity_figure(experiment, document)
+        return
     summary = document["summary"]
     estimator = REGIME_LABELS[experiment.estimator.regime]
     verdict = document["verdict"]
@@ -367,6 +445,54 @@ def write_figure(experiment: Experiment, document: dict) -> None:
     )
     for path in written:
         print(f"  wrote {path.relative_to(REPO_ROOT)}")
+
+
+def _write_liquidity_figure(experiment: Experiment, document: dict) -> None:
+    """M4b's two-panel figure, from the sweep and task 0's committed table.
+
+    The value-of-sight curve lives in ``results/m4b_reference.json`` because it is
+    oracle surface and has nothing to do with the agent; if that file is absent
+    the figure is skipped with a message rather than half-drawn, because a curve
+    against an invented parameter is the half of this figure that keeps the claim
+    honest and a version without it would be the more flattering picture.
+    """
+    from temper.eval.figures import adaptivity_figure
+
+    from tools.m4b_adaptivity import build_curve, build_rungs, caption
+
+    table_path = REPO_ROOT / "results" / "m4b_reference.json"
+    if not table_path.exists():
+        print(
+            f"  skipped the figure: {table_path.relative_to(REPO_ROOT)} is missing, "
+            "and the value-of-sight curve against the invented sigma_L is not "
+            "optional (run tools/m4b_reference_table.py)"
+        )
+        return
+    rungs = build_rungs(document)
+    written = adaptivity_figure(
+        experiment.results_figure,
+        rungs=rungs,
+        curve=build_curve(json.loads(table_path.read_text(encoding="utf-8"))),
+        provenance=Provenance(**document["provenance"]),
+        caption=caption(experiment, document, rungs),
+        formats=experiment.figure_formats,
+    )
+    for path in written:
+        print(f"  wrote {_shown(path)}")
+
+
+def _shown(path: Path) -> Path:
+    """A path as the log should read it: repo-relative when it is inside the repo.
+
+    Not decoration. ``--figure-only`` and the tests both point the figure
+    somewhere else, and ``relative_to`` raises on a path outside the tree — a
+    driver that dies while *reporting* where it wrote a file is the same shape of
+    defect as one that dies while printing a grade.
+    """
+    try:
+        return path.resolve().relative_to(REPO_ROOT)
+    except ValueError:
+        return path
 
 
 def write_outputs(experiment: Experiment, document: dict) -> None:
@@ -733,6 +859,27 @@ def main() -> int:
     if args.dry_run:
         reference = experiment.verify_lambda_rule()
         gate_reference = experiment.verify_gate_reference()
+        if experiment.liquidity.stochastic:
+            # The bar cannot be printed without the dynamic program, and printing
+            # the deterministic world's number instead would understate it by
+            # 1.7x — in the flattering direction. So the dry run says what it can
+            # check (the rule, the world, both seams) and says plainly what it
+            # cannot.
+            print(
+                f"config OK · λ = {experiment.lambda_risk:.6e} matches the rule in "
+                f"every reading · {experiment.cost_encoding} world + "
+                f"{experiment.liquidity.name} liquidity "
+                f"(sigma_log = {experiment.liquidity.sigma_log:g}, INVENTED)"
+            )
+            _liquidity_header(experiment)
+            print(
+                f"ε = {experiment.tolerances.epsilon_fraction:.0%} of the ADAPTIVE "
+                f"advantage J_static* - J_DP, which needs the dynamic program and "
+                f"is computed once by the sweep — deliberately not printed here "
+                f"from the deterministic world's tangent advantage, which is a "
+                f"different and smaller number"
+            )
+            return 0
         where = (
             "matches the rule"
             if experiment.frontier_grid is None
@@ -771,10 +918,17 @@ def main() -> int:
         )
     document = build_document(sweep)
 
-    baselines = ", ".join(
-        f"{name} {g.gap_fraction:+.4f}" for name, g in sweep.baselines.items()
-    )
-    print(f"  baselines graded through the same rollout: {baselines}")
+    if sweep.liquidity_baselines:
+        baselines = ", ".join(
+            f"{name} {g.objective:.5f}"
+            for name, g in sweep.liquidity_baselines.items()
+        )
+        print(f"  baselines graded through the same rollout (bps): {baselines}")
+    else:
+        baselines = ", ".join(
+            f"{name} {g.gap_fraction:+.4f}" for name, g in sweep.baselines.items()
+        )
+        print(f"  baselines graded through the same rollout: {baselines}")
 
     if not args.no_write:
         write_outputs(experiment, document)
@@ -790,6 +944,27 @@ def main() -> int:
         f"{experiment.tolerances.denominator} "
         f"({verdict['denominator_bps']:.5f} bps)"
     )
+    if document.get("shuffled_control") is not None:
+        control = document["shuffled_control"]
+        print(
+            f"level shift {verdict['level_shift_bps']:.5f} bps "
+            f"({verdict['level_shift_fraction_of_advantage']:.1%} of the "
+            f"advantage) — reported on its own line, and not the agent's: an "
+            f"agent measured against M4a's schedule would appear to gain the "
+            f"naive {verdict['naive_gap_bps']:.5f} bps"
+        )
+        print(
+            f"liquidity-shuffled control: median capture {control['median']:.4f} "
+            f"(worst {control['worst']:.4f}) against a bar of "
+            f"{verdict['shuffled_capture_bar']:.2f} — "
+            f"{'met' if verdict['shuffled_control_met'] else 'MISSED'}. The gap "
+            f"between the real and shuffled capture is the actual claim."
+        )
+        if verdict["seeds_below_clairvoyant"]:
+            print(
+                f"RED FLAG (rigorous): {verdict['seeds_below_clairvoyant']} scored "
+                "below the perfect-information relaxation on at least one path"
+            )
     if "capture_fraction" in summary:
         capture = summary["capture_fraction"]
         # The fraction leads and the absolute excess goes beside it every time:

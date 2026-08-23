@@ -552,3 +552,157 @@ def test_every_fixed_rung_is_graded_through_the_agent_s_own_route():
         row = baselines[name]
         closed = sweep.liquidity_reference.schedules[name].objective
         assert abs(row["objective_bps"] - closed) <= 4.0 * row["half_width_bps"]
+
+
+# ---------------------------------------------------------------------------
+# The *driver's* reporting path, on fabricated data
+# ---------------------------------------------------------------------------
+#
+# These exist because the house note's lesson arrived a second time, during M4b
+# and before the run rather than after it — but only because the run was watched.
+# ``tools/train.py`` reads a grade's fields to print one line per seed, and a
+# ``LiquidityGrade`` has none of ``relative_excess``, ``gap_fraction`` or
+# ``deviation``: the driver would have trained seed 0 for twenty minutes and then
+# died on an ``AttributeError`` in a print statement. The sibling defect was
+# quieter and worse — ``--dry-run`` printed the *deterministic* world's advantage
+# as M4b's bar, understating it by 1.7x in the flattering direction.
+#
+# Both are pure functions of data. Neither had a test, for exactly the reason the
+# note describes: the only way to reach them was to pay for the producer first.
+
+
+def _driver():
+    """``tools/train.py`` as a module. Imported inside the tests, not at collection.
+
+    The driver pins the OpenMP pools from the config before torch is imported, so
+    importing it at module scope would do that as a side effect of *collecting*
+    this file.
+    """
+    import importlib
+    import sys
+
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+    return importlib.import_module("tools.train")
+
+
+def test_the_per_seed_line_renders_in_both_grade_shapes():
+    """The line the driver prints after every seed, in each world's grade type.
+
+    A ``Grade`` has a trajectory, a deviation and a TWAP gap; a
+    ``LiquidityGrade`` has a distribution of schedules and a confidence interval.
+    Rendering the second through the first's fields is the ``AttributeError``
+    that only a training run could reach.
+    """
+    driver = _driver()
+    result = _training_result(load_experiment(CONFIGS[POWER_LAW_ENCODING]).ppo, 4)
+
+    analytic = _sweep(POWER_LAW_ENCODING, n_seeds=5).grades[0]
+    line = driver._seed_line(0, analytic, result)
+    assert "seed 0" in line and "of the TWAP gap" in line and "capture" in line
+
+    liquidity = _liquidity_sweep(n_seeds=5).liquidity_grades[0]
+    line = driver._seed_line(3, liquidity, result)
+    assert "seed 3" in line
+    assert "±" in line, "a sampled grade must print its interval, not a bare level"
+    assert "excess over J_DP" in line
+    assert "paths" in line
+    assert "TWAP gap" not in line, (
+        "the liquidity line quoted a TWAP gap; that field does not exist on a "
+        "LiquidityGrade and the number would be from the wrong world"
+    )
+
+
+def test_the_liquidity_line_shouts_when_a_path_beats_perfect_information():
+    """The rigorous red flag has to be *visible* in the run's own output."""
+    driver = _driver()
+    grade = _liquidity_sweep(n_seeds=5).liquidity_grades[0]
+    flagged = dataclasses.replace(grade, paths_below_clairvoyant=7, red_flag=True)
+    line = driver._seed_line(1, flagged, _training_result(None, 4))
+    assert "7 PATHS BELOW CLAIRVOYANT" in line
+    assert "RED FLAG" in line
+
+
+def test_the_denominator_refuses_the_wrong_world_rather_than_answering():
+    """The quieter of the two defects, and the one that would have been believed.
+
+    In the liquidity world the bar is a fraction of the *adaptive* advantage,
+    0.0621 bps. The deterministic row's ``available_advantage`` is M4a's tangent
+    advantage, 0.0367 — so a bar printed from it reads 1.7x tighter than the one
+    the agent is actually held to, in the direction that flatters the result.
+    """
+    experiment = load_experiment(M4B_CONFIG)
+    with pytest.raises(ValueError, match="adaptive advantage"):
+        experiment.denominator_bps()
+
+    reference = _liquidity_sweep(n_seeds=5).liquidity_reference
+    assert experiment.denominator_bps(reference) == reference.adaptive_advantage
+    assert reference.adaptive_advantage > experiment.reference().available_advantage
+
+
+def test_the_figure_is_skipped_rather_than_half_drawn_without_the_curve(tmp_path, capsys):
+    """No value-of-sight curve, no figure — the honest failure, not the flattering one.
+
+    The curve against ``sigma_L`` is what stops a single invented parameter with a
+    single number beside it reading as calibration. A figure drawn without it
+    would be the more impressive picture and the less honest one, so its absence
+    is a skip with a message rather than a panel quietly left out.
+    """
+    import dataclasses as dc
+
+    driver = _driver()
+    sweep = _liquidity_sweep(n_seeds=5)
+    document = build_document(sweep)
+    experiment = dc.replace(
+        sweep.experiment, results_figure=tmp_path / "m4b_adaptivity"
+    )
+
+    real = driver.REPO_ROOT
+    try:
+        driver.REPO_ROOT = tmp_path  # no results/m4b_reference.json under here
+        driver.write_figure(experiment, document)
+    finally:
+        driver.REPO_ROOT = real
+    out = capsys.readouterr().out
+    assert "skipped the figure" in out and "value-of-sight" in out
+    assert not list(tmp_path.glob("m4b_adaptivity.*"))
+
+
+def test_the_figure_draws_from_the_committed_table_when_it_is_there(tmp_path):
+    """And when the curve exists, both panels are drawn from committed data only."""
+    import dataclasses as dc
+
+    driver = _driver()
+    table = REPO_ROOT / "results" / "m4b_reference.json"
+    if not table.exists():
+        pytest.skip("task 0's table has not been generated in this tree")
+
+    sweep = _liquidity_sweep(n_seeds=5)
+    document = build_document(sweep)
+    experiment = dc.replace(
+        sweep.experiment, results_figure=tmp_path / "m4b_adaptivity"
+    )
+    driver.write_figure(experiment, document)
+    written = sorted(tmp_path.glob("m4b_adaptivity.*"))
+    assert written and written[0].stat().st_size > 10_000
+
+
+def test_the_caption_never_omits_the_three_things_it_may_not(tmp_path):
+    """Invented, denominator, bracket — every time this figure is drawn."""
+    driver = _driver()
+    table = REPO_ROOT / "results" / "m4b_reference.json"
+    if not table.exists():
+        pytest.skip("task 0's table has not been generated in this tree")
+
+    from tools.m4b_adaptivity import build_rungs, caption
+
+    sweep = _liquidity_sweep(n_seeds=5)
+    document = build_document(sweep)
+    text = caption(sweep.experiment, document, build_rungs(document))
+
+    assert "INVENTED" in text
+    assert "ADAPTIVE advantage" in text and "NOT J_M4a - J_DP" in text
+    assert "level shift" in text
+    assert "CONVERGED AND BRACKETED, not certified" in text
+    assert "no price sampling" in text
+    assert "shuffled control" in text.lower()

@@ -568,7 +568,33 @@ class Experiment:
         function, so the bar, the band and the reported excess cannot be computed
         against three different denominators by three call sites.
         """
+        if self.liquidity.stochastic and reference is None:
+            # Refused rather than answered, because the answer would be *wrong in
+            # a flattering direction*. In the liquidity world the denominator is
+            # the ADAPTIVE advantage J_static* - J_DP = 0.0621 bps, and the
+            # analytic row would hand back M4a's tangent advantage of 0.0367 —
+            # so a bar stated as "10 % of the denominator" would print as 0.0037
+            # bps where it is really 0.0062, and an agent would be reported
+            # against a bar 1.7x tighter than the one it was held to. The
+            # adaptive advantage needs the dynamic program, which is minutes, so
+            # the caller passes the row it already has rather than this
+            # recomputing one.
+            raise ValueError(
+                f"{self.path.name} runs in a stochastic-liquidity world, where the "
+                "denominator is the adaptive advantage J_static* - J_DP and needs "
+                "the dynamic program. Pass the LiquidityReferenceRow "
+                "(temper.eval.sweep.liquidity_reference) rather than letting this "
+                "fall back to the deterministic world's tangent advantage"
+            )
         row = self.reference() if reference is None else reference
+        if isinstance(row, LiquidityReferenceRow):
+            if self.tolerances.denominator != AVAILABLE_ADVANTAGE:
+                raise ValueError(
+                    f"{self.path.name} grades in the liquidity world against the "
+                    f"{self.tolerances.denominator!r} denominator; the only "
+                    "denominator that exists there is the adaptive advantage"
+                )
+            return row.adaptive_advantage
         if self.tolerances.denominator == AVAILABLE_ADVANTAGE:
             advantage = row.available_advantage
             if advantage is None:

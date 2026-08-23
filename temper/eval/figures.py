@@ -677,3 +677,247 @@ def degradation_figure(
         written.append(out)
     plt.close(figure)
     return written
+
+
+def adaptivity_figure(
+    path: str | Path,
+    *,
+    rungs: dict,
+    curve: dict,
+    provenance: Provenance,
+    caption: str,
+    formats: Sequence[str] = ("png",),
+) -> list[Path]:
+    """M4b's hero: what seeing liquidity is worth, and how much of it was captured.
+
+    Two panels, because M4b makes two claims and only one of them is about the
+    agent.
+
+    **Left — the ladder, at the trained sigma_L.** Four levels in bps of the
+    objective: M4a's schedule, which knows no liquidity at all; ``J_static*``, the
+    best *fixed* schedule that knows the liquidity **law**; the ten trained seeds,
+    drawn individually (*below n ~ 10, draw every trace*); and ``J_DP``, the
+    optimum over adapted policies, with the clairvoyant relaxation under it as a
+    floor. The gap the milestone is *about* is `static -> DP`, and it is the only
+    one the agent is measured over. The gap `M4a -> static` is drawn as its own
+    hatched band and labelled a **level shift**, because it is a constant any
+    static solver picks up for free by re-solving at an inflated coefficient, and
+    an agent measured against M4a's schedule would appear to gain it.
+
+    Drawing the level shift rather than mentioning it is the point. A chart whose
+    top rung was M4a's schedule would make the agent look 3.8 % better than it is,
+    which is precisely the direction §9's denominator entry warns about.
+
+    **Right — the value of sight against the invented parameter.** ``sigma_L`` is
+    Temper's own; FrontierView has no liquidity process. So the oracle's adaptive
+    advantage is drawn as a *curve* across three values with the trained point
+    marked, because a single invented parameter with a single number beside it
+    reads as calibration and it is not.
+
+    `rungs` and `curve` are read off committed artefacts by
+    ``tools/m4b_adaptivity.py``: nothing here computes a cost, so the figure is a
+    view of a result and redraws byte-identically from it.
+    """
+    figure, (left, right) = plt.subplots(
+        1, 2, figsize=(11.4, 5.4), gridspec_kw={"width_ratios": (1.35, 1.0)}
+    )
+
+    # ---- left panel: the ladder ------------------------------------------
+    m4a = float(rungs["m4a"])
+    static = float(rungs["static"])
+    adaptive = float(rungs["adaptive"])
+    clairvoyant = float(rungs["clairvoyant"])
+    clairvoyant_half = float(rungs["clairvoyant_half_width"])
+    seeds = np.asarray(rungs["seeds"], dtype=float)
+    span = (0.0, 1.0)
+
+    left.axhspan(
+        static,
+        m4a,
+        xmin=0.02,
+        xmax=0.98,
+        facecolor="#c1663c",
+        alpha=0.10,
+        hatch="///",
+        edgecolor="#c1663c",
+        linewidth=0.0,
+        zorder=0,
+    )
+    left.axhspan(
+        adaptive,
+        static,
+        xmin=0.02,
+        xmax=0.98,
+        facecolor="#227a4b",
+        alpha=0.09,
+        zorder=0,
+    )
+
+    for value, key, label in (
+        (m4a, "tangent", "M4a's schedule — knows no liquidity"),
+        (static, "ac", "$J_{static*}$ — best fixed schedule, knows the law"),
+        (adaptive, "optimal", "$J_{DP}$ — adaptive optimum (converged, bracketed)"),
+    ):
+        left.plot(span, (value, value), label=label, **STYLE[key])
+
+    left.fill_between(
+        span,
+        clairvoyant - clairvoyant_half,
+        clairvoyant + clairvoyant_half,
+        color="#1f4e79",
+        alpha=0.14,
+        linewidth=0.0,
+        zorder=0,
+    )
+    left.plot(
+        span,
+        (clairvoyant, clairvoyant),
+        color="#1f4e79",
+        linestyle=(0, (1, 2)),
+        linewidth=1.3,
+        label="clairvoyant bound — no policy can go below",
+    )
+
+    # Every seed, individually. The house note is about exactly this n.
+    jitter = np.linspace(0.16, 0.84, seeds.size)
+    left.plot(
+        jitter,
+        seeds,
+        marker="o",
+        markersize=6.0,
+        linestyle="none",
+        markerfacecolor=STYLE["agent"]["color"],
+        markeredgecolor="white",
+        markeredgewidth=0.7,
+        label=f"PPO, {seeds.size} seeds (each drawn)",
+        zorder=5,
+    )
+    median = float(np.median(seeds))
+    left.plot(
+        span,
+        (median, median),
+        color=STYLE["agent"]["color"],
+        linewidth=1.2,
+        linestyle=(0, (4, 2)),
+        alpha=0.85,
+        zorder=4,
+    )
+
+    left.annotate(
+        "",
+        xy=(0.955, adaptive),
+        xytext=(0.955, static),
+        arrowprops={"arrowstyle": "<->", "color": "#227a4b", "linewidth": 1.2},
+    )
+    left.text(
+        0.945,
+        0.5 * (static + adaptive),
+        f"adaptive advantage\n{static - adaptive:.5f} bps",
+        ha="right",
+        va="center",
+        fontsize=8.5,
+        color="#227a4b",
+    )
+    left.text(
+        0.05,
+        0.5 * (m4a + static),
+        f"level shift {m4a - static:.5f} bps\n— a re-solve, not the agent",
+        ha="left",
+        va="center",
+        fontsize=8.0,
+        color="#a0522d",
+    )
+
+    left.set_xlim(0.0, 1.0)
+    left.set_xticks([])
+    left.set_ylabel("objective $E + \\lambda V$, bps")
+    left.set_title(
+        f"The ladder at $\\sigma_L$ = {rungs['sigma_log']:g}", fontsize=11, pad=8
+    )
+    left.grid(axis="y", color="#e6e6e6", linewidth=0.7)
+    left.set_axisbelow(True)
+    left.legend(fontsize=8.0, loc="upper right", framealpha=0.94)
+
+    # ---- right panel: the value of sight ---------------------------------
+    sigmas = np.asarray(curve["sigma_log"], dtype=float)
+    advantage = np.asarray(curve["advantage_bps"], dtype=float)
+    shift = np.asarray(curve["level_shift_bps"], dtype=float)
+    trained = float(rungs["sigma_log"])
+
+    right.plot(
+        sigmas,
+        advantage,
+        marker="o",
+        color="#227a4b",
+        linewidth=2.0,
+        markersize=5.5,
+        label="adaptive advantage $J_{static*} - J_{DP}$",
+    )
+    right.plot(
+        sigmas,
+        shift,
+        marker="s",
+        color="#c1663c",
+        linewidth=1.5,
+        linestyle=(0, (5, 2)),
+        markersize=4.5,
+        label="level shift $J_{M4a} - J_{static*}$",
+    )
+    right.axvline(trained, color="#8c8c8c", linewidth=1.0, linestyle=(0, (1, 3)))
+    index = int(np.argmin(np.abs(sigmas - trained)))
+    right.plot(
+        [trained],
+        [advantage[index]],
+        marker="o",
+        markersize=10.0,
+        markerfacecolor="none",
+        markeredgecolor="#227a4b",
+        markeredgewidth=1.6,
+    )
+    right.annotate(
+        "trained here",
+        xy=(trained, advantage[index]),
+        xytext=(8, -18),
+        textcoords="offset points",
+        fontsize=8.5,
+        color="#227a4b",
+    )
+    right.set_xlabel("$\\sigma_L$ — Temper's own invented parameter")
+    right.set_ylabel("bps of the objective")
+    right.set_yscale("log")
+    right.set_title("What sight is worth, against $\\sigma_L$", fontsize=11, pad=8)
+    right.grid(color="#e6e6e6", linewidth=0.7)
+    right.set_axisbelow(True)
+    right.legend(fontsize=8.0, loc="upper left", framealpha=0.94)
+
+    figure.suptitle(
+        "M4b — stochastic liquidity: the advantage no fixed schedule can capture",
+        fontsize=12.5,
+        y=0.975,
+    )
+    figure.text(0.008, 0.012, caption, fontsize=8.0, color="#333333", va="bottom")
+    figure.text(
+        0.992,
+        0.012,
+        provenance.short,
+        fontsize=7.5,
+        color="#666666",
+        family="monospace",
+        ha="right",
+        va="bottom",
+    )
+    figure.subplots_adjust(left=0.075, right=0.985, top=0.885, bottom=0.205, wspace=0.22)
+
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+    for suffix in formats:
+        out = target.with_name(f"{target.name}.{suffix.lstrip('.')}")
+        figure.savefig(
+            out,
+            dpi=160,
+            metadata={"Software": None, "Creator": None, "Date": None},
+        )
+        written.append(out)
+    plt.close(figure)
+    return written
