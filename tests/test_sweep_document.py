@@ -766,3 +766,60 @@ def test_the_figure_tool_runs_end_to_end_on_a_fabricated_result(tmp_path):
     assert exit_info.value.code == 0
     written = sorted(tmp_path.glob("m4b_adaptivity.*"))
     assert written and written[0].stat().st_size > 50_000
+
+
+@pytest.mark.parametrize("encoding", sorted(CONFIGS))
+def test_the_closing_summary_renders_in_the_deterministic_worlds(encoding, capsys):
+    """``print_verdict`` on a fabricated sweep, in each world that has trajectories."""
+    driver = _driver()
+    document = build_document(_sweep(encoding))
+    driver.print_verdict(load_experiment(CONFIGS[encoding]), document)
+    out = capsys.readouterr().out
+
+    assert "median excess" in out and "shares against a derived bound" in out
+    assert "capture fraction" not in out or "certified optimum" in out
+    assert "liquidity-shuffled control" not in out
+
+
+def test_the_closing_summary_renders_in_the_liquidity_world(capsys):
+    """The same function on M4b's document — the branch that cost a full sweep.
+
+    This block was inline in ``main`` and reachable only by training ten seeds
+    first. It read ``summary['relative_excess']``, which a liquidity summary does
+    not have, and the run died on it **after** grading all ten seeds and writing
+    both artefacts. Nothing was lost only because ``write_outputs`` runs before
+    the printing. Extracting it and calling it here costs milliseconds.
+    """
+    driver = _driver()
+    sweep = _liquidity_sweep()
+    document = build_document(sweep)
+    driver.print_verdict(sweep.experiment, document)
+    out = capsys.readouterr().out
+
+    # The four things a liquidity run must say, and the two it must not.
+    assert "advantage_fraction" in out
+    assert "level shift" in out and "not the agent's" in out
+    assert "liquidity-shuffled control" in out
+    assert "capture fraction" in out
+    assert "converged, bracketed" in out, (
+        "the closing summary called a dynamic program 'the certified optimum'; "
+        "M4a earned that word and this is not the same word"
+    )
+    assert "certified optimum" not in out
+    assert "shares against a derived bound" not in out, (
+        "a liquidity-observing policy has a distribution of schedules, so there "
+        "is no single trajectory deviation to quote"
+    )
+
+
+def test_the_closing_summary_shouts_the_rigorous_red_flag(capsys):
+    """A seed below perfect information has to be visible in the run's own output."""
+    import copy
+
+    driver = _driver()
+    sweep = _liquidity_sweep()
+    document = copy.deepcopy(build_document(sweep))
+    document["verdict"]["seeds_below_clairvoyant"] = ["seed3"]
+    driver.print_verdict(sweep.experiment, document)
+    out = capsys.readouterr().out
+    assert "RED FLAG (rigorous)" in out and "seed3" in out

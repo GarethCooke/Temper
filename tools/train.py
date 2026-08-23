@@ -792,6 +792,108 @@ def run_export(experiment: Experiment, args) -> int:
     return 0
 
 
+def print_verdict(experiment: Experiment, document: dict) -> None:
+    """Everything the run says after the last seed, in whichever world it ran in.
+
+    A pure function of ``(experiment, document)`` and nothing else, extracted for
+    the reason ``docs/house-notes.md``'s *The artefact writer is tested on
+    fabricated data* gives — and extracted *after* it had already cost a run.
+    This block was inline in ``main`` and therefore reachable only by training
+    ten seeds first; it read ``summary['relative_excess']``, which is a
+    deterministic-world key that a liquidity summary does not have, and M4b's
+    sweep died on it **after** grading all ten seeds and writing both artefacts.
+    Nothing was lost that time only because ``write_outputs`` runs before the
+    printing does.
+
+    Two worlds, two shapes, and the branches are on *what the summary contains*
+    rather than on a milestone name: a liquidity-observing policy has a
+    distribution of schedules, so there is no single trajectory deviation to
+    quote and no derived band to quote it against.
+    """
+    verdict, summary = document["verdict"], document["summary"]
+    graded = summary[experiment.tolerances.graded_attribute]
+    print()
+    print(
+        f"median {experiment.tolerances.graded_attribute} {graded['median']:.4f} "
+        f"(IQR {graded['iqr']:.4f}, worst {graded['worst']:.4f}) against ε = "
+        f"{experiment.tolerances.epsilon_fraction} and a per-seed floor of "
+        f"{experiment.tolerances.per_seed_fraction}, both fractions of the "
+        f"{experiment.tolerances.denominator} "
+        f"({verdict['denominator_bps']:.5f} bps)"
+    )
+    if document.get("shuffled_control") is not None:
+        control = document["shuffled_control"]
+        print(
+            f"level shift {verdict['level_shift_bps']:.5f} bps "
+            f"({verdict['level_shift_fraction_of_advantage']:.1%} of the "
+            f"advantage) — reported on its own line, and not the agent's: an "
+            f"agent measured against M4a's schedule would appear to gain the "
+            f"naive {verdict['naive_gap_bps']:.5f} bps"
+        )
+        print(
+            f"liquidity-shuffled control: median capture {control['median']:.4f} "
+            f"(worst {control['worst']:.4f}) against a bar of "
+            f"{verdict['shuffled_capture_bar']:.2f} — "
+            f"{'met' if verdict['shuffled_control_met'] else 'MISSED'}. The gap "
+            f"between the real and shuffled capture is the actual claim."
+        )
+        if verdict["seeds_below_clairvoyant"]:
+            print(
+                f"RED FLAG (rigorous): {verdict['seeds_below_clairvoyant']} scored "
+                "below the perfect-information relaxation on at least one path"
+            )
+    if "capture_fraction" in summary:
+        capture = summary["capture_fraction"]
+        # The fraction leads and the absolute excess goes beside it every time:
+        # a capture fraction near 1 on an advantage of 0.037 bps is a small
+        # absolute claim and should read as one (ARCHITECTURE.md §9). The
+        # reference is only called *certified* where it is one — M4b's is a
+        # dynamic program and gets the word it earned instead.
+        reference_name = (
+            "J_DP (converged, bracketed)"
+            if document.get("reference_kind")
+            else "the certified optimum"
+        )
+        print(
+            f"capture fraction: median {capture['median']:.4f} "
+            f"(IQR {capture['iqr']:.4f}, worst {capture['worst']:.4f}) · "
+            f"median absolute excess over {reference_name} "
+            f"{verdict['median_excess_bps']:+.5f} bps"
+        )
+    # Trajectory-space reporting, and only where a trajectory is the answer. A
+    # liquidity-observing policy has a *distribution* of schedules, so there is
+    # no single deviation to quote and no band to quote it against — the
+    # summary carries neither key and asking for them is how this line died
+    # after a full sweep had been graded and written.
+    if "relative_excess" in summary:
+        print(
+            f"median excess {summary['relative_excess']['median']:+.4%} of J_optimal · "
+            f"median ‖δ‖₂ {summary['deviation']['median']:,.0f} shares against a "
+            f"derived bound of {experiment.band().bound_shares:,.0f}"
+        )
+    if verdict["red_flags"]:
+        print(
+            f"RED FLAG — {', '.join(verdict['red_flags'])} scored below the "
+            "reference. This is a defect, not a result (ARCHITECTURE.md §1.1)."
+        )
+    if summary.get("reward_variance") is not None:
+        rv = summary["reward_variance"]
+        print(
+            f"reward variance per update, median across seeds: sampled half "
+            f"{rv['sampled_median']:.1f} bps² · averaged {rv['averaged_median']:.3e} "
+            f"bps² · ratio {rv['variance_ratio_median']:.2e}"
+        )
+    gate = document.get("gate")
+    if gate is not None:
+        print(
+            f"gate: median gap {gate['median_gap_fraction']:.5f} against "
+            f"≤ {gate['median_gap_fraction_max']:g} (reference "
+            f"{gate['reference']} {gate['reference_regime']}: "
+            f"{gate['reference_median_gap_fraction']:.5f}) · "
+            f"{'MET' if gate['met'] else 'MISSED'}"
+        )
+
+
 def main() -> int:
     _stdout_utf8()
     parser = argparse.ArgumentParser(description=__doc__)
@@ -933,76 +1035,8 @@ def main() -> int:
     if not args.no_write:
         write_outputs(experiment, document)
 
-    verdict, summary = document["verdict"], document["summary"]
-    graded = summary[experiment.tolerances.graded_attribute]
-    print()
-    print(
-        f"median {experiment.tolerances.graded_attribute} {graded['median']:.4f} "
-        f"(IQR {graded['iqr']:.4f}, worst {graded['worst']:.4f}) against ε = "
-        f"{experiment.tolerances.epsilon_fraction} and a per-seed floor of "
-        f"{experiment.tolerances.per_seed_fraction}, both fractions of the "
-        f"{experiment.tolerances.denominator} "
-        f"({verdict['denominator_bps']:.5f} bps)"
-    )
-    if document.get("shuffled_control") is not None:
-        control = document["shuffled_control"]
-        print(
-            f"level shift {verdict['level_shift_bps']:.5f} bps "
-            f"({verdict['level_shift_fraction_of_advantage']:.1%} of the "
-            f"advantage) — reported on its own line, and not the agent's: an "
-            f"agent measured against M4a's schedule would appear to gain the "
-            f"naive {verdict['naive_gap_bps']:.5f} bps"
-        )
-        print(
-            f"liquidity-shuffled control: median capture {control['median']:.4f} "
-            f"(worst {control['worst']:.4f}) against a bar of "
-            f"{verdict['shuffled_capture_bar']:.2f} — "
-            f"{'met' if verdict['shuffled_control_met'] else 'MISSED'}. The gap "
-            f"between the real and shuffled capture is the actual claim."
-        )
-        if verdict["seeds_below_clairvoyant"]:
-            print(
-                f"RED FLAG (rigorous): {verdict['seeds_below_clairvoyant']} scored "
-                "below the perfect-information relaxation on at least one path"
-            )
-    if "capture_fraction" in summary:
-        capture = summary["capture_fraction"]
-        # The fraction leads and the absolute excess goes beside it every time:
-        # a capture fraction near 1 on an advantage of 0.037 bps is a small
-        # absolute claim and should read as one (ARCHITECTURE.md §9).
-        print(
-            f"capture fraction: median {capture['median']:.4f} "
-            f"(IQR {capture['iqr']:.4f}, worst {capture['worst']:.4f}) · "
-            f"median absolute excess over the certified optimum "
-            f"{verdict['median_excess_bps']:+.5f} bps"
-        )
-    print(
-        f"median excess {summary['relative_excess']['median']:+.4%} of J_optimal · "
-        f"median ‖δ‖₂ {summary['deviation']['median']:,.0f} shares against a "
-        f"derived bound of {experiment.band().bound_shares:,.0f}"
-    )
-    if verdict["red_flags"]:
-        print(
-            f"RED FLAG — {', '.join(verdict['red_flags'])} scored below the "
-            "certified optimum. This is a defect, not a result "
-            "(ARCHITECTURE.md §1.1)."
-        )
-    if summary.get("reward_variance") is not None:
-        rv = summary["reward_variance"]
-        print(
-            f"reward variance per update, median across seeds: sampled half "
-            f"{rv['sampled_median']:.1f} bps² · averaged {rv['averaged_median']:.3e} "
-            f"bps² · ratio {rv['variance_ratio_median']:.2e}"
-        )
-    gate = document.get("gate")
-    if gate is not None:
-        print(
-            f"gate: median gap {gate['median_gap_fraction']:.5f} against "
-            f"≤ {gate['median_gap_fraction_max']:g} (reference "
-            f"{gate['reference']} {gate['reference_regime']}: "
-            f"{gate['reference_median_gap_fraction']:.5f}) · "
-            f"{'MET' if gate['met'] else 'MISSED'}"
-        )
+    print_verdict(experiment, document)
+
     reached = "pass" if verdict["passed"] else "miss"
     print(f"sweep {verdict['sweep_seconds']:.0f}s · verdict: {reached.upper()}")
     if args.expect == "any":
