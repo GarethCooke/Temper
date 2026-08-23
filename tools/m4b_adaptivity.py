@@ -138,7 +138,14 @@ def main() -> int:
         formats=experiment.figure_formats,
     )
     for path in written:
-        print(f"wrote {path.relative_to(REPO_ROOT)}")
+        # `relative_to` raises for anything outside the tree, and a driver that
+        # dies while *reporting* where it wrote a file has thrown away the file's
+        # only mention. The figure had already been written when this fired.
+        try:
+            shown = path.resolve().relative_to(REPO_ROOT)
+        except ValueError:
+            shown = path
+        print(f"wrote {shown}")
     return 0
 
 

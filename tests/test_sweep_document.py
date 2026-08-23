@@ -718,3 +718,51 @@ def test_the_caption_never_omits_the_three_things_it_may_not(tmp_path):
         f"{len(overlong)} caption line(s) exceed {CAPTION_WIDTH} characters and "
         f"will run off the canvas: {overlong[0][:80]!r}..."
     )
+
+
+def test_the_figure_tool_runs_end_to_end_on_a_fabricated_result(tmp_path):
+    """``tools/m4b_adaptivity.py`` as the Makefile invokes it, with no training.
+
+    ``write_figure`` was already covered; ``main`` was not, and the two are
+    different code — ``main`` resolves paths, reads both artefacts off disk and
+    reports where it wrote. That last part is where it failed the first time this
+    ran: the figure had already been written and the process died on the
+    ``relative_to`` in the line that says so. A driver that throws away a file's
+    only mention while reporting it is the same shape as one that dies while
+    printing a grade, which is the defect this module exists for.
+    """
+    import json
+    import runpy
+    import sys
+
+    table = REPO_ROOT / "results" / "m4b_reference.json"
+    if not table.exists():
+        pytest.skip("task 0's table has not been generated in this tree")
+
+    document = build_document(_liquidity_sweep(n_seeds=5))
+    metrics = tmp_path / "m4b_liquidity.json"
+    metrics.write_text(json.dumps(document), encoding="utf-8")
+
+    config = (REPO_ROOT / "configs" / "m4b_liquidity.yaml").read_text(encoding="utf-8")
+    config = config.replace(
+        "metrics: results/m4b_liquidity.json", f"metrics: {metrics.as_posix()}"
+    ).replace(
+        "figure: results/m4b_adaptivity",
+        f"figure: {(tmp_path / 'm4b_adaptivity').as_posix()}",
+    )
+    config_path = tmp_path / "m4b.yaml"
+    config_path.write_text(config, encoding="utf-8")
+
+    argv = sys.argv
+    try:
+        sys.argv = ["m4b_adaptivity.py", "--config", str(config_path)]
+        with pytest.raises(SystemExit) as exit_info:
+            runpy.run_path(
+                str(REPO_ROOT / "tools" / "m4b_adaptivity.py"), run_name="__main__"
+            )
+    finally:
+        sys.argv = argv
+
+    assert exit_info.value.code == 0
+    written = sorted(tmp_path.glob("m4b_adaptivity.*"))
+    assert written and written[0].stat().st_size > 50_000
