@@ -392,6 +392,7 @@ Every pre-stated item met, nothing loosened, nothing void.
 | Wide ladder | 33.6300 bps, predicted |
 | Feeder run | 12.3587 bps; 641 third-party fills during the run, limit price moving 675 ticks between bins, 1,343 full replaces applied, whole order filled and reconciled |
 | Reconciliation | 1,000 attributed by `takerId` on every run; no third-party fill in any measured run; nothing void |
+| **Deployment run** | `anvil.garethcooke.com` over TLS, 12-ticker roster: filled 1,000 / 1,000, attributed 1,000, **VOID** on 236 third-party fills; unreported 10.3654 bps against a 9.9994 arrival mid; 0 reconnects, 1,852 full replaces, ping ≤ 89 ms |
 | Suite | 1,246 tests, 48 s — the 3-minute ceiling untouched; live-server tests behind the `anvil` marker |
 
 **The prediction is the result; the bps figure is the demonstration.** All three
@@ -437,11 +438,33 @@ sold, and the totals can coincidentally reconcile, which is itself the argument 
 checking attributed quantity against the parent order rather than against anything the
 client believes about itself.
 
-**Not done, and deliberately.** The deployment run against `anvil.garethcooke.com` was
-optional and was not taken: the demo book is a shared, unauthenticated floor, so a
-third-party fill would make it a successful demonstration and a void measurement, and the
-local runs already establish both halves. It stays available as a one-command run against
-the same client.
+**The deployment run was taken after all (2026-08-23), and it voided exactly as the
+brief said it would.** Same client, same committed policy, same thirteen bins, against
+`anvil.garethcooke.com` over TLS — `configs/m6_anvil_deployment.yaml`, a separate file
+because `configs/m6_anvil.yaml` is hashed into the four local artefacts. It filled
+1,000 of 1,000, attributed every share by `takerId`, and reported **void**: 236
+third-party fills on the ticker while the order was being worked. The unreported number
+is 10.3654 bps against an arrival mid of 9.9994. Nothing reconnected, no remainder ever
+rested, and the book was checked afterwards and left as the feeder had it.
+
+That is the brief's own sentence arriving intact: *a third-party fill makes it a
+successful demonstration and a void measurement, and both halves get reported*. It is
+the only run of the five that is void, and it is void for the healthiest possible
+reason — the venue was real and other people were trading on it.
+
+Getting there cost three findings, all in the client and none in Anvil. `wss://` was
+never supported: the REST half had TLS free from `HTTPSConnection`, but the stream is a
+hand-rolled RFC 6455 reader on a raw socket, and `ssl.SSLWantReadError` — an `OSError`
+that is *not* a `BlockingIOError` and carries no errno — is raised on every zero-timeout
+poll, which is the client's steady state. A `build: false` run's `teardown` swept
+`ladder_ids`, which that path never fills, so an interrupt could have stranded a live
+sell on a public book that nobody could then cancel. And `TradeTape` discarded
+maker-side fills, so a rested remainder that got hit would never have left inventory and
+the terminal bin would have force-liquidated shares already sold — trading past the
+mandate on somebody else's venue. The first attempt then hung: the leak fix had pointed
+`teardown` at the list its own cancels append to, and it re-cancelled nothing for
+eighteen minutes without printing a word. All four are fixed and regression-tested; the
+local ladder run still reports 11.2100 bps and MATCHED across thirteen bins.
 
 ### What this hands MP Stage 2
 

@@ -160,6 +160,13 @@ is deliberately narrower than it might sound.
   the weak sense. With the feeder seed pinned and the server restarted each time it gave
   12.3820, 12.3752, 12.3752 and 12.3587 bps across four attempts, which is what that
   caveat means measured rather than asserted.
+  The same client also worked the same order on the **public deployment** over TLS, as
+  `PROTOCOL.md`'s third independent client on a shared, unauthenticated floor. It filled
+  1,000 of 1,000 and reported **void** — 236 third-party fills while the order was being
+  worked — which is the brief's own prediction arriving intact: a third-party fill makes
+  it a successful demonstration and a void measurement, and both halves get reported. The
+  unreported figure was 10.37 bps. It is the only void run of the five, and it is void for
+  the healthiest reason available: the venue was real and other people were trading on it.
   Every run reconciles or is void: the quantity attributed by `takerId` must equal the
   parent order, and there is no reconciliation path. Deleting one `trade` frame from a
   live run — the exact loss the wire cannot signal — voids the measurement, with the
