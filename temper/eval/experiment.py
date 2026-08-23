@@ -27,19 +27,25 @@ from temper.agents.ppo import PPOConfig
 from temper.eval.provenance import Provenance, stamp
 from temper.eval.reference import (
     LambdaRule,
+    LiquidityReferenceRow,
     ReferenceRow,
     TrajectoryBand,
+    liquidity_reference_row,
     reference_row,
     reference_table,
     select_lambda,
+    static_liquidity_table,
     trajectory_band,
 )
 from temper.oracle import (
     ENCODINGS,
     LINEAR_ENCODING,
     VENDOR_LAMBDA_GRID,
+    DeterministicLiquidity,
+    LiquidityLaw,
     Market,
     SymbolParams,
+    liquidity_for,
 )
 
 #: Lambda grids a config may name. ``vendor`` is M0's 17-point log-half-decade
@@ -87,6 +93,14 @@ class ExecutionCase:
             },
         }
 
+
+#: The key the liquidity world's reading of the lambda rule is reported under.
+#: Deliberately *not* a member of :data:`~temper.oracle.model.ENCODINGS`:
+#: liquidity randomises the market, not the cost functional, so it is not a new
+#: encoding and §9's *A metric grades the world that charges it* is untouched.
+#: What it *is* is a third table the same rule is applied to, and the milestone's
+#: comparability claim is that all three select the same point.
+LIQUIDITY_READING = "power_law+liquidity"
 
 #: The two denominators a tolerance may be a fraction of, and the ``Grade``
 #: attribute each reads. ``twap_gap`` is M2's and M3's: the excess over the
@@ -335,6 +349,12 @@ class Experiment:
     #: so a config that wants one has to name it and
     #: ``tests/test_repo_invariants.py`` checks that it did.
     cost_encoding: str
+    #: The liquidity law this experiment's market runs under. Defaulted to
+    #: deterministic at the loader and never inherited from anywhere else — the
+    #: same rule as `cost_encoding`, for the same reason and enforced by the same
+    #: ``tests/test_repo_invariants.py`` check: a config written for M2, M3 or M4a
+    #: and re-run after M4b landed must not silently acquire a second noise source.
+    liquidity: LiquidityLaw
     rule: LambdaRule
     #: The frontier sub-grid this experiment is one point of, or ``None`` when
     #: its lambda is the rule-selected one (M2, and M3's validation run).
@@ -384,6 +404,38 @@ class Experiment:
     def rule_selected(self, encoding: str | None = None) -> ReferenceRow:
         """The row M2 task 0's rule selects on the committed grid, in a world."""
         return select_lambda(self.table(encoding), self.rule)
+
+    def liquidity_table(self) -> list[LiquidityReferenceRow]:
+        """The liquidity world's *static* table over the committed grid.
+
+        Static, because that is the recorded reading of the rule (task 0 gate 1):
+        the liquidity world's fixed-schedule problem is M4a's at the coefficient
+        ``A E[L^-beta]``, so the rule reads a schedule as it always has. It is
+        also five certified solves per grid point rather than a dynamic program,
+        which is what keeps :meth:`verify_lambda_rule` affordable at the top of a
+        run.
+        """
+        return static_liquidity_table(
+            self.case.market,
+            self.case.order_size,
+            self.liquidity,
+            LAMBDA_GRIDS[self.lambda_grid],
+        )
+
+    def liquidity_reference(self, **kwargs) -> LiquidityReferenceRow:
+        """The full liquidity row at the committed lambda — DP and both bounds.
+
+        Minutes, not milliseconds: the caller is a reference-table driver or a
+        grading path that needs the adaptive optimum, never a config check.
+        """
+        kwargs.setdefault("root_seed", self.seeds.root_seed)
+        return liquidity_reference_row(
+            self.case.market,
+            self.case.order_size,
+            self.lambda_risk,
+            self.liquidity,
+            **kwargs,
+        )
 
     def verify_lambda_rule(self) -> ReferenceRow:
         """Re-derive lambda from the rule; raise if the config disagrees.
@@ -454,11 +506,26 @@ class Experiment:
         and the thing it buys is that M4a's training point sits at the lambda two
         committed milestones already answered, so its capture fraction can be put
         beside their gap fractions without an argument about the x axis.
+
+        **M4b adds a third reading, not a third encoding.** Liquidity randomises
+        the market rather than the cost functional, so it is not an entry in
+        ``ENCODINGS``; what it is is one more table the same rule is applied to,
+        and it is included here whenever the experiment's law is stochastic. The
+        reading is the *static* one — the liquidity world at ``A E[L^-beta]`` — for
+        the reason recorded in ``tools/m4b_reference_table.py``: it is a closed
+        form, and the alternative (reading the rule off the dynamic program's
+        value and its mean schedule) clears the 20 % bar at 10^-4 by 0.011
+        percentage points, which would make a milestone's lambda turn on the fifth
+        digit of a numerically-solved value function.
         """
         selections = {
             encoding: self.rule_selected(encoding).lambda_risk
             for encoding in ENCODINGS
         }
+        if self.liquidity.stochastic:
+            selections[LIQUIDITY_READING] = select_lambda(
+                self.liquidity_table(), self.rule
+            ).lambda_risk
         if len(set(selections.values())) > 1:
             described = ", ".join(
                 f"{encoding} selects {lam:.6e}"
@@ -549,6 +616,7 @@ class Experiment:
             "lambda_risk": self.lambda_risk,
             "lambda_grid": self.lambda_grid,
             "cost_encoding": self.cost_encoding,
+            "liquidity": self.liquidity.as_dict(),
             "frontier_grid": self.frontier_grid,
             "lambda_rule": {
                 "min_twap_gap": self.rule.min_twap_gap,
@@ -577,6 +645,23 @@ def repo_root_of(config_path: str | Path) -> Path:
         if (ancestor / "pyproject.toml").exists():
             return ancestor
     return path.parent.parent
+
+
+def _liquidity(document: dict) -> LiquidityLaw:
+    """The liquidity law a config names, defaulting to deterministic.
+
+    The second seam, under the first seam's rule. Constitution §4's "additive
+    alternatives behind the same interface, never silent modifications of Phase 1"
+    is a sentence about defaults, and M4b hands out *two* models — so a config
+    with no ``world.liquidity`` block gets ``L = 1``, exactly the market M0
+    through M4a ran in, and one that wants a second noise source has to write it
+    down where a reader and a digest can both see it.
+    """
+    block = (document.get("world") or {}).get("liquidity")
+    if block is None:
+        return DeterministicLiquidity()
+    parameters = {key: value for key, value in block.items() if key != "model"}
+    return liquidity_for(str(block["model"]), **parameters)
 
 
 def _cost_encoding(document: dict) -> str:
@@ -678,6 +763,7 @@ def load_experiment(path: str | Path) -> Experiment:
         lambda_risk=float(selection["lambda_risk"]),
         lambda_grid=grid,
         cost_encoding=_cost_encoding(document),
+        liquidity=_liquidity(document),
         frontier_grid=(
             None
             if selection.get("frontier_grid") is None

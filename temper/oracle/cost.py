@@ -116,19 +116,80 @@ def shortfall_variance_bps2(trajectory, market: Market) -> float:
     return float((market.sigma_bin * BPS) ** 2 * np.sum((x[:-1] / order_size) ** 2))
 
 
-def cost_moments(trajectory, market: Market) -> CostMoments:
+def cost_moments(trajectory, market: Market, *, liquidity=None) -> CostMoments:
     """Cost moments under the power-law temporary impact model.
 
     This is the vendored model: what FrontierView charges, and what the goldens
     pin to 1e-6 relative.
+
+    `liquidity` is M4b's per-bin multiplier on ``v_hourly``: participation becomes
+    ``p_k = n_k / (dt v_hourly L_k)`` and **nothing else in the model changes**.
+    Passing a realised path makes this ``E[cost | L]`` *exactly* rather than
+    approximately — the price shock enters realised cost only through M1a's affine
+    term and a graded policy never sees a price, so conditioning on the liquidity
+    path removes all of the price randomness analytically and what is left is a
+    closed form. That is the route by which an M4b agent is graded, and the
+    per-step assertion that licenses it is
+    :func:`~temper.eval.grading.deterministic_schedule`.
+
+    ``liquidity=None`` is the deterministic world and is **bit-identical** to what
+    this function computed before the argument existed, which
+    ``tests/test_m4b_conditional_grading.py`` pins: no M4a or earlier number is
+    permitted to move because a later milestone widened a signature.
+
+    The encoding is unchanged. Liquidity randomises the *market*, not the cost
+    functional — the charge is still ``eta sigma p**beta`` — so §9's *A metric
+    grades the world that charges it* is untouched and this stays a ``power_law``
+    metric.
     """
     _, _, _, weights, participation = _decompose(trajectory, market)
+    if liquidity is not None:
+        multiplier = np.asarray(liquidity, dtype=float)
+        if multiplier.shape not in {(), (market.n_bins,)}:
+            raise ValueError(
+                f"liquidity must be a scalar or {market.n_bins} per-bin "
+                f"multipliers, got shape {multiplier.shape}"
+            )
+        if np.any(multiplier <= 0.0):
+            raise ValueError("liquidity multipliers must be strictly positive")
+        participation = participation / multiplier
     temporary = float(np.sum(temporary_impact_bps(participation, market) * weights))
     return CostMoments(
         temporary=temporary,
         permanent=permanent_cost_bps(trajectory, market),
         spread=float(market.params.half_spread * weights.sum()),
         variance=shortfall_variance_bps2(trajectory, market),
+    )
+
+
+def expected_cost_moments(trajectory, market: Market, law) -> CostMoments:
+    """A **fixed** schedule's ``E[cost]`` under a liquidity law — a closed form.
+
+    A fixed schedule's weights are not random, so the expectation passes straight
+    through the multiplier and lands on
+    :meth:`~temper.oracle.liquidity.LiquidityLaw.inverse_power_moment`:
+
+    .. code::
+
+        E[ sum_k h(n_k / (dt v L_k)) w_k ] = E[L^-beta] * sum_k h(n_k / (dt v)) w_k
+
+    Permanent impact, the half-spread and the shortfall variance are untouched —
+    ``V`` is *price*-shortfall variance and liquidity dispersion enters ``E[cost]``
+    through Jensen, not ``lambda V``, which is why M4b needs no amendment to
+    invariant 7.
+
+    Closed form rather than an average over sampled paths, and that is the whole
+    point: the two static rungs this prices differ by ~0.002 bps, and differencing
+    two *simulated* levels turns that into noise. The level shift is the gate that
+    decides whether M4b's headline is adaptivity or a re-solve, so it is computed
+    where it can be computed exactly.
+    """
+    base = cost_moments(trajectory, market)
+    return CostMoments(
+        temporary=base.temporary * law.inverse_power_moment(market.temp_exponent),
+        permanent=base.permanent,
+        spread=base.spread,
+        variance=base.variance,
     )
 
 

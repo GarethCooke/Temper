@@ -14,11 +14,33 @@ closed form is derived at, :mod:`~temper.oracle.schedules` the trajectories
 (E, V) locus, and :mod:`~temper.oracle.powerlaw` the optimum of the *vendored*
 power-law world — which has no closed form, is solved and certified instead,
 and is what M4a grades against.
+
+M4b adds two more, and they are the only *invented* thing in the package:
+:mod:`~temper.oracle.liquidity` is the per-bin multiplier and its closed-form
+moments, and :mod:`~temper.oracle.adaptive` is the optimum over adapted policies
+in the world that multiplier makes — a dynamic program, so **converged and
+bracketed rather than certified**. Read `liquidity`'s docstring before reporting
+any number that depends on it: FrontierView has no liquidity process, so §7's
+"vendored, not invented" cover does not reach these two.
 """
 
+from .adaptive import (
+    DEFAULT_GRID_POINTS,
+    DEFAULT_QUADRATURE_NODES,
+    AdaptiveOptimum,
+    AugmentedOptimum,
+    adaptive_optimum,
+    augmented_optimum,
+    clairvoyant_trajectories,
+    liquidity_charge,
+    path_objective_bps,
+    richardson_residual,
+    static_optimum,
+)
 from .cost import (
     CostMoments,
     cost_moments,
+    expected_cost_moments,
     linear_cost_moments,
     participation,
     permanent_cost_bps,
@@ -40,6 +62,15 @@ from .impact import (
     linearised_eta,
     permanent_drift_bps_per_hour,
     temporary_impact_bps,
+)
+from .liquidity import (
+    DETERMINISTIC_LIQUIDITY,
+    LIQUIDITY_MODELS,
+    LOGNORMAL_LIQUIDITY,
+    DeterministicLiquidity,
+    LiquidityLaw,
+    LognormalLiquidity,
+    liquidity_for,
 )
 from .model import (
     BPS,
@@ -65,6 +96,7 @@ from .powerlaw import (
     power_law_charge,
     power_law_optimum,
     power_law_optimum_by_shooting,
+    schedule_invariant_bps,
     tangent_charge,
     varying_objective_bps,
 )
@@ -84,14 +116,24 @@ from .schedules import (
 )
 
 __all__ = [
+    "AdaptiveOptimum",
+    "AugmentedOptimum",
     "BPS",
     "CostMoments",
+    "DEFAULT_GRID_POINTS",
+    "DEFAULT_QUADRATURE_NODES",
+    "DETERMINISTIC_LIQUIDITY",
+    "DeterministicLiquidity",
     "ENCODINGS",
     "ETA_TILDE_FLOOR",
     "FrontierPoint",
     "KAPPA2_FLOOR",
     "KKT_TOLERANCE",
     "LINEAR_ENCODING",
+    "LIQUIDITY_MODELS",
+    "LOGNORMAL_LIQUIDITY",
+    "LiquidityLaw",
+    "LognormalLiquidity",
     "Market",
     "PARTICIPATION_FLOOR",
     "POWER_LAW_ENCODING",
@@ -105,13 +147,19 @@ __all__ = [
     "ac_frontier_point",
     "ac_kappa",
     "ac_trajectory",
+    "adaptive_optimum",
+    "augmented_optimum",
     "charge_for",
+    "clairvoyant_trajectories",
     "cost_moments",
     "default_n_bins",
+    "expected_cost_moments",
     "inventory_penalty_scale",
     "kkt_residual",
     "linear_cost_moments",
     "linearised_eta",
+    "liquidity_charge",
+    "liquidity_for",
     "local_curvature_floor",
     "marginal_costs",
     "objective_curvature",
@@ -125,14 +173,18 @@ __all__ = [
     "optimum_by_shooting",
     "optimum_for_charge",
     "participation",
+    "path_objective_bps",
     "permanent_cost_bps",
     "permanent_drift_bps_per_hour",
     "power_law_charge",
     "power_law_optimum",
     "power_law_optimum_by_shooting",
+    "richardson_residual",
+    "schedule_invariant_bps",
     "schedule_moments",
     "shortfall_variance_bps2",
     "sinh_trajectory",
+    "static_optimum",
     "tangent_charge",
     "temporary_impact_bps",
     "trades",

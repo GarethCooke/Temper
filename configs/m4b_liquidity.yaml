@@ -1,0 +1,192 @@
+# M4b — stochastic liquidity: the first advantage no static schedule can capture.
+#
+# Liquidity becomes a second, *independent* noise source and the agent gets to
+# see it. Under M4a's power law alone the closed form was merely solving the
+# wrong problem, and a different fixed schedule fixed it; here the best possible
+# fixed schedule is provably beaten by a policy that reacts, and the milestone
+# measures by how much and how much of it the agent gets.
+#
+# Everything except the liquidity block and the bars is configs/m4a_power_law.yaml
+# verbatim — same case, same lambda, same seed addressing, same reward scale, same
+# estimator, same PPO hyperparameters, same update budget. That is what makes the
+# result comparable to M4a's and M3's. Hyperparameter search is out of scope: if
+# it does not train through 12.7 %-per-update reward noise, that is the finding.
+
+milestone: M4b
+brief: docs/briefs/M4b-stochastic-liquidity.md
+
+# --- the world (task 2) -----------------------------------------------------
+# TWO seams now, and neither is inherited. `cost_encoding` is M4a's power law;
+# `liquidity` is M4b's own, and it is **invented** — FrontierView has no
+# liquidity process, so constitution §7's "vendored, not invented" cover does not
+# extend to it and no number derived from it may be reported without saying so.
+#
+# The model is the smallest one that makes the question well-posed: a per-bin
+# i.i.d. lognormal multiplier on v_hourly with E[L] = 1 and one parameter.
+# Participation becomes p_k = n_k / (dt * v_hourly * L_k); nothing else moves.
+# i.i.d. is a choice with teeth: the best *static* schedule already absorbs the
+# level shift E[L^-0.6] = 1.1275 by re-solving at an inflated coefficient, so
+# nothing about the shape of the law is capturable statically and the whole
+# measured advantage is adaptivity. A U-shaped intraday profile would not have
+# that property — its deterministic part is eaten by a fixed schedule — which is
+# why the realistic-looking model is the harder one to report honestly, and why
+# it is backlog rather than tonight.
+#
+# sigma_log = 0.5 is trained; the oracle reports the value of sight at 0.25 /
+# 0.50 / 0.75 because a single invented parameter with a single number beside it
+# reads as calibration, and it is not.
+world:
+  cost_encoding: power_law
+  liquidity:
+    model: lognormal
+    sigma_log: 0.5
+
+# --- the case ---------------------------------------------------------------
+# M2's, M3's and M4a's, unchanged.
+case:
+  id: frontier
+  params_from: core:AAPL:X100000:T6.5:lam1e-05
+  symbol: AAPL
+  order_size: 100000.0
+  horizon_hours: 6.5
+  n_bins: 13
+  params:
+    adv: 60000000
+    sigma: 0.0155
+    half_spread: 0.3
+    eta: 0.142
+    gamma: 0.314
+
+# --- task 0: how lambda was fixed, in three readings ------------------------
+# M2's selection rule, unchanged:
+#   (i)  (J_twap - J_optimal) / J_optimal >= 0.20
+#   (ii) the optimal schedule's largest single-bin fraction <= 0.50
+#
+# Liquidity is **not** a new cost encoding — the charge is still eta*sigma*p^0.6
+# and what M4b randomises is the market — so the rule is not applied to a fourth
+# world but to a third *reading* of the same rule, and task 0 records which
+# reading. It is the static one: the liquidity world's fixed-schedule problem is
+# M4a's problem at the coefficient A*E[L^-0.6], a monotone rescaling, so the rule
+# reads a schedule's TWAP gap and a schedule's largest bin exactly as it has since
+# M2. It selects 10^-3.5 with a TWAP gap of 57.42 % and a largest bin of 40.14 %,
+# agreeing with the linear and power-law tables and therefore with M3 and M4a.
+#
+# The alternative reading — the rule against the dynamic program's value and its
+# mean schedule — selects 10^-4.0 instead, and task 0 records *why* it was not
+# taken rather than merely that it was not: at 10^-4 it clears the 20 % bar by
+# 0.011 percentage points, so a milestone's lambda would turn on the fifth digit
+# of a numerically-solved value function. The static reading misses the same bar
+# there by 3.94 points and clears it at 10^-3.5 by 37.4, and it is a closed form.
+lambda_selection:
+  grid: vendor
+  rule:
+    min_twap_gap: 0.20
+    max_bin_fraction: 0.50
+  lambda_risk: 0.00031622776601683794       # 10^-3.5
+
+# --- the pre-stated bar -----------------------------------------------------
+# M4a's denominator, one rung further along: the excess over the *adaptive*
+# optimum as a fraction of the **adaptive advantage** J_static* - J_DP, which is
+# 0.06212 bps at this lambda and sigma_log. NOT J_M4a - J_DP: 3.8 % of that is a
+# level shift any static solver picks up for free by re-solving, and the results
+# file reports it on its own line so nobody credits the agent with a constant.
+#
+#   median   excess over J_DP <= 10 %  ==> capture fraction c >= 0.90
+#   per seed excess over J_DP <= 25 %  ==> c >= 0.75
+#
+# Loosened from M4a's 5 % / 10 % for a stated reason rather than a preference.
+# The antithetic pair holds liquidity *common* and negates only the price draws,
+# so the price noise still cancels exactly and the action-identity assertion stays
+# green — but the pair does not remove the liquidity noise, and that is 12.7 % of
+# the effect per update at 512 envs against M4a's exactly zero. Grading carries a
+# further 1.36 % measurement floor at M = 20 000 paired paths. The median bar sits
+# 7.4x above that floor.
+tolerances:
+  denominator: available_advantage
+  epsilon_fraction: 0.10
+  per_seed_fraction: 0.25
+  # The red flag is *rigorous* here rather than certified: no adapted policy can
+  # beat perfect information, so J_agent below the clairvoyant relaxation's mean
+  # less 1.96 SE is a defect with a proof. J_agent below J_DP alone is a soft
+  # flag — reported, investigated, never auto-failed — because J_DP is a
+  # converged numerical value and not a certified one.
+  red_flag_rtol: 1.0e-9
+
+# --- randomness -------------------------------------------------------------
+# M3's and M4a's addressing exactly, so seed ordinal i occupies the same price
+# streams it did in both earlier worlds and the three results are seed-for-seed
+# comparable. Liquidity draws from its OWN pools — m4b/liquidity-train and
+# m4b/liquidity-eval — because a liquidity variate taken out of the price
+# generator would shift every downstream price draw and Phase 1 and M4a would
+# stop reproducing. The acceptance for that is arithmetic, not argument: one M3
+# seed and one M4a seed retrained bitwise through the new seam.
+seeding:
+  root_seed: 20260805
+  train_pool: train
+  eval_pool: eval
+  n_seeds: 10
+  env_stream_stride: 4096
+  eval_streams: [0, 1]
+
+# --- the estimator ----------------------------------------------------------
+estimator:
+  regime: antithetic
+  claim: >-
+    PPO trained on the antithetic-averaged reward in FrontierView's calibrated
+    0.6-power temporary-impact world, with a ONE-PARAMETER INVENTED per-bin
+    i.i.d. lognormal liquidity multiplier (sigma_log = 0.5, E[L] = 1) on
+    v_hourly. The pair holds the liquidity path COMMON and negates only the price
+    draws, so both halves see identical observations, take identical actions and
+    their price noise still cancels exactly; what the pair no longer removes is
+    the liquidity noise, which is the reward variance the agent must train
+    through. The agent observes (time left, inventory left, log L_k) and is
+    graded by conditional expectation E[cost | L] averaged over held-out
+    liquidity paths, against the DYNAMIC-PROGRAMMING optimum -- which is
+    converged and bracketed by a perfect-information relaxation, NOT certified,
+    and the report says which. The denominator is the ADAPTIVE advantage
+    J_static* - J_DP: the gap to the best fixed schedule that knows the
+    liquidity law, not to M4a's schedule, because the difference between those
+    two is a level shift any static solver gets for free. This is NOT a claim
+    about real market liquidity: the process is Temper's own invention, and the
+    claim is that with a one-parameter invented liquidity process, seeing
+    liquidity is worth ~2.6 % of the objective and the agent captured most of it.
+
+# --- reward scaling ---------------------------------------------------------
+# M2's committed constant, unchanged and checked rather than assumed: it was set
+# against a Phase-1 objective of 2.3546 bps; the liquidity world's static optimum
+# is 2.4966 bps at this lambda -- 6.0 % apart, so the scale carries at the episode
+# level. tools/train.py records the scaled per-step reward range before training,
+# so the check is an artefact rather than an assurance.
+reward:
+  scale: 0.02
+
+# --- PPO --------------------------------------------------------------------
+# M4a's, verbatim. Out of scope: hyperparameter search.
+ppo:
+  total_timesteps: 5000000
+  num_envs: 512
+  num_steps: 13
+  learning_rate: 1.0e-3
+  anneal_lr: true
+  gamma: 1.0
+  gae_lambda: 1.0
+  num_minibatches: 4
+  update_epochs: 10
+  clip_coef: 0.2
+  clip_vloss: true
+  ent_coef: 0.0
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  norm_adv: true
+  torch_threads: 8
+  hidden_sizes: [64, 64]
+  log_std_init: -1.0
+  max_seconds: 5400
+runtime:
+  seconds_per_seed: 1200
+  sweep_seconds: 14000
+results:
+  metrics: results/m4b_liquidity.json
+  figure: results/m4b_adaptivity
+  formats: [png]
+  trace_points: 128

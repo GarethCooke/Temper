@@ -13,8 +13,9 @@ M2_SAMPLED  ?= configs/m2_ppo_sampled.yaml
 M3_VALIDATE ?= configs/m3_antithetic_validation.yaml
 M3_FRONTIER ?= configs/m3_frontier.yaml
 M4A_CONFIG  ?= configs/m4a_power_law.yaml
+M4B_CONFIG  ?= configs/m4b_liquidity.yaml
 
-.PHONY: help test test-verbose differential smoke sweep reference validate frontier frontier-figure frontier-check m4a-reference m4a-guarantees m4a-regression m4a m4a-figure checkpoint anvil-check m6-predict m6 m6-thin m6-wide m6-feeder goldens clean
+.PHONY: help test test-verbose differential smoke sweep reference validate frontier frontier-figure frontier-check m4a-reference m4a-guarantees m4a-regression m4a m4a-figure checkpoint m4b-reference m4b-oracle m4b-guarantees m4b-regression m4b m4b-figure anvil-check m6-predict m6 m6-thin m6-wide m6-feeder goldens clean
 
 help:
 	@echo "make test          run the pytest suite (the gate); excludes the marked tiers"
@@ -31,6 +32,12 @@ help:
 	@echo "make m4a-regression M4a task 2: one M3 seed retrained bitwise - ~20 min"
 	@echo "make m4a           M4a task 5: ten seeds in the power-law world - ~3 h"
 	@echo "make m4a-figure    redraw results/m4a_degradation.* from the committed result"
+	@echo "make m4b-reference M4b task 0: the liquidity table and its four gates - ~5 min"
+	@echo "make m4b-oracle    M4b task 1: the adaptive oracle checks, incl. sigma_L -> 0"
+	@echo "make m4b-guarantees M4b task 4: the inherited guarantees through two seams"
+	@echo "make m4b-regression M4b task 2: one M3 seed AND one M4a seed bitwise - ~40 min"
+	@echo "make m4b           M4b task 5: ten seeds in the stochastic-liquidity world - ~3 h"
+	@echo "make m4b-figure    redraw results/m4b_adaptivity.* from the committed result"
 	@echo "make checkpoint    M6 prerequisite: export M4a's median seed as a policy .npz - ~15 min"
 	@echo "make anvil-check   M6 task 0: Anvil's documented behaviour, against a live server"
 	@echo "make m6-predict    M6 task 4: the closed-form prediction, no server needed"
@@ -146,6 +153,22 @@ m4a:
 # an artefact (invariant 1).
 checkpoint:
 	$(PYTHON) tools/train.py --config $(M4A_CONFIG) --quiet --export-checkpoint
+
+# M4b task 0 — oracle only, no agent, no training, ~5 minutes. Extends M4a's
+# table to the liquidity world: the best fixed schedule that knows the liquidity
+# LAW, the dynamic-programming optimum over adapted policies, and the two sampled
+# bounds that bracket it. Applies M2's selection rule in every reading and RECORDS
+# which one it is applied to — liquidity is not a new cost encoding, so that had
+# to be decided rather than inherited. Exit status is whether all four gates are
+# green. Writes results/m4b_reference.json.
+m4b-reference:
+	$(PYTHON) tools/m4b_reference_table.py --config $(M4B_CONFIG)
+
+# M4b task 1 — the adaptive oracle's own checks, including the sigma_L -> 0
+# differential against M4a's *certified* value. Seconds; the grid-convergence
+# tier is behind the `deep` marker.
+m4b-oracle:
+	$(PYTHON) -m pytest tests/test_m4b_adaptive_oracle.py -v
 
 # M4a task 6 — the degradation figure. Oracle curves are free; the agent's ten
 # seeds are read off the committed result, so this redraws without retraining.

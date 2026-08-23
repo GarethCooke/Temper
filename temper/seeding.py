@@ -46,6 +46,24 @@ from numpy.random import Generator, SeedSequence, default_rng
 #: cannot collide with an in-use range, where a new offset can only be *checked*
 #: not to. Appended, never inserted — :data:`_POOL_INDEX` is positional and
 #: reordering this tuple would re-address every committed result.
+#:
+#: The last four are M4b's, and the *reason* they exist is the reason the whole
+#: module exists. Liquidity is a second, independent noise source, and if its
+#: variate came out of the price generator then every downstream price draw would
+#: shift — Phase 1 and M4a would stop reproducing, silently, with every result
+#: still regenerating from its own config. So liquidity draws from its own
+#: address, and the acceptance is arithmetic rather than argued: one M3 seed and
+#: one M4a seed retrain **bitwise** through the new seam
+#: (``tests/test_m4b_phase1_regression.py``).
+#:
+#: Two liquidity pools rather than one with a stride, because invariant 5 asks for
+#: disjointness *by construction*: a training liquidity path and an evaluation one
+#: cannot collide when they are addressed by different spawn keys, where a shared
+#: pool split by an offset can only be *checked* not to. ``m4b/reference`` is the
+#: oracle's own bound sampling — the clairvoyant relaxation and the feasible upper
+#: bound draw tens of thousands of paths, and doing that from ``eval`` would burn
+#: streams the trained result is addressed by. ``m4b/differential`` is M1's
+#: differential once more, in the liquidity world.
 POOLS: tuple[str, ...] = (
     "train",
     "eval",
@@ -53,6 +71,10 @@ POOLS: tuple[str, ...] = (
     "m2/diagnostic",
     "m3/diagnostic",
     "m4a/differential",
+    "m4b/liquidity-train",
+    "m4b/liquidity-eval",
+    "m4b/reference",
+    "m4b/differential",
 )
 
 #: The pool M1's Monte-Carlo differential draws from. Named here rather than
@@ -69,6 +91,22 @@ M3_DIAGNOSTIC_POOL = "m3/diagnostic"
 
 #: The pool M4a's differential and its inherited-guarantee checks draw from.
 M4A_DIFFERENTIAL_POOL = "m4a/differential"
+
+#: M4b's liquidity streams — the *second* noise source, addressed away from the
+#: price streams so a shock path cannot move because a multiplier was drawn.
+#: Training and evaluation get different pools rather than different offsets in
+#: one, so invariant 5's out-of-sample claim is a property of the spawn keys.
+LIQUIDITY_TRAIN_POOL = "m4b/liquidity-train"
+LIQUIDITY_EVAL_POOL = "m4b/liquidity-eval"
+
+#: The pool the oracle's own Monte-Carlo bounds draw from — the clairvoyant
+#: relaxation and the feasible upper bound. Reported numbers, but no agent is
+#: involved and no stream a graded result is addressed by may be spent on them.
+M4B_REFERENCE_POOL = "m4b/reference"
+
+#: The pool M4b's differential draws from — the liquidity process's own moments
+#: and the world's E[cost] at M1's tiers.
+M4B_DIFFERENTIAL_POOL = "m4b/differential"
 
 _POOL_INDEX = {name: index for index, name in enumerate(POOLS)}
 

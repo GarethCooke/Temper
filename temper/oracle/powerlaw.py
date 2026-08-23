@@ -195,6 +195,27 @@ def inventory_penalty_scale(market: Market) -> float:
     return float((market.sigma_bin * BPS) ** 2)
 
 
+def schedule_invariant_bps(market: Market, order_size: float) -> float:
+    """Permanent cost plus the half-spread — the part no schedule can move.
+
+    The constant :func:`varying_objective_bps` drops, named rather than spelled
+    out at each call site. On a monotone full liquidation
+    :func:`~temper.oracle.cost.permanent_cost_bps` telescopes to
+    ``gamma sigma BPS X / (2 v_hourly)`` and the spread is ``half_spread`` on
+    weights that sum to one, so both are the same number for every schedule the
+    env can realise — which is exactly why the optimiser may ignore them and why
+    anything comparing a *varying* objective with a
+    :class:`~temper.oracle.cost.CostMoments` one has to add them back.
+    """
+    if order_size <= 0.0:
+        raise ValueError(f"order_size must be positive, got {order_size}")
+    permanent = (
+        market.params.gamma * market.params.sigma * BPS * order_size
+        / (2.0 * market.v_hourly)
+    )
+    return float(permanent + market.params.half_spread)
+
+
 # ---------------------------------------------------------------------------
 # The objective, its gradient and its Hessian, in the interior holdings
 # ---------------------------------------------------------------------------

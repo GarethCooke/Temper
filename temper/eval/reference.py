@@ -32,22 +32,30 @@ import numpy as np
 
 from temper.oracle import (
     BPS,
+    DEFAULT_GRID_POINTS,
+    DEFAULT_QUADRATURE_NODES,
     LINEAR_ENCODING,
     POWER_LAW_ENCODING,
     VENDOR_LAMBDA_GRID,
     Market,
     ac_trajectory,
+    adaptive_optimum,
     charge_for,
+    clairvoyant_trajectories,
     cost_moments,
+    expected_cost_moments,
     local_curvature_floor,
     objective_curvature_floor,
     optimal_kappa,
     optimal_trajectory,
+    path_objective_bps,
     power_law_optimum,
     schedule_moments,
+    static_optimum,
     trades,
     twap_trajectory,
 )
+from temper.seeding import M4B_REFERENCE_POOL, pool_rng
 
 #: The schedules every table and figure carries, per world (invariant 4). Order
 #: is the reporting order and is part of the committed contract.
@@ -505,3 +513,435 @@ def trajectory_deviation(trajectory, optimum) -> float:
             f"{reference.shape}"
         )
     return float(np.linalg.norm(x[1:-1] - reference[1:-1]))
+
+
+# ---------------------------------------------------------------------------
+# M4b — the liquidity world's reference row
+# ---------------------------------------------------------------------------
+
+#: The schedules M4b's table carries, in reporting order. The first three are
+#: every world's (invariant 4). ``m4a`` is the power-law optimum solved *without*
+#: liquidity — where M4a leaves off — and ``static`` is the best fixed schedule
+#: that knows the liquidity law. Their difference is the **level shift**, and it
+#: is reported as its own line everywhere because it is a constant any static
+#: solver picks up for free by re-solving at the inflated coefficient. Crediting
+#: it to the agent would make a re-solve look like adaptivity.
+LIQUIDITY_SCHEDULES: tuple[str, ...] = ("twap", "ac", "tangent", "m4a", "static")
+
+#: Paths drawn for the two Monte-Carlo bounds in the reference table. The brief
+#: pre-states M = 20 000 for the graded evaluation; the table uses the same count
+#: so the half-width it reports is the one grading will achieve.
+REFERENCE_BOUND_PATHS = 20_000
+
+
+@dataclass(frozen=True)
+class PathBound:
+    """A Monte-Carlo bound on the adaptive optimum, **paired** against a closed form.
+
+    The level of any single policy under sampled liquidity has a standard
+    deviation of ~0.18 bps, which is three times the whole effect M4b measures:
+    an unpaired estimate of a bound is worthless here. But the *static* optimum's
+    expectation is a closed form
+    (:func:`~temper.oracle.cost.expected_cost_moments`), so scoring every sampled
+    policy against the static schedule on the **same** liquidity paths turns a
+    level estimate into a difference estimate with a known offset —
+
+    .. code::
+
+        J_policy = J_static* + E[ C_policy(L) - C_static(L) ]
+
+    — which is unbiased, and whose sampling error is ~9x smaller in variance
+    because the two share their liquidity. That is the same common-random-numbers
+    rule the milestone grades an *agent* under; applying it to the reference's own
+    bounds is consistency, not a shortcut. :attr:`paired_sd_bps` and
+    :attr:`unpaired_sd_bps` are both reported so the reader can see which it is.
+    """
+
+    name: str
+    value_bps: float
+    half_width_bps: float
+    paired_sd_bps: float
+    unpaired_sd_bps: float
+    paths: int
+    paired_against: str
+
+    def as_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "value_bps": self.value_bps,
+            "half_width_bps": self.half_width_bps,
+            "paired_sd_bps": self.paired_sd_bps,
+            "unpaired_sd_bps": self.unpaired_sd_bps,
+            "paths": self.paths,
+            "paired_against": self.paired_against,
+        }
+
+
+def _paired_bound(
+    name: str, policy_bps: np.ndarray, static_bps: np.ndarray, static_level: float
+) -> PathBound:
+    difference = policy_bps - static_bps
+    return PathBound(
+        name=name,
+        value_bps=static_level + float(difference.mean()),
+        half_width_bps=float(
+            1.96 * difference.std(ddof=1) / math.sqrt(difference.size)
+        ),
+        paired_sd_bps=float(difference.std(ddof=1)),
+        unpaired_sd_bps=float(policy_bps.std(ddof=1)),
+        paths=int(difference.size),
+        paired_against="static",
+    )
+
+
+@dataclass(frozen=True)
+class LiquidityReferenceRow:
+    """One lambda in the stochastic-liquidity world: five schedules and three optima.
+
+    **Liquidity is not a cost encoding.** The functional is unchanged — the charge
+    is still ``eta sigma p**beta`` — and what M4b randomises is the *market*, so
+    :attr:`encoding` stays ``power_law`` and §9's *A metric grades the world that
+    charges it* needs no amendment. What changes is that a schedule is no longer
+    the only kind of answer: :attr:`adaptive_bps` is the value of a *policy*, and
+    the two Monte-Carlo bounds say how well that value is known.
+
+    **Which optimum the lambda rule reads.** :attr:`optimal` is the *static*
+    optimum, so :meth:`LambdaRule.admits` reads this row exactly as it reads every
+    earlier one — a schedule's TWAP gap and a schedule's largest bin. That is the
+    recorded decision, and :attr:`adaptive_twap_gap` carries the other reading
+    beside it so the choice is visible rather than implied. The reasons are in
+    ``tools/m4b_reference_table.py``'s gate 1 and, in one line: the static reading
+    is a closed form and it misses at 10^-4 by 3.94 percentage points, where the
+    adaptive reading *clears* the same bar there by 0.011 — a selection that would
+    turn on the fifth digit of a numerically-solved value function.
+    """
+
+    lambda_risk: float
+    schedules: dict[str, ScheduleReference]
+    variance_floor: float
+    liquidity: dict
+    encoding: str = POWER_LAW_ENCODING
+    #: The adaptive half, absent on a row built by :func:`static_liquidity_row`.
+    #: The lambda rule reads only the *static* rungs (the class docstring says
+    #: why), and those are five certified solves where the dynamic program and its
+    #: two sampled bounds are minutes — so the rule stays checkable at the top of
+    #: every run, which is where ``verify_lambda_rule`` needs it, instead of
+    #: becoming a thing a session skips because it is slow.
+    adaptive_bps: float | None = None
+    adaptive: dict | None = None
+    clairvoyant: PathBound | None = None
+    feasible: PathBound | None = None
+    mean_schedule_max_bin: float | None = None
+
+    def _adaptive(self) -> float:
+        if self.adaptive_bps is None:
+            raise ValueError(
+                f"the row at lambda = {self.lambda_risk:.6e} was built without the "
+                "dynamic program; build it with liquidity_reference_row to read an "
+                "adaptive quantity"
+            )
+        return self.adaptive_bps
+
+    @property
+    def twap(self) -> ScheduleReference:
+        return self.schedules["twap"]
+
+    @property
+    def ac(self) -> ScheduleReference:
+        return self.schedules["ac"]
+
+    @property
+    def tangent(self) -> ScheduleReference:
+        return self.schedules["tangent"]
+
+    @property
+    def m4a(self) -> ScheduleReference:
+        """M4a's optimum, re-priced here — the schedule that knows no liquidity."""
+        return self.schedules["m4a"]
+
+    @property
+    def static(self) -> ScheduleReference:
+        """The best fixed schedule that knows the liquidity *law*."""
+        return self.schedules["static"]
+
+    @property
+    def optimal(self) -> ScheduleReference:
+        """What the lambda rule reads — the static optimum. See the class docstring."""
+        return self.static
+
+    @property
+    def twap_gap(self) -> float:
+        """``(J_twap - J_static*) / J_static*`` — the rule's condition (i)."""
+        return (self.twap.objective - self.static.objective) / self.static.objective
+
+    @property
+    def adaptive_twap_gap(self) -> float:
+        """The same gap read against the DP — the reading *not* used, recorded."""
+        adaptive = self._adaptive()
+        return (self.twap.objective - adaptive) / adaptive
+
+    @property
+    def adaptive_advantage(self) -> float:
+        """``J_static* - J_DP`` in bps — **the milestone's denominator**.
+
+        Not ``J_M4a - J_DP``: 3.8 % of that at the trained sigma_L is a level
+        shift a static solver gets for free, and the whole claim of M4b is that
+        the remainder is something no fixed schedule can capture at all.
+        """
+        return self.static.objective - self._adaptive()
+
+    @property
+    def advantage_fraction(self) -> float:
+        """The adaptive advantage as a fraction of ``J_DP`` — task 0's gate 2."""
+        return self.adaptive_advantage / self._adaptive()
+
+    @property
+    def level_shift(self) -> float:
+        """``J_M4a - J_static*`` in bps — the constant, reported on its own line."""
+        return self.m4a.objective - self.static.objective
+
+    @property
+    def level_shift_fraction(self) -> float:
+        """The level shift as a fraction of the adaptive advantage — gate 3.
+
+        The gate that matters most. If the constant is a large fraction of the
+        advantage then most of what looks like adaptivity is a re-solve, and the
+        milestone's headline has to be restated *before* any training rather than
+        caveated afterwards.
+        """
+        return self.level_shift / self.adaptive_advantage
+
+    @property
+    def bracket_bps(self) -> float:
+        """Feasible upper minus clairvoyant lower — the reference's uncertainty."""
+        if self.feasible is None or self.clairvoyant is None:
+            raise ValueError(
+                f"the row at lambda = {self.lambda_risk:.6e} carries no sampled "
+                "bounds; build it with liquidity_reference_row"
+            )
+        return self.feasible.value_bps - self.clairvoyant.value_bps
+
+    @property
+    def bracket_fraction(self) -> float:
+        """The bracket as a fraction of the advantage — task 0's gate 4."""
+        return self.bracket_bps / self.adaptive_advantage
+
+    def as_dict(self) -> dict:
+        document = {
+            "lambda": self.lambda_risk,
+            "encoding": self.encoding,
+            "liquidity": self.liquidity,
+            "twap_gap": self.twap_gap,
+            "level_shift_bps": self.level_shift,
+            "variance_floor_bps2": self.variance_floor,
+            "schedules": {
+                name: schedule.as_dict() for name, schedule in self.schedules.items()
+            },
+        }
+        if self.adaptive_bps is not None:
+            document |= {
+                "adaptive_twap_gap": self.adaptive_twap_gap,
+                "adaptive_bps": self.adaptive_bps,
+                "adaptive": self.adaptive,
+                "adaptive_advantage_bps": self.adaptive_advantage,
+                "advantage_fraction": self.advantage_fraction,
+                "level_shift_fraction": self.level_shift_fraction,
+                "clairvoyant": self.clairvoyant.as_dict(),
+                "feasible_upper": self.feasible.as_dict(),
+                "bracket_bps": self.bracket_bps,
+                "bracket_fraction": self.bracket_fraction,
+                "mean_schedule_max_bin": self.mean_schedule_max_bin,
+            }
+        return document
+
+
+def liquidity_trajectories(
+    market: Market, order_size: float, lambda_risk: float, law
+) -> dict[str, np.ndarray]:
+    """The liquidity world's five reference schedules, by name.
+
+    All five are *fixed* schedules and every one of them is a closed form or a
+    certified solve — no simulation anywhere. That is deliberate: ``m4a`` and
+    ``static`` differ by ~0.002 bps at the trained point, and differencing two
+    Monte-Carlo levels would turn the milestone's most load-bearing gate into
+    noise.
+    """
+    return {
+        "twap": twap_trajectory(market, order_size),
+        "ac": ac_trajectory(market, order_size, lambda_risk),
+        "tangent": optimal_trajectory(market, order_size, lambda_risk),
+        "m4a": power_law_optimum(market, order_size, lambda_risk),
+        "static": static_optimum(market, order_size, lambda_risk, law),
+    }
+
+
+def _liquidity_schedule_reference(
+    name: str,
+    trajectory: np.ndarray,
+    market: Market,
+    order_size: float,
+    lambda_risk: float,
+    floor: float,
+    law,
+) -> ScheduleReference:
+    """A fixed schedule's row, priced by the *law* rather than by one sampled path."""
+    moments = expected_cost_moments(trajectory, market, law)
+    return ScheduleReference(
+        name=name,
+        trajectory=trajectory,
+        expected=moments.expected,
+        variance=moments.variance,
+        risk=lambda_risk * moments.variance,
+        excess_risk=lambda_risk * (moments.variance - floor),
+        objective=moments.objective(lambda_risk),
+        max_bin_fraction=float(np.max(trades(trajectory, market))) / order_size,
+    )
+
+
+def static_liquidity_row(
+    market: Market, order_size: float, lambda_risk: float, law
+) -> LiquidityReferenceRow:
+    """The liquidity world's five *fixed* rungs at one lambda. No DP, no sampling.
+
+    This is what the lambda selection rule is applied to, and it is the whole of
+    M4b's answer to "how is the rule applied in a world that is not a new
+    encoding": the liquidity world's static problem is M4a's problem at the
+    coefficient ``A E[L^-beta]``, a monotone rescaling, so the rule reads a
+    *schedule's* TWAP gap and a *schedule's* largest bin exactly as it has since
+    M2. It is also five certified solves rather than minutes of dynamic
+    programming, which is what lets ``Experiment.verify_lambda_rule`` keep
+    checking it at the top of every run.
+    """
+    floor = variance_floor_bps2(market)
+    trajectories = liquidity_trajectories(market, order_size, lambda_risk, law)
+    return LiquidityReferenceRow(
+        lambda_risk=lambda_risk,
+        schedules={
+            name: _liquidity_schedule_reference(
+                name, trajectories[name], market, order_size, lambda_risk, floor, law
+            )
+            for name in LIQUIDITY_SCHEDULES
+        },
+        variance_floor=floor,
+        liquidity=law.as_dict(),
+    )
+
+
+def static_liquidity_table(
+    market: Market,
+    order_size: float,
+    law,
+    lambdas: Iterable[float] = VENDOR_LAMBDA_GRID,
+) -> list[LiquidityReferenceRow]:
+    """The static liquidity table over a grid — what :func:`select_lambda` reads."""
+    return [
+        static_liquidity_row(market, order_size, lam, law) for lam in sorted(lambdas)
+    ]
+
+
+def liquidity_reference_row(
+    market: Market,
+    order_size: float,
+    lambda_risk: float,
+    law,
+    *,
+    root_seed: int,
+    stream_index: int = 0,
+    paths: int = REFERENCE_BOUND_PATHS,
+    grid_points: int = DEFAULT_GRID_POINTS,
+    quadrature_nodes: int = DEFAULT_QUADRATURE_NODES,
+) -> LiquidityReferenceRow:
+    """One row of M4b's table: five fixed schedules, the DP, and its two bounds.
+
+    The Monte-Carlo paths are drawn from :data:`~temper.seeding.M4B_REFERENCE_POOL`
+    — the oracle's own pool. Spending ``eval`` streams on a reference table would
+    burn addresses a trained result is reported at, on a computation that has no
+    agent in it (the same argument that gave M1's differential its own pool).
+    """
+    static = static_liquidity_row(market, order_size, lambda_risk, law)
+    trajectories = {name: row.trajectory for name, row in static.schedules.items()}
+    schedules = static.schedules
+
+    optimum = adaptive_optimum(
+        market,
+        order_size,
+        lambda_risk,
+        law,
+        points=grid_points,
+        nodes=quadrature_nodes,
+    )
+
+    rng = pool_rng(root_seed, M4B_REFERENCE_POOL, stream_index)
+    multipliers = law.draw(rng, (paths, market.n_bins))
+    static_weights = trades(trajectories["static"], market) / order_size
+    static_cost = path_objective_bps(
+        static_weights, multipliers, market, order_size, lambda_risk
+    )
+
+    greedy = optimum.greedy_weights(multipliers)
+    feasible = _paired_bound(
+        "feasible_upper",
+        path_objective_bps(greedy, multipliers, market, order_size, lambda_risk),
+        static_cost,
+        schedules["static"].objective,
+    )
+    clairvoyant_x = clairvoyant_trajectories(
+        market, order_size, lambda_risk, multipliers
+    )
+    clairvoyant = _paired_bound(
+        "clairvoyant_lower",
+        path_objective_bps(
+            -np.diff(clairvoyant_x, axis=1) / order_size,
+            multipliers,
+            market,
+            order_size,
+            lambda_risk,
+        ),
+        static_cost,
+        schedules["static"].objective,
+    )
+
+    return LiquidityReferenceRow(
+        lambda_risk=lambda_risk,
+        schedules=schedules,
+        variance_floor=static.variance_floor,
+        liquidity=law.as_dict(),
+        adaptive_bps=optimum.objective_bps,
+        adaptive=optimum.as_dict(),
+        clairvoyant=clairvoyant,
+        feasible=feasible,
+        mean_schedule_max_bin=float(np.max(greedy.mean(axis=0))),
+    )
+
+
+def liquidity_reference_table(
+    market: Market,
+    order_size: float,
+    law,
+    lambdas: Iterable[float] = VENDOR_LAMBDA_GRID,
+    *,
+    root_seed: int,
+    paths: int = REFERENCE_BOUND_PATHS,
+    grid_points: int = DEFAULT_GRID_POINTS,
+    quadrature_nodes: int = DEFAULT_QUADRATURE_NODES,
+) -> list[LiquidityReferenceRow]:
+    """The whole liquidity table, ascending in lambda. M0's 17-point grid by default.
+
+    Each row gets its **own** stream index, so adding a lambda cannot move the
+    liquidity paths an already-committed row was measured on.
+    """
+    ordered = sorted(lambdas)
+    return [
+        liquidity_reference_row(
+            market,
+            order_size,
+            lam,
+            law,
+            root_seed=root_seed,
+            stream_index=index,
+            paths=paths,
+            grid_points=grid_points,
+            quadrature_nodes=quadrature_nodes,
+        )
+        for index, lam in enumerate(ordered)
+    ]
