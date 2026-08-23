@@ -48,6 +48,10 @@ class SampleResult:
 
     costs: np.ndarray
     trajectory: np.ndarray
+    #: M4b: each episode's realised liquidity path, when the caller asked for it.
+    #: ``None`` otherwise — the deep tier is 2.7 million episodes and a
+    #: ``(n, n_bins)`` array per tier is not free.
+    liquidity: np.ndarray | None = None
 
     @property
     def n_episodes(self) -> int:
@@ -123,6 +127,7 @@ def sample_costs(
     *,
     seed: int | None = None,
     require_fixed_schedule: bool = False,
+    record_liquidity: bool = False,
 ) -> SampleResult:
     """Realised cost of `n_episodes` episodes, in bps of notional.
 
@@ -131,6 +136,14 @@ def sample_costs(
     :func:`~temper.oracle.cost.schedule_moments` of one realised schedule, which
     is only the right reference if there was exactly one — including after the
     env's terminal force-liquidation has had its say.
+
+    `record_liquidity` keeps each episode's realised multipliers. M4b's
+    differential needs them because standardising against the *unconditional*
+    mean would no longer be exact: with two noise sources realised cost is not
+    Gaussian. Conditioned on the liquidity path it still is — ``V`` does not
+    depend on the multiplier at all — so the exact bands M1 stated survive
+    verbatim, and this is the argument they survive *by*. An option rather than
+    always-on because the deep tier is millions of episodes.
     """
     if n_episodes <= 0:
         raise ValueError(f"n_episodes must be positive, got {n_episodes}")
@@ -138,10 +151,17 @@ def sample_costs(
         env.reset(seed=seed)
 
     costs = np.empty(n_episodes, dtype=np.float64)
+    paths = (
+        np.empty((n_episodes, env.market.n_bins), dtype=np.float64)
+        if record_liquidity
+        else None
+    )
     reference: np.ndarray | None = None
     for index in range(n_episodes):
         summary, _ = _episode(env, policy, record=False)
         costs[index] = summary["cost_bps"]
+        if paths is not None:
+            paths[index] = summary["liquidity"]
         trajectory = summary["trajectory"]
         if reference is None:
             reference = trajectory
@@ -152,7 +172,7 @@ def sample_costs(
             )
 
     assert reference is not None  # n_episodes > 0
-    return SampleResult(costs=costs, trajectory=reference)
+    return SampleResult(costs=costs, trajectory=reference, liquidity=paths)
 
 
 def standardise(costs: np.ndarray, expected: float, variance: float) -> np.ndarray:

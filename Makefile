@@ -15,7 +15,7 @@ M3_FRONTIER ?= configs/m3_frontier.yaml
 M4A_CONFIG  ?= configs/m4a_power_law.yaml
 M4B_CONFIG  ?= configs/m4b_liquidity.yaml
 
-.PHONY: help test test-verbose differential smoke sweep reference validate frontier frontier-figure frontier-check m4a-reference m4a-guarantees m4a-regression m4a m4a-figure checkpoint m4b-reference m4b-oracle m4b-guarantees m4b-regression m4b m4b-figure anvil-check m6-predict m6 m6-thin m6-wide m6-feeder goldens clean
+.PHONY: help test test-verbose differential smoke sweep reference validate frontier frontier-figure frontier-check m4a-reference m4a-guarantees m4a-regression m4a m4a-figure checkpoint m4b-reference m4b-oracle m4b-differential m4b-guarantees m4b-regression m4b m4b-figure anvil-check m6-predict m6 m6-thin m6-wide m6-feeder goldens clean
 
 help:
 	@echo "make test          run the pytest suite (the gate); excludes the marked tiers"
@@ -169,6 +169,36 @@ m4b-reference:
 # tier is behind the `deep` marker.
 m4b-oracle:
 	$(PYTHON) -m pytest tests/test_m4b_adaptive_oracle.py -v
+
+# M4b task 4 — the differential through two seams, and the liquidity process's own
+# moments against the oracle's closed forms. The fast tier is in `make test`; this
+# runs the deep one, 45 cells x 200,000 episodes.
+m4b-differential:
+	$(PYTHON) -m pytest tests/test_m4b_differential.py -m deep -v
+
+# M4b task 4's precondition — the guarantees the liquidity world inherits, run and
+# recorded *before* the training point. If any goes red, that is the milestone's
+# finding and training does not start.
+m4b-guarantees:
+	$(PYTHON) -m pytest tests/test_m4b_inherited_guarantees.py -v
+
+# M4b task 2 — the seam's acceptance, across BOTH worlds. One committed M3 seed
+# and one committed M4a seed retrained through the second seam, each required to
+# reproduce its grade bitwise. ~40 min.
+m4b-regression:
+	$(PYTHON) -m pytest tests/test_m4b_phase1_regression.py -m training -v
+
+# M4b task 5 — the training point. Ten seeds in the stochastic-liquidity world,
+# graded by conditional expectation on held-out liquidity paths. Serial and
+# unattended.
+m4b:
+	$(PYTHON) tools/train.py --config $(M4B_CONFIG) --expect pass
+
+# M4b task 6 — the adaptivity figure. Both panels are views of committed
+# artefacts: the rungs from the sweep, the value-of-sight curve from task 0's
+# table, so it redraws without retraining.
+m4b-figure:
+	$(PYTHON) tools/m4b_adaptivity.py --config $(M4B_CONFIG)
 
 # M4a task 6 — the degradation figure. Oracle curves are free; the agent's ten
 # seeds are read off the committed result, so this redraws without retraining.

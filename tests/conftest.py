@@ -240,6 +240,85 @@ def power_law_pairs(tier: str) -> list[DifferentialPair]:
 
 
 # ---------------------------------------------------------------------------
+# M4b: the stochastic-liquidity differential (configs/m4b_differential.yaml)
+# ---------------------------------------------------------------------------
+
+M4B_CONFIG_PATH = REPO_ROOT / "configs" / "m4b_differential.yaml"
+
+#: M4b's committed input: the two-seam differential's tiers and the liquidity
+#: process's own moment bands. Its own file for the same reason M4a's was —
+#: editing an earlier milestone's committed thresholds in place would put two
+#: worlds' bars in one blast radius.
+M4B_CONFIG: dict = yaml.safe_load(M4B_CONFIG_PATH.read_text(encoding="utf-8"))
+M4B_ENCODING: str = str(M4B_CONFIG["world"]["cost_encoding"])
+
+
+def m4b_liquidity_law():
+    """The invented liquidity law M4b's differential runs under."""
+    from temper.oracle import liquidity_for
+
+    block = dict(M4B_CONFIG["world"]["liquidity"])
+    return liquidity_for(block.pop("model"), **block)
+
+
+def build_liquidity_env(case, stream_index: int, *, pool: str | None = None):
+    """The same env in M4b's world, with **both** seams named and neither default.
+
+    One ``ExecutionEnv`` and one ``step`` loop; the only differences from
+    :func:`build_power_law_env` are the injected liquidity stream and the third
+    observation coordinate that comes with it. The liquidity pool is the *eval*
+    one by default, which is deliberate: the differential is a check on the
+    world, and checking it on the streams a graded result is scored over is the
+    cheapest way to find out that those streams are what the config says.
+    """
+    from temper.env import ExecutionEnv, LiquidityStream, impact_for
+    from temper.seeding import LIQUIDITY_EVAL_POOL
+
+    seeding = M4B_CONFIG["seeding"]
+    return ExecutionEnv(
+        case.market,
+        case.order_size,
+        case.lambda_risk,
+        temporary_impact=impact_for(M4B_ENCODING, case.market, case.order_size),
+        liquidity=LiquidityStream(
+            law=m4b_liquidity_law(), pool=pool or LIQUIDITY_EVAL_POOL
+        ),
+        root_seed=int(seeding["root_seed"]),
+        pool=seeding["pool"],
+        stream_index=stream_index,
+    )
+
+
+def liquidity_pairs(tier: str) -> list[DifferentialPair]:
+    """Every (case, schedule) cell of M4b's `tier`, addressed as its config says.
+
+    Five schedules wide rather than four: ``static`` is the liquidity world's own
+    optimum and ``m4a`` is the power-law one that knows no liquidity, and the
+    level shift between them is the milestone's most load-bearing small number.
+    """
+    spec = M4B_CONFIG["tiers"][tier]
+    schedules = M4B_CONFIG["schedules"]
+    n_sim = int(spec["n_sim"])
+    return [
+        DifferentialPair(
+            tier=tier,
+            case=case_by_id(case_id),
+            schedule=schedule,
+            n_sim=n_sim,
+            stream_index=(
+                int(spec["stream_base"])
+                + case_ordinal * len(schedules)
+                + schedule_ordinal
+            ),
+            mean_band=float(spec["mean_z_sigmas"]) / math.sqrt(n_sim),
+            var_band=float(spec["var_z_sigmas"]) * math.sqrt(2.0 / n_sim),
+        )
+        for case_ordinal, case_id in enumerate(spec["cases"])
+        for schedule_ordinal, schedule in enumerate(schedules)
+    ]
+
+
+# ---------------------------------------------------------------------------
 # The task-4 guard case — a case that is deliberately not a golden
 # ---------------------------------------------------------------------------
 
