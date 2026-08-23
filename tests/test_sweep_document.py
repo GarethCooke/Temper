@@ -30,6 +30,8 @@ before an evening is spent producing one.
 
 from __future__ import annotations
 
+import dataclasses
+
 import numpy as np
 import pytest
 
@@ -244,3 +246,65 @@ def test_a_red_flagged_seed_fails_the_verdict():
     verdict = build_document(sweep)["verdict"]
     assert verdict["red_flags"] == ["seed0"]
     assert verdict["passed"] is False
+
+
+# ---------------------------------------------------------------------------
+# Subset runs: the seed's address is not its position in a list
+# ---------------------------------------------------------------------------
+
+
+def test_a_full_sweeps_seed_records_carry_their_own_ordinals():
+    """The unchanged path, so the two tests below mean something."""
+    document = build_document(_sweep(POWER_LAW_ENCODING))
+    assert [record["ordinal"] for record in document["seeds"]] == list(range(10))
+
+
+def test_a_subset_sweep_refuses_to_become_a_metrics_document():
+    """`run_sweep(ordinals=...)` may train a subset; it may not report one.
+
+    Every number in the document is a statement about the sweep — median, IQR,
+    worst seed, the epsilon verdict — and none of them survives being computed
+    over one seed. Invariant 4 asks for dispersion, and a median over one value
+    is not a median.
+    """
+    subset = dataclasses.replace(
+        _sweep(POWER_LAW_ENCODING, n_seeds=1), ordinals=(9,)
+    )
+    with pytest.raises(ValueError, match="cannot be written from a subset"):
+        build_document(subset)
+
+
+def test_a_seeds_address_survives_being_run_out_of_position():
+    """The provenance trap the refusal above removes, asserted on the labelling.
+
+    Before `SweepResult.ordinals` existed the seed records took their address
+    from their *position*, which was right only because the list was always the
+    full range. Run ordinals 9 and 4 and the old code would have written them as
+    0 and 1, with seed 0's and seed 1's `env_stream_base` — a false provenance
+    stamp in the file invariant 1 rests on. `addresses` is what makes the
+    labelling follow the seed rather than the slot.
+    """
+    sweep = dataclasses.replace(_sweep(POWER_LAW_ENCODING, n_seeds=2), ordinals=(9, 4))
+    assert sweep.addresses == (9, 4)
+
+    experiment = sweep.experiment
+    expected = [
+        experiment.seeds.env_streams(ordinal, experiment.ppo.num_envs)[0]
+        for ordinal in (9, 4)
+    ]
+    assert expected[0] != expected[1], "the two seeds must occupy different streams"
+
+    # The document itself is refused, so the labelling is checked on the pieces
+    # it would have used — which is where the falsehood would have been written.
+    assert [
+        experiment.seeds.env_streams(ordinal, experiment.ppo.num_envs)[0]
+        for ordinal in sweep.addresses
+    ] == expected
+
+
+def test_a_full_range_sweep_is_not_mistaken_for_a_subset():
+    """`ordinals` set to the whole range is still a sweep, not a subset."""
+    sweep = dataclasses.replace(_sweep(POWER_LAW_ENCODING), ordinals=tuple(range(10)))
+    document = build_document(sweep)
+    assert [record["ordinal"] for record in document["seeds"]] == list(range(10))
+

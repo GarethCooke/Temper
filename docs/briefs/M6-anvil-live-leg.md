@@ -211,6 +211,7 @@ value before it opens a socket or sends an order.
 | Reference ladder | centre 100,000 ticks ($10.0000), half-spread 100 ticks, spacing 100 ticks, quantities `[300, 260, 220, 180, 150, 120, 100, 80]` per side |
 | Posted depth | 1,410 a side; best bid 9.99, worst bid 9.92; arrival mid exactly $10.0000 by symmetry |
 | Largest bin | 421 shares — **42.1 % of the parent, 29.9 % of posted depth**, crossing two levels |
+| Whole order against depth | **70.9 %** of one side's 1,410 as a single snapshot — stated because 29.9 % is the flattering number and quoting only it would be a choice. Over the run the client consumes 1,000 against depth *replenished before every bin*, so cumulative supplied liquidity is several times that; both framings are true and neither alone is honest |
 | Also committed | `thin` (375 a side: bin one cannot fill, exercising the partial-fill and cancel path) and `wide` (three times the spread and spacing) — machinery checks, never the reported number |
 
 Everything above lives in `configs/m6_anvil.yaml`, which holds all four runs

@@ -133,6 +133,20 @@ def load_policy(path: str | Path) -> Policy:
                 f"{target} was trained with a {network.get('activation')!r} "
                 "activation; this reader implements tanh only"
             )
+        # The squash is the one part of the boundary the numeric pin cannot
+        # see: the committed `eval_fractions` run 0.293–0.421 and never touch
+        # 0 or 1, so replaying them agrees whether this reader clips to [0, 1],
+        # clips to something else, or does not clip at all. Declaring it and
+        # checking it is what closes that gap. `.get` with the default, not
+        # `[...]`: the committed checkpoint predates the key, and a reader that
+        # refused it would cost a retrain to say nothing.
+        squash = network.get("output_squash", "clip[0,1]")
+        if squash != "clip[0,1]":
+            raise ValueError(
+                f"{target} declares output squash {squash!r}; this reader "
+                "implements clip[0,1] only — see temper.agents.execution."
+                "as_fraction for why the boundary is a clip and not a sigmoid"
+            )
         layers = tuple(
             (
                 np.array(handle[weight], dtype=DTYPE),

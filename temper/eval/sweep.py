@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import json
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -178,6 +178,18 @@ class SweepResult:
     #: Per seed, the per-update pair statistics; empty tuples outside the
     #: antithetic regime.
     pairs: tuple[tuple[PairUpdateStats, ...], ...] = ()
+    #: The seed ordinals this run actually trained, in the order it trained
+    #: them. Carried rather than re-derived, because everything downstream that
+    #: names a seed needs its *address* and not its position in a list: a subset
+    #: run's third result is not seed 2, and `build_document` would otherwise
+    #: stamp it with seed 2's `env_stream_base`. Empty means the full range,
+    #: which is what every committed sweep so far was.
+    ordinals: tuple[int, ...] = ()
+
+    @property
+    def addresses(self) -> tuple[int, ...]:
+        """The ordinal of each trained seed, positionally aligned with `grades`."""
+        return self.ordinals or tuple(range(len(self.grades)))
 
     @property
     def trajectories(self) -> list[list[float]]:
@@ -190,8 +202,29 @@ def run_sweep(
     repo_root: Path | None = None,
     on_seed: Callable[..., None] | None = None,
     progress: Callable[[int, dict], None] | None = None,
+    ordinals: Sequence[int] | None = None,
 ) -> SweepResult:
-    """Every seed, trained and graded. Verifies the lambda rule first."""
+    """Every seed, trained and graded. Verifies the lambda rule first.
+
+    `ordinals` restricts the run to a subset of the config's seeds, addressed
+    exactly as the full sweep addresses them — seed 9 of a ten-seed config is the
+    same object whether it is run first, ninth or alone, because its torch seed
+    and its env streams both come from its ordinal and neither depends on what
+    ran before it (:func:`train_seed`). ``tests/test_m4a_phase1_regression.py``
+    is the standing evidence: one seed, retrained in isolation, reproduces its
+    committed grade bitwise.
+
+    The result of a subset run is **not** an acceptance artefact — a median over
+    one seed is not a median, and invariant 4 asks for dispersion. It exists so a
+    single seed's *policy* can be re-derived without spending the whole sweep
+    again; the caller is expected to write a checkpoint rather than a metrics
+    file, and ``tools/train.py --export-checkpoint`` writes exactly that and
+    never builds a metrics document at all.
+
+    `build_document` refuses a subset run outright. A metrics file is a claim
+    about a *sweep*, and there is no honest way to write one from one seed: the
+    median, the IQR and the worst-seed verdict are all statements about ten.
+    """
     experiment.verify_lambda_rule()
     experiment.verify_gate_reference()
     # Stamped *before* any training, not after. A sweep runs for hours; the
@@ -207,7 +240,16 @@ def run_sweep(
     grades: list[Grade] = []
     training: list[TrainResult] = []
     pairs: list[tuple[PairUpdateStats, ...]] = []
-    for ordinal in range(experiment.seeds.n_seeds):
+    selected = (
+        range(experiment.seeds.n_seeds) if ordinals is None else tuple(ordinals)
+    )
+    for ordinal in selected:
+        if not 0 <= ordinal < experiment.seeds.n_seeds:
+            raise ValueError(
+                f"seed ordinal {ordinal} is outside the config's "
+                f"{experiment.seeds.n_seeds} seeds; an ordinal is an address into "
+                "the committed seed pool, not a free-running counter"
+            )
         ledger = PairLedger()
         result, policy = train_seed(
             experiment, ordinal, progress=progress, ledger=ledger
@@ -227,6 +269,7 @@ def run_sweep(
         seconds=time.perf_counter() - started,
         provenance=provenance,
         pairs=tuple(pairs),
+        ordinals=tuple(selected),
     )
 
 
@@ -329,8 +372,33 @@ def _gate_block(experiment: Experiment, median_gap: float) -> dict | None:
 
 
 def build_document(sweep: SweepResult) -> dict:
-    """The results JSON: the claim, the provenance, the numbers, the verdict."""
+    """The results JSON: the claim, the provenance, the numbers, the verdict.
+
+    Refuses a subset run. Every number below is a statement about the *sweep* —
+    the median, the IQR, the worst seed, the epsilon verdict — and none of them
+    means anything computed over one seed; invariant 4 asks for dispersion and a
+    median over one value is not a median. The refusal is here rather than in the
+    caller because this is the function that would write the file.
+
+    The sharper reason is provenance. Until `ordinals` existed, the seed records
+    took their address from their *position* in the list, which was correct
+    exactly because the list was always the full range. A subset run breaks that
+    silently: `run_sweep(ordinals=[9])` would have written seed 9's grade under
+    ``"ordinal": 0`` with seed 0's ``env_stream_base``, which is a false
+    provenance stamp in the one file the whole repo's invariant 1 rests on.
+    :attr:`SweepResult.addresses` fixes the labelling; this refusal removes the
+    question.
+    """
     experiment = sweep.experiment
+    if sweep.ordinals and tuple(sweep.ordinals) != tuple(
+        range(experiment.seeds.n_seeds)
+    ):
+        raise ValueError(
+            f"this sweep trained ordinals {list(sweep.ordinals)} of the config's "
+            f"{experiment.seeds.n_seeds}; a metrics document is a claim about a "
+            "sweep and cannot be written from a subset. Export the policy "
+            "instead (tools/train.py --export-checkpoint)."
+        )
     tolerances = experiment.tolerances
     reference = experiment.reference()
 
@@ -371,7 +439,7 @@ def build_document(sweep: SweepResult) -> dict:
         "red_flags": red_flags,
         "timed_out": [
             ordinal
-            for ordinal, result in enumerate(sweep.training)
+            for ordinal, result in zip(sweep.addresses, sweep.training)
             if result.timed_out
         ],
         "sweep_seconds": sweep.seconds,
@@ -436,8 +504,8 @@ def build_document(sweep: SweepResult) -> dict:
                 ),
                 "grade": seed_grade.as_dict(),
             }
-            for ordinal, (seed_grade, result, seed_pairs) in enumerate(
-                zip(sweep.grades, sweep.training, pairs)
+            for ordinal, seed_grade, result, seed_pairs in zip(
+                sweep.addresses, sweep.grades, sweep.training, pairs
             )
         ],
         "summary": summary,

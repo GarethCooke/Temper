@@ -61,6 +61,20 @@ there is no bench track. M0's golden export was the one owner-input step; re-exp
   `results/m4a_degradation.png` and peaks at 2.33 % near 10^−3, away from the λ the rule
   selects — but the agent half is nine more training points and a sized milestone of its
   own, not a stretch goal.
+- **Price each bin at the level it intends to consume, not through the whole book**
+  (raised by the M6 merge, 2026-08-23 — from the abandoned first attempt, which reached
+  the opposite conclusion before any code ran). `client/ladder.full_sweep_limit` prices
+  through the far side of the observed book, which guarantees a bin is never short
+  because it was priced timidly. The alternative is to price at exactly the worst level
+  the bin *means* to reach, and the argument for it is detection-theoretic rather than
+  economic: a deeper limit sweeps further than predicted and **hides** the discrepancy
+  inside a plausible fill, while a limit at the intended worst level leaves a residual
+  and makes the surprise loud. Both are defensible and the committed runs used the
+  first, so this is not a defect — but it is the sharper instrument, and it was arrived
+  at independently, which is the reason to keep it. **Not free:** it changes the
+  realised fills, so it re-baselines all four `results/m6_anvil_*.json` and their
+  predictions. A deliberate task with the re-run recorded, not something done in
+  passing.
 - SAC / behaviour-cloning-warm-start comparison against the PPO baseline.
 - C++ inference leg: ONNX export of the trained policy + a Crucible post (policy inference
   under fire; ties the ML work back to the C++ story).

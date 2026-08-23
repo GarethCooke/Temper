@@ -483,6 +483,20 @@ def run_export(experiment: Experiment, args) -> int:
     committed = document["seeds"][ordinal]["grade"]
     target = _checkpoint_path(experiment, args.export_checkpoint)
 
+    # The lambda rule, re-derived before anything trains — the same refusal
+    # `run_sweep` opens with, and for a stronger reason here. This was missing:
+    # the export was the *only* training entry point in the repo that trained
+    # without it, and it is the one that writes the single artefact leaving the
+    # repo, read by `client/` on a live venue. Unchecked, an edited `lambda_risk`
+    # in a committed config yields a policy stamped with this milestone's name,
+    # cross-referencing the sweep by digest, graded against the edited world's
+    # own optimum — with `reproduced_bitwise: false` as the only trace, printed
+    # as a diagnostic rather than raised as a refusal. Found by reconciling this
+    # driver against the `run_sweep(ordinals=...)` factoring that reached the
+    # same conclusion from the other direction.
+    experiment.verify_lambda_rule()
+    experiment.verify_gate_reference()
+
     provenance = experiment.provenance(REPO_ROOT)
     if provenance.git_dirty:
         print(

@@ -27,6 +27,17 @@ that hard-coded them would break on a network of a different depth for no reason
 that matters. The metadata lists the actor's layers in order, so a forward pass
 is a loop over that list and works for any ``hidden_sizes``.
 
+**The critic is in the file, and the file says so.** The objection to writing it
+is real: a reader could take a stored value head for part of what was graded,
+and the grade is analytic on the *schedule* — the critic never enters it. The
+answer here is structural rather than by omission. The arrays are prefixed
+``critic.``, ``metadata.network.actor_layers`` names only the actor's three
+pairs, and ``client/inference.py`` loads strictly from that list, so nothing
+following the file's own description can mistake a value estimate for the
+policy. Leaving it out costs more than it saves: :func:`agent_from_checkpoint`
+would return an ``Agent`` with a randomly initialised value head, which is the
+same trap with no label on it.
+
 **The metadata carries the grade and the evaluation trajectory.** A committed
 binary that nothing verifies is not an artefact this repo keeps: with the
 schedule and the graded objective stored beside the weights,
@@ -94,6 +105,18 @@ def _named_arrays(prefix: str, module: nn.Sequential) -> dict[str, np.ndarray]:
     ``weight`` is stored in torch's ``(out, in)`` orientation, unchanged, so a
     reader computes ``W @ x + b`` and the arrays never need transposing on
     either side of the boundary.
+
+    Getting that backwards is **silent whenever the layer is square**, and
+    exactly one of the actor's three is: the weights are ``(64, 2)``,
+    ``(64, 64)`` and ``(1, 64)``, so a transposed first or last layer raises a
+    dimension error on the first forward pass, while a transposed middle one
+    passes every shape check here, in :func:`agent_from_checkpoint`, and in
+    ``client.inference._check_shapes`` — and then produces plausible fractions
+    from the wrong arithmetic. What catches that one is the pin travelling in
+    the same archive: ``eval_observations`` replayed to ``eval_fractions``, at
+    ``1e-9`` in ``tests/test_policy_checkpoint.py`` and ``1e-6`` in
+    ``tests/test_client_inference.py``. It is the only thing that does, which is
+    why the pin is stored beside the weights rather than beside the tests.
     """
     arrays: dict[str, np.ndarray] = {}
     for index, layer in enumerate(_linear_layers(module)):
@@ -105,9 +128,13 @@ def _named_arrays(prefix: str, module: nn.Sequential) -> dict[str, np.ndarray]:
 def policy_arrays(agent: Agent) -> dict[str, np.ndarray]:
     """Every trained parameter of `agent`, under the checkpoint's own names.
 
-    The actor's mean net is the policy; the critic and ``log_std`` are stored
-    beside it because they cost 17 kB and are what makes the difference between
-    a saved *policy* and a saved *agent*. Only the actor is needed to act.
+    The actor's mean net is the policy. The critic is stored beside it because
+    it is the difference between a saved *policy* and a saved *agent*:
+    :func:`agent_from_checkpoint` would otherwise hand back an ``Agent`` whose
+    value head is freshly random, which is a worse trap than the one writing it
+    creates. ``log_std`` is recorded because dropping half a distribution
+    silently is worse than carrying four unused bytes. Only the actor is needed
+    to act — size is not the argument, and was never a good one.
     """
     if not getattr(agent, "continuous", False):
         raise TypeError(
@@ -146,6 +173,11 @@ def network_description(agent: Agent, hidden_sizes: Sequence[int]) -> dict:
         ),
         "observation": "(time remaining fraction, inventory remaining fraction)",
         "dtype": "float32",
+        # Both of these were in the file's *source* and not in the file. A
+        # torch-free reader sees only the arrays and this dict, so a fact that
+        # lives in a docstring here is a fact that reader does not have.
+        "weight_layout": "(out, in) — evaluate W @ x + b",
+        "output_squash": "clip[0,1]",
     }
 
 

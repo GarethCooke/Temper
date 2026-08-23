@@ -171,6 +171,37 @@ def test_a_non_tanh_network_is_refused(tmp_path: Path):
         load_policy(forged)
 
 
+def test_a_different_output_squash_is_refused(tmp_path: Path):
+    """The one boundary fact the numeric pin cannot check.
+
+    The committed `eval_fractions` run 0.293-0.421 and never reach 0 or 1, so
+    replaying them agrees whether this reader clips to [0, 1], clips to some
+    other range, or does not clip at all. Declaring the squash in the metadata
+    and refusing an unknown one is what closes that gap — and it is why the
+    field was worth adding to `network_description` rather than leaving the fact
+    in a docstring on the training side.
+    """
+    forged = tmp_path / "sigmoid.npz"
+    with np.load(CHECKPOINT) as handle:
+        arrays = {key: np.array(handle[key]) for key in handle.files}
+    metadata = json.loads(str(arrays.pop("metadata")))
+    metadata["network"]["output_squash"] = "sigmoid"
+    np.savez(forged, **arrays, metadata=np.array(json.dumps(metadata)))
+    with pytest.raises(ValueError, match="output squash"):
+        load_policy(forged)
+
+
+def test_a_checkpoint_predating_the_squash_field_still_loads():
+    """`.get` with a default, and the committed artefact is why.
+
+    `results/m4a_power_law_policy.npz` was exported before `output_squash`
+    existed. A reader that required the key would have refused the one file the
+    milestone actually ran on, and buying that strictness costs a retrain.
+    """
+    assert "output_squash" not in POLICY.metadata["network"]
+    assert load_policy(CHECKPOINT).n_bins == 13
+
+
 def test_layers_that_do_not_compose_are_refused(tmp_path: Path):
     """A mis-read file must fail here, not produce plausible fractions live."""
     forged = tmp_path / "mismatched.npz"

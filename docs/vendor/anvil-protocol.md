@@ -3,13 +3,25 @@
 | | |
 | --- | --- |
 | **Artefact** | this file: a **verbatim** snapshot of Anvil's `PROTOCOL.md`, header prepended |
-| **Source** | Anvil, `PROTOCOL.md` (branch `rest-interface`) |
+| **Source** | Anvil, `PROTOCOL.md`, branch **`main`** — *not* `rest-interface`; see the note below |
 | **Source commit** | `4801ed8d8b09b62ec4fcee8e68280f16b3c4780c` (clean working tree), committed 2026-08-17 |
 | **Source SHA-256** | `350f9c701bb4548edfd0ad2015a1d1bd71e92618c02cccbe338786595f93ef01` — 38,166 bytes, LF endings |
 | **Wire version** | `1`; the client refuses to start against any other `GET /api/health` value |
 | **Last source change** | `864ee2f` *feat(server): publish a real last-traded price in the summary row* — the `summary.last` semantic change described below and recorded in the snapshot's own header |
 | **Vendored** | 2026-08-22, for M6 (`docs/briefs/M6-anvil-live-leg.md`, task 0) |
 | **Consumed by** | `client/`, and `tests/test_vendored_protocol.py`, which re-hashes the body |
+
+> **The snapshot's own status line is stale; the commit in the table above is
+> what was read.** The vendored body opens with *"canonical contract for the
+> live-demo build (branch `rest-interface`)"*, and that branch does not contain
+> this snapshot: `git branch -a --contains 4801ed8` returns only `main`, and
+> `origin/rest-interface` still points at `6ac288e`, the Phase-0 commit that
+> created the file. The same is true of the last source change, `864ee2f`. The
+> branch name is a label Anvil has outgrown; the **commit hash and the body
+> digest** are what identify this artefact, and they are what the test checks.
+> Recorded rather than corrected in the body, because the body is verbatim and
+> stays that way — an upstream document is allowed to be stale about itself, and
+> a vendoring that quietly fixed it would no longer be a snapshot.
 
 ## Why this exists
 
@@ -61,6 +73,7 @@ so the client can cite a section instead of paraphrasing a schema.
 | One socket per ticker; `snapshot` and `book` are full replaces, applied idempotently | §3, §3.1, §3.2, §4 |
 | `trade` carries `takerId` and `makerId`, so a client's own fills are directly attributable | §3.3 |
 | The book mid is read off a `snapshot`/`book` frame | §3.1 |
+| **The published book is the whole book** — the client prices each bin at the last level it can see, which is a full sweep only while `ANVIL_BOOK_DEPTH` is `0`. See the note below: this is server *configuration*, not a protocol guarantee | §2 `GET /api/book`, §3, *depth* |
 
 | Must not | Section |
 | --- | --- |
@@ -74,6 +87,33 @@ so the client can cite a section instead of paraphrasing a schema.
 The last two are the ones M6's brief calls out as returning plausible wrong
 numbers rather than crashing, which is why they are listed as prohibitions
 rather than as notes.
+
+### Two things the tables above understate
+
+**A single-ticker socket sees `seq` gaps too, and not because of other tickers.**
+§1 explains sparseness as the gaps belonging to other tickers' frames, which
+reads as "irrelevant on a one-ticker roster" — and M6 runs exactly one ticker.
+The mechanism survives anyway: the engine publishes its coalesced book on a
+70 ms deadline (`server/engine_harness.hpp:96`, `coalesce = Millis{70}`) and the
+broadcaster samples that slot on its *own* independent 70 ms tick
+(`server/broadcaster.hpp:84`). The two are unsynchronised, so a generation the
+engine stamped can be overwritten before the broadcaster ever reads it, and that
+`seq` is delivered to nobody. The prohibition is unchanged and this is why it is
+not merely a multi-ticker artefact: there is no roster small enough to make `seq`
+a gap detector.
+
+**Whole-ladder pricing depends on an environment variable.** `ANVIL_BOOK_DEPTH`
+(`server/config.hpp:38`) caps the levels per side the server publishes; it
+defaults to `0`, meaning every resting level, and the deployed configuration
+leaves it there. The client's "price through the far side of the book just
+observed" is therefore a genuine full sweep *by operator configuration rather
+than by contract*. Set it non-zero and the client would price to the deepest
+**published** level while resting depth continued below it — bins would fill
+short for a reason invisible in the artefact, since the run's `operator_note`
+records `ANVIL_TICKERS`, `ANVIL_DEFAULT_TICKER`, `ANVIL_FEEDER` and `ANVIL_PORT`
+and not this. Recorded here rather than defended in code: the measured runs ran
+at the default, and a client that tried to detect the truncation could not — a
+truncated book is indistinguishable from a shallow one on the wire.
 
 ---
 
