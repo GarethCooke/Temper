@@ -529,7 +529,16 @@ class Session:
         right one. `continue` rather than `return` on a fault, because the whole
         point is the ids *after* the one that failed.
         """
-        for order_id in self.venue.order_ids:
+        # A **snapshot**, and this is not stylistic. `Venue.send` appends every
+        # id the server returns to `venue.order_ids`, and a Cancel echoes the id
+        # it was given — so iterating the live list appends to the thing being
+        # iterated and never terminates. It does not fail loudly: each pass is a
+        # well-formed cancel earning an honest `200 {accepted: false}`, so the
+        # client sits there re-cancelling nothing forever, one TLS handshake at a
+        # time, with the run's report never printed. `dict.fromkeys` copies once
+        # and drops duplicates, keeping insertion order so the ladder is unwound
+        # in the order it was built.
+        for order_id in dict.fromkeys(self.venue.order_ids):
             try:
                 self.venue.send(cancel_line(self.config.ticker, order_id))
             except TransportFault:  # pragma: no cover - the server is going away

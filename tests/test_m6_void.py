@@ -251,3 +251,77 @@ def test_a_dropped_fill_voids_a_real_run_end_to_end():
     # The run itself reached the end. That is the half worth keeping.
     assert len(realised.bins) == config.n_bins
     assert reconciliation["third_party_fills"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Teardown: the sweep that must always terminate
+# ---------------------------------------------------------------------------
+
+
+class _CountingVenue:
+    """A venue that echoes the id it is handed, exactly as Anvil does.
+
+    `Venue.send` appends every returned id to `order_ids`, and a Cancel echoes
+    the id it was given — so a teardown that iterates the live list appends to
+    the thing it is walking.
+    """
+
+    def __init__(self, ids):
+        from client.wire import OrderResult
+
+        self._result = OrderResult
+        self.order_ids = list(ids)
+        self.sent = []
+
+    def send(self, line):
+        order_id = line.split(",")[2]
+        self.sent.append(order_id)
+        if len(self.sent) > 500:
+            raise AssertionError(
+                "teardown did not terminate: it is iterating a list its own "
+                "cancels append to"
+            )
+        result = self._result(accepted=False, id=order_id, reason="unknown", line=line)
+        self.order_ids.append(result.id)  # what Venue.send does
+        return result
+
+
+def test_teardown_terminates_even_though_cancels_mint_ids():
+    """The failure this guards against cost a live run and looked like nothing.
+
+    Every pass is a well-formed cancel earning an honest `200 {accepted: false}`,
+    so there is no error, no traceback and no output — the process simply
+    re-cancels nothing forever and the run's report is never printed. Against a
+    remote venue each pass is also a fresh TLS handshake, so it reads as a busy
+    process rather than a hung one.
+    """
+    from client.run import Session
+
+    session = Session.__new__(Session)
+    session.config = _config("ladder")
+    session.venue = _CountingVenue(["o1", "o2", "o3"])
+    Session.teardown(session)
+
+    assert session.venue.sent == ["o1", "o2", "o3"], (
+        "teardown must cancel each id exactly once, in the order it was minted"
+    )
+
+
+def test_teardown_cancels_every_order_the_client_minted():
+    """Not just the ladder — the leak this replaced left bin orders resting.
+
+    `ladder_ids` is appended to only inside the ladder path, so on a run that
+    does not build a book it is empty and teardown swept nothing. A bin order's
+    unfilled remainder is a live sell on somebody else's venue, and after the
+    process exits nobody can cancel it: ownership is the session cookie.
+    """
+    from client.run import Session
+
+    session = Session.__new__(Session)
+    session.config = _config("feeder")
+    session.venue = _CountingVenue(["bin1", "bin2"])
+    session.ladder_ids = []  # a build=false run never fills this
+    Session.teardown(session)
+
+    assert session.venue.sent == ["bin1", "bin2"]
+
