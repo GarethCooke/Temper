@@ -127,10 +127,54 @@ is deliberately narrower than it might sound.
   failure.
   The now-wrong AC schedule and TWAP are on every chart. It says the agent adapts to a
   model change the formula cannot. It says nothing about real fills, and 0.037 bps is a
-  small absolute claim that should read as one. **The liquidity half is not done.** M4b
-  makes liquidity a second, *independent* noise source, which is what actually breaks
-  analytic grading and the antithetic pairing — M4a deliberately left the observation
-  untouched so that a red result could be attributed to one thing.
+  small absolute claim that should read as one.
+
+  **The liquidity half (M4b) is done, and it is the first advantage in the project that no
+  fixed schedule can capture at all.** Under the power law alone the closed form was merely
+  solving the wrong problem, and a *different* fixed schedule fixed it. Here liquidity becomes
+  a second, independent noise source, the agent gets to see it, and the best possible fixed
+  schedule is provably beaten by a policy that reacts.
+
+  **The liquidity model is Temper's own invention and the claim is only ever about it.**
+  FrontierView has no liquidity process, so §7's "vendored, not invented" cover does not reach
+  here: the model is a per-bin i.i.d. lognormal multiplier on `v_hourly` with `E[L] = 1` and
+  one parameter, `sigma_L = 0.5`. The result is therefore a *curve* rather than a point — the
+  oracle reports the value of sight at `sigma_L` = 0.25, 0.5, 0.75, worth 0.01474, 0.06212,
+  0.15223 bps — because a single invented parameter with a single number beside it reads as
+  calibration, and it is not.
+
+  The denominator is the thing to watch again, and it moved again. Three rungs, all of them
+  closed forms bar the last: M4a's schedule, which knows no liquidity at all (2.49895 bps);
+  `J_static*`, the best *fixed* schedule that knows the liquidity **law** (2.49661); and
+  `J_DP`, the optimum over *adapted* policies (2.43449). The milestone's denominator is the
+  **adaptive** advantage `J_static* − J_DP` = **0.06212 bps**, 2.55% of the objective. It is
+  *not* `J_M4a − J_DP`: 0.00234 bps of that (3.8% of the advantage) is a **level shift** any
+  static solver picks up for free by re-solving at an inflated coefficient, and both rungs are
+  computed in closed form because differencing two *simulated* levels would put a 0.002 bps
+  quantity under a per-path standard deviation of 0.18.
+
+  Ten seeds captured a median **99.0%** of the adaptive advantage (IQR 0.013, worst seed 96.3%)
+  — a median excess over `J_DP` of **+0.00064 bps**. The control is part of the claim rather
+  than an appendix: re-graded with the observed liquidity drawn *independently* of the
+  liquidity actually charged, the same policies capture a median **-1.01**, so the gap between
+  0.99 and -1.01 is what says the agent is using the signal rather than having found a better
+  fixed schedule.
+
+  Two things about the reference are said plainly because they are weaker than M4a's. `J_DP` is
+  a dynamic program, so it is **converged and bracketed, not certified** — M4a earned that word
+  with a Cholesky factorisation and a 1.2e-15 KKT residual, and this is not the same word. What
+  it has instead is two-sided and it makes the red-flag test *rigorous*: a perfect-information
+  relaxation below it and the DP's own greedy policy above, bracketing it to 9.8% of the
+  advantage, and no adapted policy can beat perfect information **on any path**. And the grade
+  is an average rather than a closed form — `E[cost | L]`, which is exact given the liquidity
+  path because the policy never sees a price, averaged over 20,000 held-out paths with common
+  random numbers, for a half-width of 1.40% of the effect. There is no price sampling anywhere.
+
+  The one thing that did **not** change is the objective. `V` is still price-shortfall
+  variance; liquidity enters `E[cost]` through Jensen and never `lambda V`, so invariant 7
+  needed no amendment. The stated claim is exactly this and no wider: *with a one-parameter
+  invented liquidity process, seeing liquidity is worth 2.6% of the objective and the agent
+  captured 99% of it.* Not "the agent adapts to real market liquidity".
 - **Phase 3 — it ran on a wire, and the venue did exactly what was predicted.** The
   stretch leg (M6) is done. The trained policy — M4a's median seed, exported as a
   committed `.npz` and run through a numpy forward pass with no torch on the client's
