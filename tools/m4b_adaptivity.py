@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import textwrap
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -56,8 +57,16 @@ def build_curve(table: dict) -> dict:
     }
 
 
+#: Characters per caption line. Measured against the 11.6-inch canvas at 7.6 pt:
+#: matplotlib silently draws text past the figure edge, so the width is bounded
+#: where the string is built rather than trusted to fit. The house note records a
+#: caption running off the canvas as a real failure that reached a committed
+#: artefact once already.
+CAPTION_WIDTH = 168
+
+
 def caption(experiment, document: dict, rungs: dict) -> str:
-    """The three things this figure may never be shown without."""
+    """The three things this figure may never be shown without, hard-wrapped."""
     reference = document["reference"]
     summary = document["summary"]
     verdict = document["verdict"]
@@ -88,7 +97,10 @@ def caption(experiment, document: dict, rungs: dict) -> str:
         f"averaged over {document['seeds'][0]['grade']['paths']:,} held-out paths, "
         f"paired against the static optimum's closed form.",
     ]
-    return "\n".join(lines)
+    return "\n".join(
+        textwrap.fill(line, width=CAPTION_WIDTH, subsequent_indent="  ")
+        for line in lines
+    )
 
 
 def main() -> int:

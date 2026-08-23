@@ -706,3 +706,15 @@ def test_the_caption_never_omits_the_three_things_it_may_not(tmp_path):
     assert "CONVERGED AND BRACKETED, not certified" in text
     assert "no price sampling" in text
     assert "shuffled control" in text.lower()
+
+    # And it fits. matplotlib draws text straight past the figure edge without a
+    # word of complaint, and the house note records a caption doing exactly that
+    # on a committed artefact — so the width is bounded where the string is built
+    # and the bound is checked here rather than noticed in a picture.
+    from tools.m4b_adaptivity import CAPTION_WIDTH
+
+    overlong = [line for line in text.splitlines() if len(line) > CAPTION_WIDTH]
+    assert not overlong, (
+        f"{len(overlong)} caption line(s) exceed {CAPTION_WIDTH} characters and "
+        f"will run off the canvas: {overlong[0][:80]!r}..."
+    )

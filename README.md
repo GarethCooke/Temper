@@ -220,6 +220,8 @@ make validate      # M3 task 1: antithetic pairing at M2's λ, 10 seeds — a ni
 make frontier      # M3 tasks 4–5: the nine-λ sweep, then the frontier figure — a day
 make m4a-reference # M4a task 0: the power-law table and its three gates — minutes
 make m4a           # M4a task 5: ten seeds in the power-law world — ~2 h
+make m4b-reference # M4b task 0: the liquidity table and its four gates — ~5 min
+make m4b           # M4b task 5: ten seeds in the stochastic-liquidity world — ~2.5 h
 make checkpoint    # M6's prerequisite: export M4a's median seed as a policy .npz — ~15 min
 make m6-predict    # M6 task 4: the closed-form prediction; no server needed
 make m6            # M6 task 5: the measured ladder run against a live anvil_server
@@ -231,8 +233,8 @@ the per-commit loop never waits on them:
 
 - `make differential` — the deep Monte-Carlo tiers of both worlds: M1's 27 (case, schedule)
   cells at 200,000 episodes each and M4a's 36, 163.8 M calls into the real `step` loop,
-  counted and asserted; from `configs/m1_differential.yaml` and
-  `configs/m4a_differential.yaml`.
+  counted and asserted; from `configs/m1_differential.yaml`,
+  `configs/m4a_differential.yaml` and `configs/m4b_differential.yaml`.
 - `make smoke` — the CleanRL adaptation solving `Pendulum-v1` and `CartPole-v1` on three
   seeds each, ~7 min, from `configs/ppo_smoke.yaml`. It stays in the suite permanently
   because it is what separates "PPO is broken" from "the env is hard" for every later
@@ -262,6 +264,27 @@ the per-commit loop never waits on them:
   power-law world, everything except the world and the graded encoding identical to M3's
   point at the same λ. ~2 h, unattended. `make m4a-figure` redraws
   `results/m4a_degradation.png` from the committed JSON without training.
+- `make m4b-reference` — M4b's task 0, oracle only and ~5 minutes: the liquidity table
+  across the committed λ grid, the dynamic-programming optimum, the two sampled bounds
+  that bracket it, and the four gates. Exit status is whether all four are green, and it
+  writes `results/m4b_reference.json` — the first committed artefact in the repo whose
+  reference is *converged and bracketed* rather than certified, and which says so in the
+  field a reader would look for the word in. `make m4b-oracle` runs that oracle's own
+  checks, including the one that matters most: at σ_L = 0 the dynamic program must return
+  M4a's **certified** value, which is what ties every piece of new machinery to a number
+  that had a Cholesky factorisation behind it.
+- `make m4b-guarantees` — the guarantees the liquidity world inherits, run *before*
+  training and through **two** seams rather than one. `make m4b-differential` is invariant
+  6 again, in two parts: conditionally on the liquidity path (where M1's exact bands
+  survive verbatim, because liquidity never touches `V`) and unconditionally against the
+  closed form (where they cannot, and the band says so). `make m4b-regression` retrains one
+  committed M3 seed **and** one committed M4a seed through the second seam and requires
+  both to reproduce bitwise, ~40 min.
+- `make m4b` — M4b's acceptance run, from `configs/m4b_liquidity.yaml`: ten seeds in the
+  stochastic-liquidity world, graded by conditional expectation on held-out liquidity
+  paths. Everything except the liquidity block and the bars is M4a's config verbatim.
+  ~2.5 h, unattended. `make m4b-figure` redraws `results/m4b_adaptivity.png` from the
+  committed sweep and task 0's table, without training.
 
 - `make checkpoint` — M6's prerequisite, and a repo gap rather than an M6 one: until it
   landed, every network this project trained was discarded the moment it had been graded.

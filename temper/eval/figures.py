@@ -719,7 +719,7 @@ def adaptivity_figure(
     view of a result and redraws byte-identically from it.
     """
     figure, (left, right) = plt.subplots(
-        1, 2, figsize=(11.4, 5.4), gridspec_kw={"width_ratios": (1.35, 1.0)}
+        1, 2, figsize=(11.6, 6.8), gridspec_kw={"width_ratios": (1.35, 1.0)}
     )
 
     # ---- left panel: the ladder ------------------------------------------
@@ -803,6 +803,7 @@ def adaptivity_figure(
         zorder=4,
     )
 
+    advantage = static - adaptive
     left.annotate(
         "",
         xy=(0.955, adaptive),
@@ -812,20 +813,32 @@ def adaptivity_figure(
     left.text(
         0.945,
         0.5 * (static + adaptive),
-        f"adaptive advantage\n{static - adaptive:.5f} bps",
+        f"adaptive advantage\n{advantage:.5f} bps",
         ha="right",
         va="center",
         fontsize=8.5,
         color="#227a4b",
     )
-    left.text(
-        0.05,
-        0.5 * (m4a + static),
-        f"level shift {m4a - static:.5f} bps\n— a re-solve, not the agent",
-        ha="left",
-        va="center",
+    # The level shift is ~4 % of the panel's height, so the two rungs it separates
+    # are all but on top of each other and there is nowhere *between* them to put
+    # a label. A leader line from clear air is the honest way to point at a gap
+    # too small to annotate in place — and the gap being too small to see is
+    # itself the reading: it is a constant, and a small one.
+    left.annotate(
+        f"level shift {m4a - static:.5f} bps —\na re-solve, NOT the agent's",
+        xy=(0.46, 0.5 * (m4a + static)),
+        xytext=(0.40, static - 0.10 * advantage),
         fontsize=8.0,
         color="#a0522d",
+        ha="left",
+        va="top",
+        arrowprops={
+            "arrowstyle": "-|>",
+            "color": "#c1663c",
+            "linewidth": 1.0,
+            "shrinkA": 2,
+            "shrinkB": 1,
+        },
     )
 
     left.set_xlim(0.0, 1.0)
@@ -836,7 +849,17 @@ def adaptivity_figure(
     )
     left.grid(axis="y", color="#e6e6e6", linewidth=0.7)
     left.set_axisbelow(True)
-    left.legend(fontsize=8.0, loc="upper right", framealpha=0.94)
+    # In the empty middle of the advantage band, which is the one region of this
+    # panel guaranteed to be clear: everything the figure draws is either at the
+    # top (the two static rungs) or at the bottom (the seeds, the DP and its
+    # bound), and the space between them is the quantity being measured.
+    left.legend(
+        fontsize=7.8,
+        loc="center left",
+        bbox_to_anchor=(0.02, 0.47),
+        framealpha=0.94,
+        borderpad=0.5,
+    )
 
     # ---- right panel: the value of sight ---------------------------------
     sigmas = np.asarray(curve["sigma_log"], dtype=float)
@@ -893,20 +916,25 @@ def adaptivity_figure(
     figure.suptitle(
         "M4b — stochastic liquidity: the advantage no fixed schedule can capture",
         fontsize=12.5,
-        y=0.975,
+        y=0.985,
     )
-    figure.text(0.008, 0.012, caption, fontsize=8.0, color="#333333", va="bottom")
+    # The caption is hard-wrapped by the caller and drawn in its own reserved
+    # band at the bottom. Both halves of that are the house note's *A figure
+    # caption that runs off the canvas* arriving as code: matplotlib will not tell
+    # you that text overflowed, so the width is bounded where the string is built
+    # and the space is reserved here rather than hoped for.
+    figure.text(0.008, 0.010, caption, fontsize=7.6, color="#333333", va="bottom")
     figure.text(
         0.992,
-        0.012,
+        0.955,
         provenance.short,
         fontsize=7.5,
         color="#666666",
         family="monospace",
         ha="right",
-        va="bottom",
+        va="top",
     )
-    figure.subplots_adjust(left=0.075, right=0.985, top=0.885, bottom=0.205, wspace=0.22)
+    figure.subplots_adjust(left=0.070, right=0.985, top=0.895, bottom=0.235, wspace=0.20)
 
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
