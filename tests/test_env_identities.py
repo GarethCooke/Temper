@@ -425,6 +425,13 @@ def test_the_shock_is_published_through_info_and_nowhere_else(env):
         # it was produced in, and because the grader reads `cost_encoding` off
         # it; it carries impact parameters and no path.
         "temporary_impact",
+        # M4b: the liquidity stream — a law bound to the seed pool it draws from.
+        # Public for the same two reasons the impact model is: a result names the
+        # world it was produced in, and the estimator has to hand the *same*
+        # stream to a mirror. It carries a distribution and a pool name; the
+        # realised path is reachable only through `multipliers`, which is the
+        # market the agent is *shown* and deliberately not the price it is not.
+        "liquidity",
         "action_space",
         "observation_space",
     }, "the env grew a public attribute; if it exposes the price path, §4 is broken"
@@ -433,16 +440,52 @@ def test_the_shock_is_published_through_info_and_nowhere_else(env):
     assert class_surface == {
         "metadata",
         "seed_address",
-        "cost_encoding",   # M4a: which functional this env charges
+        "cost_encoding",       # M4a: which functional this env charges
+        # M4b, and the contrast with SHOCK_KEY is the whole point. These publish
+        # the *liquidity* path — the market the agent is shown on purpose, because
+        # reacting to it is what the milestone measures — and the second seed
+        # address it was drawn at. Neither touches the price walk, which still has
+        # exactly one public route and it is `info[SHOCK_KEY]`.
+        "liquidity_address",
+        "multipliers",
         "step_count",
         "reset",
         "step",
     }
 
+
     for name in instance_surface | class_surface:
         value = getattr(env, name)
         if isinstance(value, float):
             assert value != info[SHOCK_KEY], f"{name} exposes the realised shock"
+
+
+def test_the_liquidity_path_is_public_and_the_price_path_is_still_not(env):
+    """M4b's second stream, and the asymmetry between the two noise sources.
+
+    A policy may see liquidity — that is the milestone — and may never see the
+    price. So this checks the *pair* of statements rather than either alone: the
+    realised multipliers are reachable, the walk is not, and the two are drawn at
+    different seed addresses so neither can move the other.
+    """
+    from temper.env import LIQUIDITY_KEY
+
+    env.reset(seed=13)
+    _, _, _, _, info = env.step(env.order_size / env.market.n_bins)
+
+    assert LIQUIDITY_KEY in info
+    assert info[LIQUIDITY_KEY] == 1.0, "the default world has no liquidity noise"
+    assert env.multipliers.shape == (env.market.n_bins,)
+    assert env.multipliers is not env.multipliers, "callers got the env's own buffer"
+
+    price_root, price_pool, price_index = env.seed_address
+    liquidity_root, liquidity_pool, liquidity_index = env.liquidity_address
+    assert (price_root, price_index) == (liquidity_root, liquidity_index)
+    assert price_pool != liquidity_pool, (
+        "the liquidity multiplier is addressed in the same pool as the price "
+        "shock, so a liquidity draw would move every downstream shock and no "
+        "committed Phase-1 or M4a number would still regenerate"
+    )
 
 
 def test_the_step_counter_is_monotone_and_survives_reset(env):

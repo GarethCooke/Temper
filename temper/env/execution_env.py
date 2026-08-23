@@ -59,6 +59,7 @@ from gymnasium import Env, spaces
 from numpy.random import Generator
 
 from temper.env.impact import TemporaryImpact, linear_temporary
+from temper.env.liquidity import DETERMINISTIC_LIQUIDITY, LiquidityStream
 from temper.oracle import BPS, Market
 from temper.seeding import DIFFERENTIAL_POOL, pool_rng
 
@@ -76,6 +77,18 @@ EPISODE_KEY = "episode_summary"
 #: ``tests/test_repo_invariants.py`` can statically reject the literal everywhere
 #: outside this package: one greppable name, and every read of it auditable.
 SHOCK_KEY = "walk_bps"
+
+#: ``info`` key the bin's realised liquidity multiplier is published under.
+#:
+#: Deliberately **not** quarantined the way :data:`SHOCK_KEY` is, and the contrast
+#: is the point. The shock is the future of the episode's own price path and a
+#: policy that could see it would be cheating; the multiplier is the *current*
+#: state of the market the agent is trading in, it is in the observation on
+#: purpose, and M4b's whole claim is that reacting to it is worth something. The
+#: key exists so the antithetic pair can assert that both halves saw the same
+#: liquidity — the third per-step identity — and so the differential can measure
+#: the realised draws against the oracle's closed-form moments.
+LIQUIDITY_KEY = "liquidity_multiplier"
 
 
 def _as_shares(action) -> float:
@@ -114,8 +127,24 @@ class ExecutionEnv(Env):
         :func:`~temper.env.impact.linear_temporary` — Phase 1, exactly as this
         env built it before the model became injectable. A Phase-2 world is
         never inherited: it has to be named, here or in a config.
+    liquidity:
+        M4b's second seam: a :class:`~temper.env.liquidity.LiquidityStream`, which
+        is a per-bin multiplier on ``v_hourly`` **bound to the seed pool it draws
+        from**. ``None`` is
+        :data:`~temper.env.liquidity.DETERMINISTIC_LIQUIDITY` — ``L = 1``, no
+        randomness consumed, the market every milestone through M4a ran in. Same
+        rule as the impact model and for the same reason; there are now two ways
+        to inherit a Phase-2 world by omission and ``tests/test_repo_invariants.py``
+        closes both.
+
+        A **stochastic** stream changes two visible things: the observation grows
+        a third coordinate, ``log L_k``, and the temporary charge is paid at the
+        bin's own liquidity. It changes nothing else — the shock model, permanent
+        impact, the half-spread and the frozen objective are all Phase 1's.
     root_seed, pool, stream_index:
-        The seed address (see the module docstring).
+        The seed address (see the module docstring). The liquidity stream shares
+        `root_seed` and `stream_index` and differs only in its pool, so the two
+        noise sources cannot collide and neither can move the other.
 
     Actions are shares to execute this interval, clipped to ``[0, remaining]``.
     The final bin force-liquidates whatever is left and charges it like any other
@@ -138,6 +167,7 @@ class ExecutionEnv(Env):
         lambda_risk: float,
         *,
         temporary_impact: TemporaryImpact | None = None,
+        liquidity: LiquidityStream | None = None,
         root_seed: int,
         pool: str = DIFFERENTIAL_POOL,
         stream_index: int = 0,
@@ -155,11 +185,26 @@ class ExecutionEnv(Env):
             if temporary_impact is None
             else temporary_impact
         )
+        self.liquidity = (
+            DETERMINISTIC_LIQUIDITY if liquidity is None else liquidity
+        )
+        if not isinstance(self.liquidity, LiquidityStream):
+            raise TypeError(
+                "liquidity is a LiquidityStream — a law bound to the pool it draws "
+                f"from — got {type(self.liquidity)!r}"
+            )
 
         self._root_seed = int(root_seed)
         self._pool = pool
         self._stream_index = int(stream_index)
         self._rng: Generator | None = None
+        # A *second* generator, at a second pool. Never the same object as
+        # `_rng`, never derived from it: a liquidity draw taken out of the price
+        # generator would shift every downstream shock and silently un-reproduce
+        # every committed Phase-1 and M4a number.
+        self._liquidity_rng: Generator | None = None
+        self._multipliers = np.ones(market.n_bins, dtype=np.float64)
+        self._log_multipliers = np.zeros(market.n_bins + 1, dtype=np.float64)
 
         n_bins = market.n_bins
         self._n_bins = n_bins
@@ -181,9 +226,22 @@ class ExecutionEnv(Env):
         self.action_space = spaces.Box(
             low=0.0, high=self.order_size, shape=(1,), dtype=np.float64
         )
-        self.observation_space = spaces.Box(
-            low=0.0, high=1.0, shape=(2,), dtype=np.float64
-        )
+        # Two coordinates in the deterministic world — bitwise the Phase-1 and M4a
+        # observation, which is what lets their committed seeds retrain through
+        # this seam unchanged — and three when liquidity is a noise source, the
+        # third being `log L_k` for the bin about to execute. The observation grows
+        # once per milestone and only where the milestone needs it (§7).
+        if self.liquidity.stochastic:
+            self.observation_space = spaces.Box(
+                low=np.array([0.0, 0.0, -np.inf]),
+                high=np.array([1.0, 1.0, np.inf]),
+                shape=(3,),
+                dtype=np.float64,
+            )
+        else:
+            self.observation_space = spaces.Box(
+                low=0.0, high=1.0, shape=(2,), dtype=np.float64
+            )
 
         self._trajectory = np.empty(n_bins + 1, dtype=np.float64)
         # Monotone over the env's whole life — deliberately *not* cleared by
@@ -204,6 +262,30 @@ class ExecutionEnv(Env):
     def seed_address(self) -> tuple[int, str, int]:
         """``(root_seed, pool, stream_index)`` — what a result must record."""
         return (self._root_seed, self._pool, self._stream_index)
+
+    @property
+    def liquidity_address(self) -> tuple[int, str, int]:
+        """``(root_seed, liquidity pool, stream_index)`` — the *second* address.
+
+        Shares the root seed and the index with :attr:`seed_address` and differs
+        only in the pool, which is the whole disjointness argument in one line.
+        """
+        return (
+            self._root_seed,
+            self.liquidity.pool,
+            self.liquidity.stream_index(self._stream_index),
+        )
+
+    @property
+    def multipliers(self) -> np.ndarray:
+        """This episode's realised per-bin liquidity, drawn at ``reset``.
+
+        Published so the estimator can assert that a mirror saw the *same*
+        liquidity, and so the grader can evaluate ``E[cost | L]`` at the path the
+        policy actually faced. A copy, because a caller holding the env's own
+        buffer would see it change under them at the next reset.
+        """
+        return self._multipliers.copy()
 
     @property
     def cost_encoding(self) -> str:
@@ -246,9 +328,32 @@ class ExecutionEnv(Env):
                 raise ValueError(f"seed is a stream index and must be >= 0, got {seed}")
             self._stream_index = int(seed)
             self._rng = None
+            self._liquidity_rng = None
         if self._rng is None:
             self._rng = pool_rng(self._root_seed, self._pool, self._stream_index)
             self.np_random = self._rng
+        if self._liquidity_rng is None:
+            self._liquidity_rng = self.liquidity.generator(
+                self._root_seed, self._stream_index
+            )
+
+        # The whole episode's liquidity, drawn in one block from the *liquidity*
+        # generator. The publication ordering is the thing that matters and it is
+        # M1a's ordering one seam along: `L_k` is revealed **before** bin `k`
+        # executes, so `reset` publishes `L_0` and the observation after step `k`
+        # carries `L_{k+1}`. That ordering is invisible in the code and load-bearing
+        # for the dynamic program's state definition — the DP's `(k, x_k, L_k)` is
+        # sufficient only if the agent sees `L_k` in time to act on it.
+        #
+        # Blockwise rather than one draw per step because the two are identical for
+        # a numpy Generator (`standard_normal(n)` fills the same sequence as `n`
+        # scalar calls) and the block makes "the same address gives the same
+        # liquidity path" a property a test can read off in one line.
+        self._multipliers = self.liquidity.law.draw(
+            self._liquidity_rng, self._n_bins
+        )
+        self._log_multipliers[: self._n_bins] = np.log(self._multipliers)
+        self._log_multipliers[self._n_bins] = 0.0
 
         self._step_index = 0
         self._inventory = self.order_size
@@ -285,11 +390,12 @@ class ExecutionEnv(Env):
 
         self._walk += self._shock_bps * self._rng.standard_normal()
         own_drift = self._permanent_per_share * shares
+        liquidity = self._multipliers[step_index]
         price_bps = (
             self._walk
             - self._permanent
             - 0.5 * own_drift
-            - self._temporary_bps(shares)
+            - self._temporary_bps(shares, liquidity)
             - self._half_spread
         )
         self._permanent += own_drift
@@ -328,6 +434,12 @@ class ExecutionEnv(Env):
             # route to it: it is deliberately absent from the observation, and
             # `SHOCK_KEY`'s docstring says why.
             SHOCK_KEY: self._walk,
+            # The bin's realised liquidity. In `info` as well as in the
+            # observation because the estimator has to be able to *assert* that a
+            # mirror saw the same market, and reading that off a log inside an
+            # observation vector would be a check on the encoding rather than on
+            # the draw.
+            LIQUIDITY_KEY: liquidity,
         }
         if terminated:
             info[EPISODE_KEY] = self._episode_summary()
@@ -337,11 +449,34 @@ class ExecutionEnv(Env):
     # -- internals ----------------------------------------------------------
 
     def _observation(self) -> np.ndarray:
-        """``(time remaining fraction, inventory remaining fraction)``."""
+        """``(time left, inventory left)``, plus ``log L_k`` when liquidity is a world.
+
+        The third coordinate is the multiplier for the bin **about to execute**,
+        so a policy sees the market it is about to trade in rather than the one it
+        has just traded through. At the terminal boundary there is no next bin and
+        the entry is ``0.0``; that observation is returned only after the episode
+        has terminated and no policy acts on it.
+
+        ``log L`` rather than ``L`` because the law is lognormal, so the log is the
+        coordinate the distribution is symmetric and unit-scaled in — at
+        ``sigma_log = 0.5`` it sits in roughly ``[-1.6, 1.4]``, which is the same
+        order as the other two coordinates. No running normaliser is involved and
+        none is permitted (``tests/test_repo_invariants.py``): the scaling is a
+        property of the committed law, not of the data seen so far.
+        """
+        if not self.liquidity.stochastic:
+            return np.array(
+                (
+                    self._time_fractions[self._step_index],
+                    self._inventory / self.order_size,
+                ),
+                dtype=np.float64,
+            )
         return np.array(
             (
                 self._time_fractions[self._step_index],
                 self._inventory / self.order_size,
+                self._log_multipliers[self._step_index],
             ),
             dtype=np.float64,
         )
@@ -356,6 +491,7 @@ class ExecutionEnv(Env):
         """
         return {
             "trajectory": self._trajectory.copy(),
+            "liquidity": self._multipliers.copy(),
             "cost_bps": BPS * (1.0 - self._proceeds / self.order_size),
             "shortfall_bps": self._shortfall_total,
             "penalty_bps": self._penalty_total,

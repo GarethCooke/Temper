@@ -21,6 +21,18 @@ requires the trajectories to be bitwise identical. If price ever leaks into the
 observation, that assertion fails loudly and everything downstream stops being
 computed rather than quietly becoming an estimate.
 
+**Amended by M4b, which is the first milestone that cannot obey the rule above as
+written.** A liquidity-observing policy's schedule is closed-loop by design, so
+there is no single trajectory to hand to a closed form and the open-loop shortcut
+retires. The *assertion* does not: the price still enters cost only through M1a's
+affine term and the policy still never sees a price, so conditioning on the
+liquidity path removes all of the price randomness analytically and
+``E[cost | L]`` is a closed form. :func:`deterministic_schedule` keeps its name
+and its exception and grows one axis — pin the liquidity, vary the price, require
+the trajectories bitwise equal — and :mod:`temper.eval.conditional` is where the
+averaging over liquidity paths lives. Everything in *this* module continues to
+serve the deterministic-schedule worlds, M0 through M4a, unchanged.
+
 The number itself comes out of :data:`~temper.eval.metrics.GRADED`, not out of a
 direct call to the closed form. That registry refuses to admit a metric encoded
 against FrontierView's power law (invariant 7, ``ARCHITECTURE.md`` §9), and
@@ -35,7 +47,13 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from temper.env import ExecutionEnv, TemporaryImpact, impact_for
+from temper.env import (
+    DETERMINISTIC_LIQUIDITY,
+    ExecutionEnv,
+    LiquidityStream,
+    TemporaryImpact,
+    impact_for,
+)
 from temper.eval.metrics import Metric, WorldMismatch, check_grades_world, metrics_for
 from temper.eval.reference import ReferenceRow, trajectory_deviation
 from temper.eval.rollout import run_episode
@@ -89,27 +107,48 @@ def deterministic_schedule(
     pool: str = "eval",
     streams: Sequence[int] = DEFAULT_EVAL_STREAMS,
     temporary_impact: TemporaryImpact | None = None,
+    liquidity: LiquidityStream | None = None,
     expect_encoding: str | None = None,
 ) -> np.ndarray:
-    """The inventory trajectory `policy` induces, verified shock-independent.
+    """The inventory trajectory `policy` induces, verified **price**-independent.
 
-    Rolls the policy out once per stream through the shared
+    Rolls the policy out once per price stream through the shared
     :func:`~temper.eval.rollout.run_episode` — the same loop TWAP and both AC
     schedules go through — and requires every trajectory to be *bitwise* equal.
     Bitwise, not ``allclose``: the claim is that the shocks did not enter the
     computation at all, and a policy that let 1e-16 of price into its action
     would still be a policy whose schedule is not open-loop.
 
+    **Generalised by M4b, not retired.** Through M4a the claim was "the schedule
+    is open-loop", because the observation carried nothing that varied. A
+    liquidity-observing policy's schedule is *not* open-loop — it reacts, on
+    purpose, and that is the milestone — so the check grows one axis instead:
+    the liquidity stream is **pinned** and only the price stream varies. What is
+    asserted is therefore the narrower and still load-bearing half of the old
+    claim, "the price never entered the decision", which is exactly what makes
+    ``E[cost | L]`` a legitimate closed form
+    (:mod:`temper.eval.conditional`). A policy that fails this has still not been
+    scored badly — it has not been scored at all.
+
+    The pin is what makes the check possible: liquidity normally follows the env's
+    stream index, so varying the index would move both noise sources at once and
+    the comparison would be vacuous. `liquidity` is pinned to `streams[0]`'s index
+    here, so the two rollouts differ in the price and in nothing else.
+
     `temporary_impact` names the world the policy is rolled out in; ``None`` is
-    Phase 1, which is what the env itself defaults to. `expect_encoding` is the
-    env half of M4a's world/metric check: the caller states which world it
-    believes it is grading in, and every env built here has to agree before a
-    step is taken.
+    Phase 1, which is what the env itself defaults to. `liquidity` likewise
+    defaults to the deterministic multiplier, which is the market M0-M4a ran in.
+    `expect_encoding` is the env half of M4a's world/metric check: the caller
+    states which world it believes it is grading in, and every env built here has
+    to agree before a step is taken.
     """
     if len(streams) < 2:
         raise ValueError(
             f"determinism needs at least two shock streams, got {list(streams)}"
         )
+    stream_pin = (
+        DETERMINISTIC_LIQUIDITY if liquidity is None else liquidity
+    ).pinned_to(int(streams[0]))
 
     trajectories = []
     for stream in streams:
@@ -118,6 +157,7 @@ def deterministic_schedule(
             order_size,
             lambda_risk,
             temporary_impact=temporary_impact,
+            liquidity=stream_pin,
             root_seed=root_seed,
             pool=pool,
             stream_index=int(stream),
@@ -137,9 +177,10 @@ def deterministic_schedule(
             worst = float(np.max(np.abs(trajectory - reference)))
             raise ScheduleNotDeterministic(
                 f"policy {getattr(policy, 'name', policy)!r} realised different "
-                f"schedules on eval streams {streams[0]} and {stream} — worst "
-                f"difference {worst:.3e} shares. The observation must carry no "
-                "price, or analytic grading is invalid."
+                f"schedules on price streams {streams[0]} and {stream} at one "
+                f"pinned liquidity path — worst difference {worst:.3e} shares. "
+                "The observation must carry no price, or neither analytic grading "
+                "nor the conditional expectation E[cost | L] is valid."
             )
     return reference
 

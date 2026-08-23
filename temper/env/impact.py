@@ -55,30 +55,55 @@ class TemporaryImpact:
     encoding: str
 
     def bind(self, market: Market):
-        """A callable ``shares -> bps per share`` on `market`'s grid."""
+        """A callable ``(shares, liquidity=1.0) -> bps per share`` on `market`'s grid.
+
+        The liquidity argument is M4b's, and it defaults to the deterministic
+        world so that a Phase-1 or M4a env reaches bitwise the same charge it
+        always did. Liquidity multiplies ``v_hourly``, so it is a property of the
+        *market* on the bin rather than of the impact function, which is why it is
+        a call argument and not a field.
+        """
         raise NotImplementedError
 
 
 @dataclass(frozen=True)
 class _LinearCharge:
-    """``eta_tilde * BPS / dt * n`` — one multiply, per step."""
+    """``eta_tilde * BPS / dt * n`` — one multiply, per step.
+
+    `liquidity` scales ``v_hourly``, so it divides the participation rate and
+    therefore the charge. It defaults to ``1.0`` and at that value the arithmetic
+    is **bitwise** what it was before the argument existed: ``x / 1.0 == x``
+    exactly in IEEE, which is what keeps every Phase-1 number where it was.
+
+    The linear tangent under stochastic liquidity is not a world M4b reports —
+    ``eta_tilde`` is taken at a participation rate computed *without* the
+    multiplier, so the tangent point itself would move — and the generalisation is
+    here for consistency of the interface rather than as a claim about that world.
+    """
 
     coefficient: float
 
-    def __call__(self, shares: float) -> float:
-        return self.coefficient * shares
+    def __call__(self, shares: float, liquidity: float = 1.0) -> float:
+        return self.coefficient * shares / liquidity
 
 
 @dataclass(frozen=True)
 class _PowerLawCharge:
-    """``eta * sigma * BPS * (n / (dt * v_hourly)) ** beta`` — the vendored charge."""
+    """``eta * sigma * BPS * (n / (dt * v_hourly * L)) ** beta`` — the vendored charge.
+
+    M4b's world. ``L`` is the per-bin liquidity multiplier and enters exactly
+    where the participation rate does and nowhere else: the exponent, the
+    coefficient and the shock model are untouched, which is why liquidity does not
+    make a new *cost encoding* and §9's *A metric grades the world that charges it*
+    needs no amendment. At ``L = 1`` the expression is bitwise the M4a one.
+    """
 
     coefficient: float
     rate: float
     exponent: float
 
-    def __call__(self, shares: float) -> float:
-        return self.coefficient * (shares * self.rate) ** self.exponent
+    def __call__(self, shares: float, liquidity: float = 1.0) -> float:
+        return self.coefficient * (shares * self.rate / liquidity) ** self.exponent
 
 
 @dataclass(frozen=True)

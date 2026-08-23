@@ -45,7 +45,7 @@ import torch
 from gymnasium import Env, Wrapper, spaces
 
 from temper.agents.ppo import AGENT_DTYPE, Agent
-from temper.env import ExecutionEnv, TemporaryImpact
+from temper.env import ExecutionEnv, LiquidityStream, TemporaryImpact
 from temper.oracle import Market
 from temper.seeding import DIFFERENTIAL_POOL
 
@@ -172,6 +172,7 @@ def execution_env_factory(
     reward_scale: float = 1.0,
     reward_wrapper: Callable[[Env], Env] | None = None,
     temporary_impact: TemporaryImpact | None = None,
+    liquidity: LiquidityStream | None = None,
 ) -> Callable[[], Env]:
     """A thunk building one training env at one seed address.
 
@@ -194,7 +195,10 @@ def execution_env_factory(
     `temporary_impact` is the world the agent trains in, and it arrives the same
     way and for a related reason: ``None`` is Phase 1, and a Phase-2 world is
     named by the config the driver read rather than defaulted to by the training
-    path (constitution §4).
+    path (constitution §4). `liquidity` is M4b's second seam, arriving the same
+    way again — a law bound to the pool it draws from, ``None`` being ``L = 1``.
+    Two seams now default to Phase 1 and **every env this factory builds gets
+    both**, which is M4a's §9 lesson stated as a signature rather than as a hope.
     """
 
     def make() -> Env:
@@ -203,6 +207,7 @@ def execution_env_factory(
             order_size,
             lambda_risk,
             temporary_impact=temporary_impact,
+            liquidity=liquidity,
             root_seed=root_seed,
             pool=pool,
             stream_index=stream_index,

@@ -357,6 +357,18 @@ POOL_ALLOWANCE: dict[str, frozenset[str]] = {
     # it, so it legitimately holds both reserved pools — the same grant, for the
     # same reason, as the two sweep regenerators above.
     "test_m4a_phase1_regression.py": frozenset({"train", "eval"}),
+    # M4b's seam regression is M4a's twice over — one committed seed per world —
+    # so it holds the same two pools for the same reason. It also builds envs at
+    # `train` addresses to assert the *observation shape* and the second seed
+    # address without stepping them, which is the cheap half of the same claim.
+    "test_m4b_phase1_regression.py": frozenset({"train", "eval"}),
+    # M4b's guarantees, and the pools mirror M4a's grant exactly: its own
+    # differential pool for the per-step identities, and `eval` because the
+    # open-loop successor *is* about the eval streams — pin the liquidity, vary
+    # the price, require the trajectory bitwise.
+    "test_m4b_inherited_guarantees.py": frozenset({"m4b/differential", "eval"}),
+    "test_m4b_differential.py": frozenset({"m4b/differential"}),
+    "test_m4b_conditional_grading.py": frozenset({"m4b/differential", "eval"}),
     # The committed policy checkpoint holds M4a's median seed, so verifying it
     # means rolling that policy out on the streams it was *graded* on and
     # nowhere else. `eval` only, and deliberately not `train`: the checkpoint is
@@ -376,6 +388,10 @@ SWEEP_REGENERATORS: tuple[str, ...] = (
     # result end to end and therefore needs the pools that result was addressed
     # by. It is not a *new* sweep — it is the invariant-1 check on one.
     "test_m4a_phase1_regression.py",
+    # M4b's is the same check across two worlds rather than one, which is what
+    # the second seam demands: an env that draws a *second* noise source has to
+    # be shown not to have moved either of the milestones that predate it.
+    "test_m4b_phase1_regression.py",
 )
 
 DEFAULT_POOL_ALLOWANCE = frozenset({"m1/differential"})

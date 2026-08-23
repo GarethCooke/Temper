@@ -308,3 +308,247 @@ def test_a_full_range_sweep_is_not_mistaken_for_a_subset():
     document = build_document(sweep)
     assert [record["ordinal"] for record in document["seeds"]] == list(range(10))
 
+
+# ---------------------------------------------------------------------------
+# M4b — the liquidity document, on fabricated data, before the training run
+# ---------------------------------------------------------------------------
+
+M4B_CONFIG = REPO_ROOT / "configs" / "m4b_liquidity.yaml"
+
+#: A small path count. Nothing here checks a *number*; it checks that every key a
+#: reader, a test and a figure depend on exists in a document assembled by the
+#: real writer from real grades. The house note's whole point is that this must
+#: cost milliseconds, or it will be run after the evening instead of before it.
+FABRICATED_PATHS = 64
+
+
+def _liquidity_sweep(n_seeds: int = 10, *, shuffled: bool = True):
+    """A liquidity sweep whose seeds are the DP's own greedy policy, nudged.
+
+    Real grades through the real grader: the schedules come out of
+    :meth:`~temper.oracle.adaptive.AdaptiveOptimum.greedy_weights` on real
+    sampled paths, get perturbed per seed, and go through
+    :func:`~temper.eval.conditional.grade_conditional` against a real
+    :class:`~temper.eval.reference.LiquidityReferenceRow`. Only the *training* is
+    fabricated, because a ``TrainResult``'s ``as_dict`` never touches a network.
+
+    Deliberately a **coarse** reference — a 201-point grid and 64 paths — because
+    this module is about the writer and not about the reference. The committed
+    numbers come from ``tools/m4b_reference_table.py``; what is under test here is
+    that ``build_document`` can turn grades into a file without a training run to
+    find out.
+    """
+    import numpy as np
+
+    from temper.eval.conditional import grade_conditional, trajectory_quantiles
+    from temper.eval.reference import liquidity_reference_row
+    from temper.eval.sweep import grade_liquidity_baselines
+
+    experiment = load_experiment(M4B_CONFIG)
+    market, order_size = experiment.case.market, experiment.case.order_size
+    reference = liquidity_reference_row(
+        market,
+        order_size,
+        experiment.lambda_risk,
+        experiment.liquidity,
+        root_seed=experiment.seeds.root_seed,
+        paths=FABRICATED_PATHS,
+        grid_points=201,
+        quadrature_nodes=7,
+    )
+
+    rng = np.random.default_rng(4)
+    multipliers = experiment.liquidity.draw(
+        np.random.default_rng(11), (FABRICATED_PATHS, market.n_bins)
+    )
+    optimum = __import__(
+        "temper.oracle", fromlist=["adaptive_optimum"]
+    ).adaptive_optimum(
+        market, order_size, experiment.lambda_risk, experiment.liquidity, points=201
+    )
+    weights = optimum.greedy_weights(multipliers)
+
+    grades, shuffles, quantiles = [], [], []
+    for ordinal in range(n_seeds):
+        nudged = weights * (1.0 + 1e-3 * rng.normal(size=weights.shape))
+        nudged = np.clip(nudged, 1e-9, None)
+        nudged /= nudged.sum(axis=1, keepdims=True)
+        trajectories = order_size * np.concatenate(
+            (
+                np.ones((nudged.shape[0], 1)),
+                1.0 - np.cumsum(nudged, axis=1),
+            ),
+            axis=1,
+        )
+        trajectories[:, -1] = 0.0
+        grades.append(
+            grade_conditional(
+                trajectories,
+                multipliers,
+                market,
+                order_size,
+                reference,
+                name=f"seed{ordinal}",
+            )
+        )
+        quantiles.append(trajectory_quantiles(trajectories))
+        if shuffled:
+            shuffles.append(
+                grade_conditional(
+                    np.tile(reference.static.trajectory, (FABRICATED_PATHS, 1)),
+                    multipliers,
+                    market,
+                    order_size,
+                    reference,
+                    name=f"seed{ordinal}_shuffled",
+                )
+            )
+
+    return SweepResult(
+        experiment=experiment,
+        baselines={},
+        grades=(),
+        training=tuple(
+            _training_result(experiment.ppo, experiment.ppo.num_updates)
+            for _ in grades
+        ),
+        seconds=9000.0,
+        provenance=PROVENANCE,
+        pairs=tuple(() for _ in grades),
+        liquidity_reference=reference,
+        liquidity_grades=tuple(grades),
+        shuffled_grades=tuple(shuffles),
+        liquidity_baselines=grade_liquidity_baselines(
+            experiment, reference, multipliers
+        ),
+        schedule_quantiles=tuple(quantiles),
+    )
+
+
+def test_the_liquidity_document_assembles_without_a_training_run():
+    """Every key M4b's readers depend on, from real grades, in milliseconds."""
+    document = build_document(_liquidity_sweep())
+
+    assert document["milestone"] == "M4b"
+    assert document["config"]["cost_encoding"] == POWER_LAW_ENCODING
+    assert document["liquidity"]["model"] == "lognormal"
+    assert document["liquidity"]["invented"] is True, (
+        "the results file must record that the liquidity process is Temper's own"
+    )
+    assert document["reference_kind"] == "converged and bracketed, not certified"
+    assert document["reference"]["adaptive"]["certified"] is False
+    assert len(document["seeds"]) == 10
+
+    for record in document["seeds"]:
+        grade = record["grade"]
+        assert set(grade) >= {
+            "objective_bps",
+            "half_width_bps",
+            "paired_sd_bps",
+            "paths",
+            "excess_bps",
+            "advantage_fraction",
+            "capture_fraction",
+            "paths_below_clairvoyant",
+            "red_flag",
+            "soft_flag",
+            "mean_trajectory",
+        }
+        assert set(record["schedule_quantiles"]) == {"q25", "q50", "q75"}
+        assert "shuffled" in record, "the control travels with the seed it controls"
+
+
+def test_the_liquidity_verdict_reports_the_level_shift_on_its_own_line():
+    """The single number M4b is most at risk of quietly crediting to the agent.
+
+    ``J_M4a - J_static*`` is a constant any static solver picks up for free by
+    re-solving at the inflated coefficient. An agent measured against M4a's
+    schedule appears to gain the *naive* gap; the denominator is the adaptive
+    advantage, and both numbers are in the file so a reader can see the
+    difference rather than take the fraction on trust.
+    """
+    document = build_document(_liquidity_sweep())
+    verdict = document["verdict"]
+
+    assert set(verdict) >= {
+        "tolerance_denominator",
+        "graded_attribute",
+        "epsilon_met",
+        "per_seed_met",
+        "red_flags",
+        "seeds_below_clairvoyant",
+        "soft_flags",
+        "shuffled_control_met",
+        "shuffled_capture_bar",
+        "denominator_bps",
+        "median_excess_bps",
+        "level_shift_bps",
+        "level_shift_fraction_of_advantage",
+        "naive_gap_bps",
+        "passed",
+    }
+    assert verdict["tolerance_denominator"] == AVAILABLE_ADVANTAGE
+    assert verdict["graded_attribute"] == "advantage_fraction"
+    assert verdict["denominator_bps"] > 0.0
+    assert verdict["naive_gap_bps"] > verdict["denominator_bps"], (
+        "the naive gap must exceed the adaptive advantage by the level shift; if "
+        "it does not, the two are being computed from the same rung"
+    )
+    assert verdict["level_shift_bps"] == pytest.approx(
+        verdict["naive_gap_bps"] - verdict["denominator_bps"], rel=1e-9
+    )
+    assert 0.0 < verdict["level_shift_fraction_of_advantage"] < 0.10
+
+
+def test_the_liquidity_summary_carries_the_headline_and_its_control():
+    """Median, IQR, per-seed values — and the shuffled control beside them."""
+    document = build_document(_liquidity_sweep())
+    summary = document["summary"]
+
+    assert set(summary) >= {
+        "advantage_fraction",
+        "objective",
+        "excess",
+        "capture_fraction",
+    }
+    capture = summary["capture_fraction"]
+    advantage = summary["advantage_fraction"]
+    assert len(capture["values"]) == 10
+    assert capture["median"] == pytest.approx(1.0 - advantage["median"])
+    # The worst seed is the *largest* excess, so the worst capture is the
+    # smallest — the direction a summariser that treats every quantity as a cost
+    # would get backwards exactly once, silently, in a verdict.
+    assert capture["worst"] == pytest.approx(1.0 - advantage["worst"])
+    assert capture["worst"] <= capture["median"]
+
+    control = document["shuffled_control"]
+    assert control is not None and len(control["values"]) == 10
+    assert document["verdict"]["shuffled_control_met"] in {True, False}
+
+
+def test_a_liquidity_sweep_without_a_reference_refuses_to_write():
+    """The DP is what the grades are excesses *over*; a file without it is a lie."""
+    sweep = dataclasses.replace(_liquidity_sweep(), liquidity_reference=None)
+    with pytest.raises(ValueError, match="no reference row"):
+        build_document(sweep)
+
+
+def test_every_fixed_rung_is_graded_through_the_agent_s_own_route():
+    """Invariant 4: the baselines are on the chart, and by the same arithmetic.
+
+    The static optimum is the control variate, so its sampled grade must return
+    its closed form *exactly* — that is the sharpest available check that the
+    grading path is unbiased, and it costs nothing.
+    """
+    sweep = _liquidity_sweep()
+    document = build_document(sweep)
+    baselines = document["baselines"]
+    assert set(baselines) == {"twap", "ac", "tangent", "m4a", "static"}
+    assert baselines["static"]["objective_bps"] == pytest.approx(
+        sweep.liquidity_reference.static.objective, rel=1e-12
+    )
+    assert baselines["static"]["capture_fraction"] == pytest.approx(0.0, abs=1e-12)
+    for name in ("twap", "ac", "tangent", "m4a"):
+        row = baselines[name]
+        closed = sweep.liquidity_reference.schedules[name].objective
+        assert abs(row["objective_bps"] - closed) <= 4.0 * row["half_width_bps"]

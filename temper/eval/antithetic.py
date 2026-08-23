@@ -41,6 +41,22 @@ The brief asks for both because they are cheap now and expensive later.
   required to be the exact negation of the primary's, elementwise, on every
   step. IEEE arithmetic rounds symmetrically, so a sum of negated terms is the
   negated sum bitwise; anything else means the mirror drew fresh numbers.
+* **Liquidity is shared, exactly** (M4b). The mirror's per-bin multiplier must
+  equal the primary's — *not* be its mirror image. This is the third identity and
+  it is what makes the first one survive M4b: because both halves see the same
+  ``L``, they see the same observation even though the observation is now richer,
+  so they take the same action and the price noise still cancels exactly given
+  ``(x, L)``. What the pairing no longer removes is the *liquidity* noise, which
+  is the reward variance M4b's agent has to train through.
+
+What M4b actually changed, against what §9 predicted
+----------------------------------------------------
+M4a's amendment named "a second, independent noise source or a price-bearing
+observation" as what ends the pairing's exactness. Half of that is right and the
+useful half is wrong: a second noise source is harmless as long as the pair
+*shares* it, because what the action identity needs is not a poor observation but
+an observation the two halves **agree about**. A price-bearing one would end it;
+a richer one they both see does not.
 
 The reward-variance evidence
 ----------------------------
@@ -58,9 +74,10 @@ Why it lives here and not beside the training loop
 Because it names the env's shock key to check the negation, and
 ``tests/test_repo_invariants.py`` rejects that key — by literal or by name —
 anywhere under ``temper/agents/``. Like the variate, this is an estimator, not a
-policy: the observation stays two-dimensional, the agent never sees a shock, and
-the transform is handed to :func:`~temper.agents.ppo.train` as an env factory
-parameter by the driver.
+policy: the agent never sees a shock, and the transform is handed to
+:func:`~temper.agents.ppo.train` as an env factory parameter by the driver. From
+M4b the observation is three-dimensional in the liquidity world and still carries
+no price, which is the distinction the seam was drawn along in the first place.
 """
 
 from __future__ import annotations
@@ -71,7 +88,7 @@ import numpy as np
 from gymnasium import Env, Wrapper
 from numpy.random import Generator
 
-from temper.env import SHOCK_KEY, ExecutionEnv
+from temper.env import LIQUIDITY_KEY, SHOCK_KEY, ExecutionEnv
 from temper.eval.variate import SHARES_KEY
 
 
@@ -159,19 +176,34 @@ class MirrorEnv(ExecutionEnv):
 
 
 def mirror_of(env: ExecutionEnv) -> MirrorEnv:
-    """The mirror of a raw env: same market, order, lambda, **world** and address.
+    """The mirror: same market, order, lambda, **both worlds**, and the same address.
 
-    The temporary-impact model is copied across, and that is not housekeeping.
-    Until M4a there was only one world and the mirror rebuilt it by default; the
-    moment the model became injectable, a mirror that defaulted was a *Phase-1*
-    env being averaged against a power-law primary. The pairing's cancellation is
-    exact only because both halves pay the same schedule-dependent cost, so the
-    two halves disagreeing about what a trade costs breaks the estimator
-    silently — the rewards still look like rewards.
+    Every per-episode property injected into the env has to be handed over, and
+    M4b hands over two. The temporary-impact model was M4a's lesson and it was
+    learned the expensive way: until then there was one world and the mirror
+    rebuilt it by default, so the moment the model became injectable a mirror that
+    defaulted was a *Phase-1* env being averaged against a power-law primary. The
+    rewards still looked like rewards and the schedules were still identical; the
+    estimator was simply no longer the one the config named. M4a task 4 caught it
+    on the first cell it ran, at 0.06 bps per step against a 1e-12 band.
 
-    Found by M4a task 4 rather than reasoned about, which is what that task is
-    for: the antithetic average stopped matching the control variate by 0.06 bps
-    per step, four orders above the 1e-12 band, on the first cell it was run on.
+    **The liquidity stream is the second, and it is subtler**, because the failure
+    would not merely mis-price — it would break the pairing's one exact property.
+    The mirror is constructed at the same seed address and only its *price*
+    generator is proxied by :class:`NegatedDraws`, so its liquidity generator runs
+    unnegated at the same address and draws the **same path**. That is what M4b
+    needs and it is why the action-identity assertion survives a richer
+    observation: both halves see the same ``log L_k``, so both take the same
+    action, so the price noise still cancels exactly given ``(x, L)``.
+
+    A mirror on a *different* liquidity path would look exactly like the M4a bug
+    looked. :class:`AntitheticPair` therefore asserts the shared multiplier on
+    every step rather than trusting this constructor.
+
+    Deliberately **not** antithetic in liquidity: mirroring ``u -> 1 - u`` on the
+    liquidity uniform would make the two halves disagree about ``L``, hence about
+    their actions, and would trade the pairing's one exact property for a partial
+    second one.
     """
     if not isinstance(env, ExecutionEnv):
         raise TypeError(f"mirror_of takes a raw ExecutionEnv, got {type(env)!r}")
@@ -181,6 +213,7 @@ def mirror_of(env: ExecutionEnv) -> MirrorEnv:
         env.order_size,
         env.lambda_risk,
         temporary_impact=env.temporary_impact,
+        liquidity=env.liquidity,
         root_seed=root_seed,
         pool=pool,
         stream_index=stream,
@@ -351,6 +384,18 @@ class AntitheticPair(Wrapper):
             raise PairDiverged(
                 f"the mirror's shock {m_info[SHOCK_KEY]!r} is not the exact "
                 f"negation of the primary's {info[SHOCK_KEY]!r}"
+            )
+        if m_info[LIQUIDITY_KEY] != info[LIQUIDITY_KEY]:
+            # M4b's third identity. Liquidity is *common* across the pair, not
+            # mirrored: the halves must see the same market and negate only the
+            # price. A mirror on its own liquidity path would still produce
+            # plausible rewards and identical-looking schedules while quietly
+            # averaging two different worlds — the M4a mirror bug's exact shape,
+            # one seam along.
+            raise PairDiverged(
+                f"pair halves saw different liquidity ({info[LIQUIDITY_KEY]!r} vs "
+                f"{m_info[LIQUIDITY_KEY]!r}); the pairing holds liquidity common "
+                "and negates only the price"
             )
         if (terminated, truncated) != (m_terminated, m_truncated):
             raise PairDiverged("pair halves disagree on episode termination")

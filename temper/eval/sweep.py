@@ -25,20 +25,41 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
 
 from temper.agents.execution import PPOPolicy, execution_env_factory
 from temper.agents.ppo import TrainResult, train
-from temper.env import impact_for
+from temper.env import LiquidityStream, impact_for
 from temper.eval.antithetic import PairLedger, PairUpdateStats, antithetic_reward
+from temper.eval.conditional import (
+    DEFAULT_EVAL_PATHS,
+    LiquidityGrade,
+    conditional_costs,
+    conditional_rollouts,
+    fixed_schedule_grade,
+    grade_conditional,
+    trajectory_quantiles,
+)
 from temper.eval.experiment import ANTITHETIC, CONTROL_VARIATE, SAMPLED, Experiment
-from temper.eval.grading import Grade, grade_policy, summarise
+from temper.eval.grading import (
+    Grade,
+    deterministic_schedule,
+    grade_policy,
+    summarise,
+)
 from temper.eval.provenance import Provenance
+from temper.eval.reference import LiquidityReferenceRow, liquidity_reference_row
 from temper.eval.variate import deterministic_reward
-from temper.seeding import pool_seeds
+from temper.oracle import clairvoyant_trajectories
+from temper.seeding import (
+    LIQUIDITY_EVAL_POOL,
+    LIQUIDITY_TRAIN_POOL,
+    M4B_REFERENCE_POOL,
+    pool_seeds,
+)
 
 #: The quantities reported with median and IQR across seeds. All are costs, so
 #: larger is worse for every one of them without exception — which is why the
@@ -51,6 +72,13 @@ SUMMARISED = ("gap_fraction", "relative_excess", "objective", "deviation")
 #: Reported as well, but only in a world where the closed form left something on
 #: the table (M4a). ``advantage_fraction`` is ``None`` elsewhere.
 ADVANTAGE_SUMMARISED = ("advantage_fraction",)
+
+#: M4b's pre-stated bar on the liquidity-shuffled control: a policy re-graded
+#: with the observed multiplier drawn independently of the charged one must
+#: capture at most this much of the adaptive advantage. The *gap* between the
+#: real and shuffled capture fractions is the actual claim — a headline that
+#: survived the shuffle would be measuring something other than adaptivity.
+SHUFFLED_CAPTURE_BAR = 0.15
 
 
 def reward_wrapper(experiment: Experiment, ledger: PairLedger | None = None):
@@ -68,6 +96,24 @@ def reward_wrapper(experiment: Experiment, ledger: PairLedger | None = None):
     if regime == ANTITHETIC:
         return antithetic_reward(ledger)
     raise ValueError(f"no reward wrapper for estimator regime {regime!r}")
+
+
+def training_liquidity(experiment: Experiment) -> LiquidityStream:
+    """The liquidity stream training draws from — the *train* pool, always.
+
+    Disjoint from evaluation by construction rather than by a stride: the two
+    pools have different spawn keys, so a training liquidity path and an
+    evaluation one cannot be the same object however the indices are chosen. That
+    is invariant 5 doing M4b's out-of-sample work, and it is the whole reason
+    :data:`~temper.seeding.LIQUIDITY_TRAIN_POOL` and
+    :data:`~temper.seeding.LIQUIDITY_EVAL_POOL` are two pools instead of one.
+    """
+    return LiquidityStream(law=experiment.liquidity, pool=LIQUIDITY_TRAIN_POOL)
+
+
+def evaluation_liquidity(experiment: Experiment) -> LiquidityStream:
+    """The liquidity stream every graded rollout draws from — the *eval* pool."""
+    return LiquidityStream(law=experiment.liquidity, pool=LIQUIDITY_EVAL_POOL)
 
 
 def train_seed(
@@ -96,6 +142,12 @@ def train_seed(
         ledger = PairLedger()
     wrapper = reward_wrapper(experiment, ledger)
     impact = impact_for(experiment.cost_encoding, case.market, case.order_size)
+    # M4a's §9 lesson, one seam later: *every* env the estimator constructs has to
+    # be handed every injected per-episode property. The factory below builds the
+    # primary and `mirror_of` builds the mirror from it, so both routes carry the
+    # liquidity stream — and the pair asserts per step that they saw the same
+    # multiplier rather than trusting that they did.
+    liquidity = training_liquidity(experiment)
 
     def hook(update: int, metrics: dict) -> None:
         if experiment.estimator.antithetic:
@@ -114,6 +166,7 @@ def train_seed(
             reward_scale=experiment.reward_scale,
             reward_wrapper=wrapper,
             temporary_impact=impact,
+            liquidity=liquidity,
         )
         for stream in seeds.env_streams(ordinal, ppo.num_envs)
     ]
@@ -185,11 +238,31 @@ class SweepResult:
     #: stamp it with seed 2's `env_stream_base`. Empty means the full range,
     #: which is what every committed sweep so far was.
     ordinals: tuple[int, ...] = ()
+    #: M4b's half. ``grades`` stays empty in the liquidity world: a
+    #: liquidity-observing policy's schedule is not open-loop, so there is no
+    #: single trajectory for the analytic grader to score and the honest thing is
+    #: an empty tuple rather than a number computed from one arbitrary path.
+    liquidity_reference: LiquidityReferenceRow | None = None
+    liquidity_grades: tuple[LiquidityGrade, ...] = ()
+    shuffled_grades: tuple[LiquidityGrade, ...] = ()
+    liquidity_baselines: dict[str, LiquidityGrade] = field(default_factory=dict)
+    schedule_quantiles: tuple[dict, ...] = ()
+
+    @property
+    def scored(self) -> tuple:
+        """Whichever grade list this world populated — exactly one of the two.
+
+        A liquidity-observing policy has no analytic ``Grade`` and a
+        deterministic one has no ``LiquidityGrade``, so "the seeds this sweep
+        scored" is one question with one answer and the callers that only need to
+        count them should not have to know which world they are in.
+        """
+        return self.grades or self.liquidity_grades
 
     @property
     def addresses(self) -> tuple[int, ...]:
-        """The ordinal of each trained seed, positionally aligned with `grades`."""
-        return self.ordinals or tuple(range(len(self.grades)))
+        """The ordinal of each trained seed, positionally aligned with `scored`."""
+        return self.ordinals or tuple(range(len(self.scored)))
 
     @property
     def trajectories(self) -> list[list[float]]:
@@ -236,8 +309,36 @@ def run_sweep(
     provenance = experiment.provenance(repo_root)
     started = time.perf_counter()
 
-    baselines = grade_baselines(experiment)
+    stochastic = experiment.liquidity.stochastic
+    reference = liquidity_reference(experiment) if stochastic else None
+    multipliers = (
+        liquidity_evaluation_paths(experiment) if stochastic else None
+    )
+    clairvoyant = (
+        conditional_costs(
+            clairvoyant_trajectories(
+                experiment.case.market,
+                experiment.case.order_size,
+                experiment.lambda_risk,
+                multipliers,
+            ),
+            multipliers,
+            experiment.case.market,
+            experiment.lambda_risk,
+        )
+        if stochastic
+        else None
+    )
+    baselines = {} if stochastic else grade_baselines(experiment)
+    liquidity_baselines = (
+        grade_liquidity_baselines(experiment, reference, multipliers)
+        if stochastic
+        else {}
+    )
     grades: list[Grade] = []
+    liquidity_grades: list[LiquidityGrade] = []
+    shuffled_grades: list[LiquidityGrade] = []
+    quantiles: list[dict] = []
     training: list[TrainResult] = []
     pairs: list[tuple[PairUpdateStats, ...]] = []
     selected = (
@@ -254,8 +355,31 @@ def run_sweep(
         result, policy = train_seed(
             experiment, ordinal, progress=progress, ledger=ledger
         )
-        seed_grade = grade(experiment, policy, name=f"seed{ordinal}")
-        grades.append(seed_grade)
+        if stochastic:
+            seed_grade, seed_quantiles = grade_liquidity(
+                experiment,
+                policy,
+                reference,
+                name=f"seed{ordinal}",
+                clairvoyant_costs=clairvoyant,
+            )
+            # The control is part of the milestone, not an extra, and it is run
+            # here rather than in a later pass because it costs a re-grade rather
+            # than a re-train and because a control run after the verdict is a
+            # control nobody would have to publish.
+            shuffled_grade, _ = grade_liquidity(
+                experiment,
+                policy,
+                reference,
+                name=f"seed{ordinal}_shuffled",
+                shuffled=True,
+            )
+            liquidity_grades.append(seed_grade)
+            shuffled_grades.append(shuffled_grade)
+            quantiles.append(seed_quantiles)
+        else:
+            seed_grade = grade(experiment, policy, name=f"seed{ordinal}")
+            grades.append(seed_grade)
         training.append(result)
         pairs.append(tuple(ledger.updates))
         if on_seed is not None:
@@ -270,6 +394,11 @@ def run_sweep(
         provenance=provenance,
         pairs=tuple(pairs),
         ordinals=tuple(selected),
+        liquidity_reference=reference,
+        liquidity_grades=tuple(liquidity_grades),
+        shuffled_grades=tuple(shuffled_grades),
+        liquidity_baselines=liquidity_baselines,
+        schedule_quantiles=tuple(quantiles),
     )
 
 
@@ -390,6 +519,12 @@ def build_document(sweep: SweepResult) -> dict:
     question.
     """
     experiment = sweep.experiment
+    if experiment.liquidity.stochastic:
+        # M4b's document, and the dispatch is on the *world* rather than on which
+        # fields happen to be populated: a liquidity-observing policy is graded by
+        # conditional expectation and has no analytic `Grade` to summarise, so the
+        # two documents answer different questions and share only a skeleton.
+        return build_liquidity_document(sweep)
     if sweep.ordinals and tuple(sweep.ordinals) != tuple(
         range(experiment.seeds.n_seeds)
     ):
@@ -510,5 +645,310 @@ def build_document(sweep: SweepResult) -> dict:
         ],
         "summary": summary,
         "gate": gate,
+        "verdict": verdict,
+    }
+
+
+# ---------------------------------------------------------------------------
+# M4b — the liquidity world's grading and its document
+# ---------------------------------------------------------------------------
+
+#: The liquidity summary's quantities, all costs, so larger is worse for every
+#: one without exception — the same rule :data:`SUMMARISED` is written under, and
+#: the reason ``capture_fraction`` is derived from ``advantage_fraction`` rather
+#: than summarised directly.
+LIQUIDITY_SUMMARISED = ("advantage_fraction", "objective", "excess")
+
+
+def liquidity_reference(experiment: Experiment) -> LiquidityReferenceRow:
+    """The committed reference row: five fixed rungs, the DP, and both bounds.
+
+    Minutes, and computed **once** per sweep rather than once per seed: it does
+    not depend on the agent, and ten independent solves of the same dynamic
+    program would be ten chances for them to disagree.
+    """
+    return liquidity_reference_row(
+        experiment.case.market,
+        experiment.case.order_size,
+        experiment.lambda_risk,
+        experiment.liquidity,
+        root_seed=experiment.seeds.root_seed,
+    )
+
+
+def grade_liquidity(
+    experiment: Experiment,
+    policy,
+    reference: LiquidityReferenceRow,
+    *,
+    name: str,
+    paths: int = DEFAULT_EVAL_PATHS,
+    shuffled: bool = False,
+    clairvoyant_costs=None,
+) -> tuple[LiquidityGrade, dict]:
+    """Roll a policy out on held-out liquidity paths and score the conditional cost.
+
+    Two assertions run before the number is computed, in this order and for
+    different reasons. :func:`~temper.eval.grading.deterministic_schedule` pins
+    the liquidity stream and varies the *price* stream and requires the trajectory
+    to be bitwise identical — the successor to M2's open-loop check, and what
+    licenses ``E[cost | L]`` as a closed form at all. Then the rollouts happen on
+    the eval pool, which is disjoint from training by construction.
+
+    `shuffled` runs the liquidity-shuffled control: the observation's multiplier
+    comes from an independent stream while the env charges its own. It is part of
+    the milestone rather than an extra — if the advantage survives it, the agent
+    is not using the signal and the headline is measuring something else.
+    """
+    case = experiment.case
+    impact = impact_for(experiment.cost_encoding, case.market, case.order_size)
+    liquidity = evaluation_liquidity(experiment)
+
+    if not shuffled:
+        # The licence for the conditional expectation, checked before it is used.
+        deterministic_schedule(
+            policy,
+            case.market,
+            case.order_size,
+            experiment.lambda_risk,
+            root_seed=experiment.seeds.root_seed,
+            pool=experiment.seeds.eval_pool,
+            streams=experiment.seeds.eval_streams,
+            temporary_impact=impact,
+            liquidity=liquidity,
+            expect_encoding=experiment.cost_encoding,
+        )
+
+    trajectories, multipliers = conditional_rollouts(
+        policy,
+        case.market,
+        case.order_size,
+        experiment.lambda_risk,
+        temporary_impact=impact,
+        liquidity=liquidity,
+        root_seed=experiment.seeds.root_seed,
+        pool=experiment.seeds.eval_pool,
+        stream_index=experiment.seeds.eval_streams[0],
+        paths=paths,
+        shuffle=(M4B_REFERENCE_POOL, 500) if shuffled else None,
+    )
+    grade = grade_conditional(
+        trajectories,
+        multipliers,
+        case.market,
+        case.order_size,
+        reference,
+        name=name,
+        clairvoyant_costs=clairvoyant_costs,
+        soft_slack=reference.feasible.half_width_bps,
+    )
+    return grade, trajectory_quantiles(trajectories)
+
+
+def liquidity_evaluation_paths(experiment: Experiment, paths: int = DEFAULT_EVAL_PATHS):
+    """The eval liquidity paths every policy on the chart is scored on.
+
+    Common random numbers, and *these* are the paths: a policy graded through
+    :func:`grade_liquidity` draws the same blocks off the same stream in the same
+    order, so a fixed schedule priced here and an agent rolled out there are
+    comparable path by path. Returned so the clairvoyant relaxation can be solved
+    once for the whole sweep rather than once per seed.
+    """
+    case = experiment.case
+    stream = evaluation_liquidity(experiment)
+    generator = stream.generator(
+        experiment.seeds.root_seed, experiment.seeds.eval_streams[0]
+    )
+    return experiment.liquidity.draw(generator, (paths, case.market.n_bins))
+
+
+def grade_liquidity_baselines(
+    experiment: Experiment,
+    reference: LiquidityReferenceRow,
+    multipliers,
+) -> dict[str, LiquidityGrade]:
+    """Every fixed rung, priced on the same paths the agent is scored on.
+
+    Not read off the oracle: running them through the *grader* is the cheapest
+    check that the grading path returns the closed form when handed a schedule
+    whose closed form is known — and it is what puts the baselines on the chart,
+    as invariant 4 requires. ``static`` is the control variate, so it must come
+    back exactly; the rest must land within their own half-widths.
+    """
+    case = experiment.case
+    return {
+        name: fixed_schedule_grade(
+            row.trajectory,
+            multipliers,
+            case.market,
+            case.order_size,
+            reference,
+            name=name,
+        )
+        for name, row in reference.schedules.items()
+    }
+
+
+def build_liquidity_document(sweep: "SweepResult") -> dict:
+    """M4b's results JSON. Same skeleton, a different question underneath.
+
+    The verdict is read on ``advantage_fraction`` against the *adaptive*
+    advantage, and the **level shift is a line of its own** — reported beside the
+    headline everywhere so nobody credits the agent with a constant any static
+    solver picks up by re-solving at an inflated coefficient.
+
+    Three things this file says that no earlier one had to. The reference is
+    ``converged and bracketed``, not certified, and it says so in the field a
+    reader would look for the word in. The liquidity process is **invented**, and
+    says that too. And the headline carries a *confidence interval*, because M4b
+    is the first milestone whose grade is an average rather than a closed form —
+    over liquidity alone, with no price sampling anywhere.
+    """
+    experiment = sweep.experiment
+    if sweep.ordinals and tuple(sweep.ordinals) != tuple(
+        range(experiment.seeds.n_seeds)
+    ):
+        raise ValueError(
+            f"this sweep trained ordinals {list(sweep.ordinals)} of the config's "
+            f"{experiment.seeds.n_seeds}; a metrics document is a claim about a "
+            "sweep and cannot be written from a subset."
+        )
+    tolerances = experiment.tolerances
+    reference = sweep.liquidity_reference
+    if reference is None:
+        raise ValueError(
+            "a stochastic-liquidity sweep has no reference row; the dynamic "
+            "program is what its grades are excesses over"
+        )
+
+    grades = sweep.liquidity_grades
+    summary = {
+        name: summarise(name, [getattr(g, name) for g in grades]).as_dict()
+        for name in LIQUIDITY_SUMMARISED
+    }
+    advantage = summary["advantage_fraction"]
+    summary["capture_fraction"] = {
+        "name": "capture_fraction",
+        "values": [1.0 - v for v in advantage["values"]],
+        "median": 1.0 - advantage["median"],
+        "q1": 1.0 - advantage["q3"],
+        "q3": 1.0 - advantage["q1"],
+        "iqr": advantage["iqr"],
+        "worst": 1.0 - advantage["worst"],
+    }
+    graded_on = summary[tolerances.graded_attribute]
+
+    shuffled = sweep.shuffled_grades
+    shuffled_summary = (
+        summarise(
+            "capture_fraction", [g.capture_fraction for g in shuffled]
+        ).as_dict()
+        if shuffled
+        else None
+    )
+
+    red_flags = [g.name for g in grades if g.red_flag]
+    below = [g.name for g in grades if g.paths_below_clairvoyant]
+    verdict = {
+        "tolerance_denominator": tolerances.denominator,
+        "graded_attribute": tolerances.graded_attribute,
+        "epsilon_met": bool(graded_on["median"] <= tolerances.epsilon_fraction),
+        "per_seed_met": bool(graded_on["worst"] <= tolerances.per_seed_fraction),
+        "red_flags": red_flags,
+        # The rigorous form, and it needs no interval: perfect information is the
+        # per-path minimum over all schedules, so a policy below it on *any* path
+        # is a defect with a proof rather than a discovery.
+        "seeds_below_clairvoyant": below,
+        "soft_flags": [g.name for g in grades if g.soft_flag],
+        "shuffled_control_met": (
+            None
+            if shuffled_summary is None
+            else bool(shuffled_summary["median"] <= SHUFFLED_CAPTURE_BAR)
+        ),
+        "shuffled_capture_bar": SHUFFLED_CAPTURE_BAR,
+        "timed_out": [
+            ordinal
+            for ordinal, result in zip(sweep.addresses, sweep.training)
+            if result.timed_out
+        ],
+        "sweep_seconds": sweep.seconds,
+        "within_sweep_budget": bool(
+            sweep.seconds <= experiment.runtime.sweep_seconds
+        ),
+    }
+    verdict["passed"] = bool(
+        verdict["epsilon_met"]
+        and verdict["per_seed_met"]
+        and not red_flags
+        and not below
+        and verdict["shuffled_control_met"] is not False
+    )
+    verdict["denominator_bps"] = reference.adaptive_advantage
+    verdict["median_excess_bps"] = summary["excess"]["median"]
+    # Its own line, every time. 3.8 % of the naive gap at the trained sigma_log,
+    # and none of it the agent's.
+    verdict["level_shift_bps"] = reference.level_shift
+    verdict["level_shift_fraction_of_advantage"] = reference.level_shift_fraction
+    verdict["naive_gap_bps"] = reference.m4a.objective - reference.adaptive_bps
+
+    points = experiment.trace_points
+    antithetic = experiment.estimator.antithetic
+    pairs = sweep.pairs if sweep.pairs else tuple(() for _ in grades)
+    if antithetic:
+        summary["reward_variance"] = {
+            "unit": "bps^2 of episode return, unscaled",
+            "sampled_median": _nanmedian(
+                _nanmedian(u.sampled_variance for u in seed_pairs)
+                for seed_pairs in pairs
+            ),
+            "averaged_median": _nanmedian(
+                _nanmedian(u.averaged_variance for u in seed_pairs)
+                for seed_pairs in pairs
+            ),
+            "variance_ratio_median": _nanmedian(
+                _nanmedian(u.variance_ratio for u in seed_pairs)
+                for seed_pairs in pairs
+            ),
+        }
+
+    return {
+        "milestone": experiment.milestone,
+        "claim": experiment.estimator.claim,
+        "provenance": sweep.provenance.as_dict(),
+        "config": experiment.as_dict(),
+        "liquidity": experiment.liquidity.as_dict(),
+        "reference": reference.as_dict(),
+        "reference_kind": "converged and bracketed, not certified",
+        "baselines": {
+            name: g.as_dict() for name, g in sweep.liquidity_baselines.items()
+        },
+        "trace_points": points,
+        "seeds": [
+            {
+                "ordinal": ordinal,
+                "env_stream_base": experiment.seeds.env_streams(
+                    ordinal, experiment.ppo.num_envs
+                )[0],
+                "training": _training_record(result, points),
+                **({"pair": _pair_record(seed_pairs, points)} if antithetic else {}),
+                "grade": seed_grade.as_dict(),
+                "schedule_quantiles": quantiles,
+                **(
+                    {"shuffled": shuffled_grade.as_dict()}
+                    if shuffled_grade is not None
+                    else {}
+                ),
+            }
+            for ordinal, seed_grade, result, seed_pairs, quantiles, shuffled_grade in zip(
+                sweep.addresses,
+                grades,
+                sweep.training,
+                pairs,
+                sweep.schedule_quantiles or [{} for _ in grades],
+                shuffled or [None for _ in grades],
+            )
+        ],
+        "summary": summary,
+        "shuffled_control": shuffled_summary,
         "verdict": verdict,
     }

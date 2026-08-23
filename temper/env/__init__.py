@@ -15,7 +15,7 @@ round, bin by bin, or M1's differential is checking the oracle against itself.
 Both are enforced by ``tests/test_repo_invariants.py``.
 """
 
-from .execution_env import EPISODE_KEY, SHOCK_KEY, ExecutionEnv
+from .execution_env import EPISODE_KEY, LIQUIDITY_KEY, SHOCK_KEY, ExecutionEnv
 from .impact import (
     LinearTemporary,
     PowerLawTemporary,
@@ -24,9 +24,17 @@ from .impact import (
     linear_temporary,
     power_law_temporary,
 )
+from .liquidity import (
+    DETERMINISTIC_LIQUIDITY,
+    LiquidityStream,
+    liquidity_stream,
+)
 
 __all__ = [
+    "DETERMINISTIC_LIQUIDITY",
     "EPISODE_KEY",
+    "LIQUIDITY_KEY",
+    "LiquidityStream",
     "SHOCK_KEY",
     "ExecutionEnv",
     "LinearTemporary",
@@ -34,5 +42,6 @@ __all__ = [
     "TemporaryImpact",
     "impact_for",
     "linear_temporary",
+    "liquidity_stream",
     "power_law_temporary",
 ]
