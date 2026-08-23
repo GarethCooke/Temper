@@ -227,9 +227,12 @@ make m6-predict    # M6 task 4: the closed-form prediction; no server needed
 make m6            # M6 task 5: the measured ladder run against a live anvil_server
 ```
 
-`make test` is the per-commit gate and stays evening-sized (~15 s; the brief's ceiling is
-3 min). The rest are milestone acceptance gates, each behind a pytest marker or a driver so
-the per-commit loop never waits on them:
+`make test` is the per-commit gate and stays evening-sized (~2 min 10 s; the ceiling every
+brief has stated is 3 min). Most of the growth is M4b's differential fast tier — fifteen
+(case, schedule) cells at 10 000 episodes each, through the real `step` loop with the count
+asserted — which is the price of checking a second noise source on every commit rather than
+at acceptance. The rest are milestone acceptance gates, each behind a pytest marker or a
+driver so the per-commit loop never waits on them:
 
 - `make differential` — the deep Monte-Carlo tiers of both worlds: M1's 27 (case, schedule)
   cells at 200,000 episodes each and M4a's 36, 163.8 M calls into the real `step` loop,
