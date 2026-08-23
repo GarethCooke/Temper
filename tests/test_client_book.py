@@ -180,7 +180,7 @@ def trade(seq: int, taker: str, maker: str, price="9.99", qty=100) -> dict:
 def test_a_fill_is_ours_when_we_were_the_taker():
     """`takerId` against the ids `POST /api/order` returned. No inference (§3.3)."""
     tape = TradeTape()
-    tape.own("o9")
+    tape.working("o9")
     assert tape.apply(trade(1, "o9", "o1")) is not None
     assert tape.total_qty == 100
     assert tape.attributed("o9")[0]["price"] == 99_900
@@ -201,9 +201,46 @@ def test_a_fill_against_our_resting_ladder_is_not_part_of_the_parent_order():
     assert tape.third_party == 0
 
 
+def test_a_working_order_filled_as_maker_is_still_ours():
+    """The shares are sold whichever side of the fill this client was on.
+
+    A bin order is priced to cross, so it is normally the taker. When it cannot
+    fill completely the remainder *rests*, and anything that hits it before the
+    cancel lands fills this client as the maker. Counting only takes leaves those
+    shares in inventory, so the next bin sells them again and the terminal bin
+    force-liquidates a remainder that was never there — trading past the mandate,
+    on somebody else's venue.
+    """
+    tape = TradeTape()
+    tape.working("o9")
+    fill = tape.apply(trade(1, "stranger", "o9", qty=46))
+    assert fill is not None
+    assert fill["role"] == "maker"
+    assert tape.total_qty == 46
+    assert tape.attributed("o9")[0]["qty"] == 46
+    assert tape.against_us == 0, "our own working order is not somebody raiding us"
+
+
+def test_a_fill_on_both_sides_of_the_working_set_counts_once():
+    """The naive 'taker or maker against every id we minted' double-counts.
+
+    On a client-built ladder every bin order crosses this client's own resting
+    bid, so both ids are ours. Attribution matches the *working* set only — the
+    ladder order is not in it — so the fill counts once, which is what the four
+    committed ladder runs reconciled under.
+    """
+    tape = TradeTape()
+    tape.working("bin1")
+    tape.own("ladder1")
+    fill = tape.apply(trade(1, "bin1", "ladder1", qty=300))
+    assert fill is not None and fill["role"] == "taker"
+    assert tape.total_qty == 300, "counted once, not twice"
+    assert len(tape.attributed("bin1")) == 1
+
+
 def test_a_fill_between_two_strangers_is_third_party():
     tape = TradeTape()
-    tape.own("o9")
+    tape.working("o9")
     assert tape.apply(trade(1, "x", "y")) is None
     assert tape.third_party == 1
     assert tape.against_us == 0
@@ -216,7 +253,7 @@ def test_duplicate_frames_are_deduped_by_seq():
     in this client beyond the reconnect watermark.
     """
     tape = TradeTape()
-    tape.own("o9")
+    tape.working("o9")
     tape.apply(trade(7, "o9", "o1"))
     tape.apply(trade(7, "o9", "o1"))
     assert tape.total_qty == 100
@@ -224,7 +261,7 @@ def test_duplicate_frames_are_deduped_by_seq():
 
 def test_out_of_order_seq_does_not_confuse_the_tape():
     tape = TradeTape()
-    tape.own("o9")
+    tape.working("o9")
     tape.apply(trade(90, "o9", "o1", qty=10))
     tape.apply(trade(12, "o9", "o2", qty=20))
     assert tape.total_qty == 30

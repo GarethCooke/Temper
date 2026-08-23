@@ -32,6 +32,7 @@ import http.client
 import json
 import os
 import socket
+import ssl
 import struct
 import time
 from collections.abc import Iterator
@@ -49,6 +50,21 @@ WIRE_VERSION = 1
 #: replaying this is the only thing that lets the client cancel its own orders
 #: (vendored §2, *Session & ownership*).
 SESSION_COOKIE = "anvil_session"
+
+#: What "nothing to read yet" looks like, across both transports. A plaintext
+#: socket at a zero timeout raises `BlockingIOError` and at a positive one
+#: `socket.timeout`; a **TLS** socket raises `ssl.SSLWantReadError`, which is an
+#: `OSError` but is *not* a `BlockingIOError` and carries no `errno`. The
+#: steady-state drain polls at a zero timeout, so on `wss://` that difference is
+#: not an edge case — it is every single poll, and without this the first one
+#: would propagate as a fault and end the run.
+_WOULD_BLOCK: tuple[type[BaseException], ...] = (
+    TimeoutError,
+    socket.timeout,
+    BlockingIOError,
+    ssl.SSLWantReadError,
+    ssl.SSLWantWriteError,
+)
 
 #: RFC 6455's fixed GUID, and the opcodes this reader handles.
 _WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
@@ -303,9 +319,14 @@ class Stream:
         *,
         depth: int = 0,
         timeout: float = 10.0,
+        tls: bool = False,
     ) -> None:
         self.host, self.port, self.ticker = host, int(port), int(ticker)
         self.depth, self.timeout = int(depth), float(timeout)
+        #: `wss://` rather than `ws://`. The REST half got TLS free from
+        #: `http.client.HTTPSConnection`; this half is a hand-rolled RFC 6455
+        #: reader over a raw socket, so it has to ask for it.
+        self.tls = bool(tls)
         self._socket: socket.socket | None = None
         self._buffer = b""
         #: Application frames that arrived while :meth:`ping` was waiting on its
@@ -324,14 +345,30 @@ class Stream:
         return False
 
     def connect(self) -> None:
-        """Open the socket and complete the upgrade (vendored §3, *Handshake*)."""
+        """Open the socket and complete the upgrade (vendored §3, *Handshake*).
+
+        Under `tls` the socket is wrapped before a byte is written, with SNI —
+        `server_hostname` is not optional against a name-based virtual host, and
+        omitting it earns a certificate the client cannot match rather than an
+        obvious failure. Certificate verification is the default context's, on
+        purpose: this client sends order lines and replays a session cookie, and
+        a participant that would talk to anything holding the right IP is not a
+        participant, it is a leak.
+
+        The `Host` header drops the port under TLS. `Host: example.com:443` is
+        legal but a reverse proxy matching `server_name example.com` may not
+        match it, and the failure is a 404 on the upgrade rather than anything
+        that names the cause.
+        """
         key = base64.b64encode(os.urandom(16)).decode("ascii")
         path = f"/ws?ticker={self.ticker}"
         if self.depth:
             path += f"&depth={self.depth}"
+        default_port = 443 if self.tls else 80
+        authority = self.host if self.port == default_port else f"{self.host}:{self.port}"
         request = (
             f"GET {path} HTTP/1.1\r\n"
-            f"Host: {self.host}:{self.port}\r\n"
+            f"Host: {authority}\r\n"
             "Upgrade: websocket\r\n"
             "Connection: Upgrade\r\n"
             f"Sec-WebSocket-Key: {key}\r\n"
@@ -339,6 +376,10 @@ class Stream:
             "\r\n"
         ).encode("ascii")
         sock = socket.create_connection((self.host, self.port), timeout=self.timeout)
+        if self.tls:
+            sock = ssl.create_default_context().wrap_socket(
+                sock, server_hostname=self.host
+            )
         sock.sendall(request)
         self._socket = sock
         self._buffer = b""
@@ -513,7 +554,7 @@ class Stream:
             try:
                 self._socket.settimeout(remaining if remaining > 0 else 0.0)
                 frames.append(self.read(timeout=None))
-            except (TimeoutError, socket.timeout, BlockingIOError):
+            except _WOULD_BLOCK:
                 return frames
             except OSError as error:  # pragma: no cover - platform variance
                 if error.errno in (10035, 11):  # WSAEWOULDBLOCK / EAGAIN

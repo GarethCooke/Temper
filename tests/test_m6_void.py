@@ -67,7 +67,7 @@ def _execution(order_ids, fills) -> Execution:
 def _tape(order_ids, fills, **counts) -> TradeTape:
     tape = TradeTape(**counts)
     for order_id, bin_fills in zip(order_ids, fills):
-        tape.own(order_id)
+        tape.working(order_id)
         for price, qty in bin_fills:
             tape.fills.append(
                 {"seq": len(tape.fills), "price": price, "qty": qty,

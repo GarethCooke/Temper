@@ -114,6 +114,34 @@ class RunConfig:
         return float(self.document["grid"]["settle_seconds"])
 
     @property
+    def warmup_seconds(self) -> float:
+        """How long to let the book form before taking the arrival price.
+
+        Zero for a run that builds its own book — it knows exactly when the
+        ladder is up. It matters on a venue whose feeder is client-gated: the
+        books sit empty until something connects, so this client *starts* the
+        market it then trades in, and `wait_for_two_sided` is satisfied by one
+        bid and one ask. On a twelve-ticker roster the feeder round-robins, so
+        one book fills at roughly a twelfth of the single-ticker rate, and an
+        arrival mid taken 0.7 s after connect is a mid of almost nothing — which
+        is the denominator of the only number the run reports.
+        """
+        return float(self.document["grid"].get("warmup_seconds", 0.0))
+
+    @property
+    def void_on_third_party(self) -> bool:
+        """Does a stranger's fill void this run's measurement?
+
+        Defaults to `builds_ladder`, which is exactly the rule the four
+        committed runs were reconciled under, so their artefacts are unaffected.
+        A run may set it explicitly, and the deployment run does: the brief says
+        of it that "a third-party fill makes it a successful demonstration and a
+        void measurement, and both halves get reported". A shared public floor is
+        not a book this client can make claims about, whoever posted the depth.
+        """
+        return bool(self.block.get("void_on_third_party", self.builds_ladder))
+
+    @property
     def checkpoint(self) -> Path:
         return REPO_ROOT / self.document["policy"]["checkpoint"]
 
@@ -320,6 +348,9 @@ class Session:
         order_id = self.post(
             new_line(config.ticker, config.side, requested, limit)
         )
+        # This one works the parent order, so it attributes from either side —
+        # taker while it crosses, maker if its remainder rests and is hit.
+        self.tape.working(order_id)
         before = len(self.tape.fills)
         self.settle(config.settle_seconds)
         fills = self.tape.attributed(order_id)
@@ -409,7 +440,16 @@ class Session:
         health = self.venue.require_wire_version(int(config.venue["wire_version"]))
         self.note(event="health", **{k: health[k] for k in ("status", "wireVersion")})
 
-        with Stream(self.venue.host, self.venue.port, config.ticker) as stream:
+        # The stream follows the REST half's scheme rather than taking one of
+        # its own: a client that reached a venue over TLS and then opened its
+        # market-data socket in the clear would be a configuration mistake
+        # nothing on either side would report.
+        with Stream(
+            self.venue.host,
+            self.venue.port,
+            config.ticker,
+            tls=self.venue.scheme == "https",
+        ) as stream:
             self.stream = stream
             # On connect: exactly one snapshot, then one summary (vendored §3).
             self.absorb([stream.read(timeout=10.0)])
@@ -418,7 +458,16 @@ class Session:
                 self.settle(max(config.settle_seconds, 1.0))
             else:
                 waited = self.wait_for_two_sided(timeout=60.0)
-                self.note(event="warmup", seconds=round(waited, 3))
+                # Two-sided is one bid and one ask. Keep draining past it so the
+                # arrival mid is taken off a book that has actually formed.
+                self.settle(config.warmup_seconds)
+                self.note(
+                    event="warmup",
+                    seconds=round(waited, 3),
+                    settled_for=config.warmup_seconds,
+                    bid_depth=self.book.depth("B"),
+                    ask_depth=self.book.depth("S"),
+                )
             self.refresh(0.5)
 
             # The arrival price, and the one place it comes from. NOT
@@ -462,12 +511,29 @@ class Session:
             return execution
 
     def teardown(self) -> None:
-        """Cancel the ladder. Best effort: a filled order cannot be cancelled."""
-        for order_id in self.ladder_ids:
+        """Cancel **everything this client ever minted**. Best effort, no exceptions.
+
+        Sweeps `venue.order_ids` — every id the server handed back — and not
+        `ladder_ids`, which is appended to only inside the ladder path and is
+        therefore *empty* on a run that does not build a book. That was a leak
+        with real consequences on a shared venue: a bin order's unfilled
+        remainder rests as a live sell, and if the run ends between the post and
+        the cancel — Ctrl+C, a transport fault, a failed reconnect — nothing
+        cancelled it. Nobody could afterwards, either: ownership is the
+        `anvil_session` cookie held only in that process, and Anvil publishes no
+        route that lists your open orders. The order would rest on somebody
+        else's public book until the server restarted.
+
+        Cancelling a filled or unknown id is harmless — it comes back as a `200`
+        business verdict, not a fault — so the cheap over-broad sweep is the
+        right one. `continue` rather than `return` on a fault, because the whole
+        point is the ids *after* the one that failed.
+        """
+        for order_id in self.venue.order_ids:
             try:
                 self.venue.send(cancel_line(self.config.ticker, order_id))
             except TransportFault:  # pragma: no cover - the server is going away
-                return
+                continue
 
 
 # ---------------------------------------------------------------------------
@@ -487,23 +553,32 @@ def reconcile(execution: Execution, tape: TradeTape, config: RunConfig) -> dict:
     demonstration by `ARCHITECTURE.md` §7's terms, because §7 asks for plumbing
     evidence.
     """
+    # Either side, matching `TradeTape.attributed`. A bin order is normally the
+    # taker, and is the *maker* when its remainder rested and was hit before the
+    # cancel landed — the shares are gone either way, and a sum that counted only
+    # takes would report a shortfall the client did not have and void a run for
+    # the wrong reason. The set is the execution's own order ids, so a
+    # counterparty-ladder order can never enter it and there is no double count.
+    working = _own_order_ids(execution)
     attributed = sum(
-        fill["qty"] for fill in tape.fills if fill["takerId"] in _own_order_ids(execution)
+        fill["qty"]
+        for fill in tape.fills
+        if working & {fill["takerId"], fill["makerId"]}
     )
     reasons = []
     if attributed != config.parent:
         reasons.append(
             f"attributed quantity {attributed} != parent order {config.parent}"
         )
-    if config.builds_ladder and tape.against_us:
+    if config.void_on_third_party and tape.against_us:
         reasons.append(
             f"{tape.against_us} fill(s) taken against this client's ladder by "
             "another participant during a measured run"
         )
-    if config.builds_ladder and tape.third_party:
+    if config.void_on_third_party and tape.third_party:
         reasons.append(
-            f"{tape.third_party} third-party fill(s) on this ticker during a "
-            "measured run"
+            f"{tape.third_party} third-party fill(s) on this ticker while the "
+            "order was being worked"
         )
     return {
         "attributed": attributed,
@@ -776,8 +851,11 @@ def main(argv: list[str] | None = None) -> int:
     try:
         realised = session.execute()
     finally:
-        if session.stream is not None:
-            session.teardown()
+        # Unconditional. Cancelling is a REST call and needs no socket, so
+        # gating it on the stream meant an order posted just before a transport
+        # fault could outlive the process. There is nothing to lose by trying:
+        # with no ids minted the loop is empty.
+        session.teardown()
     document = build_document(
         config, policy, predicted, realised, session.tape, session, note=args.note
     )

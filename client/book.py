@@ -192,6 +192,25 @@ class TradeTape:
     """
 
     own_ids: set[str] = field(default_factory=set)
+    #: The subset of `own_ids` that is *working the parent order* — the bin
+    #: orders, never the counterparty ladder. Attribution reads this and not
+    #: `own_ids`, and the distinction is what makes "taker **or** maker" safe.
+    #:
+    #: A bin order can be filled from either side. It is normally the taker: it
+    #: is priced to cross. But when it cannot fill completely the remainder
+    #: *rests*, and anything that then hits it fills this client as the **maker**
+    #: — the shares are sold either way. Counting only `takerId` leaves them in
+    #: inventory, so the next bin sells them again and the terminal bin
+    #: force-liquidates a remainder that was never there. That is not a
+    #: mis-report, it is trading past the mandate.
+    #:
+    #: The naive repair — attribute on `takerId` *or* `makerId` against
+    #: `own_ids` — is worse, and silently: on a client-built ladder every bin
+    #: order crosses this client's *own* resting bid, so both sides are ours and
+    #: every fill counts twice. Restricting the match to the working set fixes
+    #: both, because a ladder order is never a working id and a bin order never
+    #: crosses another bin order (they are all sells).
+    working_ids: set[str] = field(default_factory=set)
     fills: list[dict] = field(default_factory=list)
     seen: set[int] = field(default_factory=set)
     #: Fills on this ticker in which this client was neither side. In a measured
@@ -204,8 +223,15 @@ class TradeTape:
     against_us: int = 0
 
     def own(self, order_id: str) -> None:
+        """Record an order this client minted. Not necessarily a working order."""
         if order_id:
             self.own_ids.add(order_id)
+
+    def working(self, order_id: str) -> None:
+        """Record an order that is working the parent — a bin order."""
+        if order_id:
+            self.own_ids.add(order_id)
+            self.working_ids.add(order_id)
 
     def apply(self, frame: dict) -> dict | None:
         """Record a `trade` frame if this client was the taker; else classify it.
@@ -223,8 +249,18 @@ class TradeTape:
         self.seen.add(stamp)
         taker = str(frame.get("takerId", ""))
         maker = str(frame.get("makerId", ""))
-        if taker not in self.own_ids:
-            if maker in self.own_ids:
+        # No fallback to `own_ids`. The whole point of the working set is that
+        # it excludes the counterparty ladder, and a "helpful" default that
+        # widened to every minted id would restore the double count on exactly
+        # the runs the distinction exists for.
+        took = taker in self.working_ids
+        made = maker in self.working_ids
+        if not (took or made):
+            if maker in self.own_ids or taker in self.own_ids:
+                # Somebody traded against this client's *ladder*. Not part of
+                # the parent order — those are shares the policy never asked
+                # for — but it means the book the prediction was computed from
+                # is no longer the book that traded, which voids a measured run.
                 self.against_us += 1
             else:
                 self.third_party += 1
@@ -236,13 +272,23 @@ class TradeTape:
             "aggr": str(frame.get("aggr", "")),
             "takerId": taker,
             "makerId": maker,
+            # Which side of this fill was ours. A bin order is normally the
+            # taker; it is the maker when its unfilled remainder rested and was
+            # hit before the cancel landed. Recorded because the two are the
+            # same shares to inventory and very different to read about.
+            "role": "taker" if took else "maker",
             "ts": frame.get("ts"),
         }
         self.fills.append(fill)
         return fill
 
     def attributed(self, order_id: str) -> tuple[dict, ...]:
-        return tuple(fill for fill in self.fills if fill["takerId"] == order_id)
+        """Every fill of `order_id`, whichever side of it this client was on."""
+        return tuple(
+            fill
+            for fill in self.fills
+            if order_id in (fill["takerId"], fill["makerId"])
+        )
 
     @property
     def total_qty(self) -> int:

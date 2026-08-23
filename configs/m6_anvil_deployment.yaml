@@ -1,0 +1,106 @@
+# M6 — the deployment run, against the public Anvil at anvil.garethcooke.com.
+#
+# A SEPARATE FILE, and that is the whole reason it exists rather than a fifth run
+# in configs/m6_anvil.yaml. That file's SHA-256 is hashed into four committed
+# artefacts and tests/test_m6_runs.py asserts the digest still matches; adding a
+# run to it would invalidate all four and force a re-run of work that is already
+# done and correct. A new file costs nothing and touches nothing.
+#
+# The M6 brief lists this run as optional and says what it is worth:
+#
+#   "Deployment run, optionally, once — same client against anvil.garethcooke.com.
+#    The demo book is a shared, unauthenticated trading floor: ownership stops a
+#    stranger cancelling your orders, not trading against them. A third-party fill
+#    makes it a successful demonstration and a void measurement, and both halves
+#    get reported."
+#
+# Same client, same committed policy, same 13 bins. Nothing here is tuned; the
+# differences from the local config are all consequences of the venue being real.
+
+milestone: M6
+brief: docs/briefs/M6-anvil-live-leg.md
+
+# --- the venue --------------------------------------------------------------
+# TLS on 443 behind nginx, not plaintext on a loopback port. `scheme: https`
+# drives both halves: the REST client picks HTTPSConnection, and client/run.py
+# hands the same choice to the WebSocket, so the market-data socket cannot
+# silently open in the clear while order entry is encrypted.
+#
+# The deployed roster is TWELVE tickers (101..112) rather than one. The socket
+# still subscribes to exactly one of them; the cross-ticker `summary` frame
+# arrives regardless, as the contract says it does, and the book ignores it.
+venue:
+  host: anvil.garethcooke.com
+  port: 443
+  scheme: https
+  ticker: 101
+  wire_version: 1
+
+# --- the parent order -------------------------------------------------------
+# Unchanged from the local runs, deliberately: the point of a deployment run is
+# that the *same* order goes to a different venue. Read-only reconnaissance
+# measured 5,181 shares of bid depth within eight seconds of connecting, so the
+# 421-share first bin is ~8 % of one side — comfortably fillable, and a smaller
+# fraction than the 29.9 % the local ladder presented.
+order:
+  side: S
+  parent: 1000
+
+# --- the grid ---------------------------------------------------------------
+# Thirteen bins, because that is what the policy was trained on and the bin count
+# is part of the observation's clock.
+#
+# `settle_seconds` is doubled from the local 0.75. On loopback a ping round-trip
+# was 0.23 ms; here it is 84 ms, and the book still only publishes on the server's
+# ~70 ms tick. The settle has to cover the tick plus a real network round trip, or
+# the client prices against a book that predates its own order.
+# `warmup_seconds` has no local counterpart and is the difference between a
+# demonstration and a number taken off nothing. Anvil's feeder is gated on a live
+# WebSocket client, so all twelve books sit empty until this client connects — it
+# starts the market it then trades in — and `wait_for_two_sided` is satisfied by
+# ONE bid and ONE ask. The feeder also round-robins one message per tick across
+# the roster, so ticker 101 sees ~17 msg/s rather than the ~200 a single-ticker
+# local run gets. Read-only reconnaissance measured 5,181 shares of bid depth
+# after holding a socket open for eight seconds; the run has to wait for that
+# itself rather than inherit it from a probe that has since disconnected.
+grid:
+  n_bins: 13
+  bin_seconds: 8.0
+  settle_seconds: 1.5
+  warmup_seconds: 45.0
+
+policy:
+  checkpoint: results/m4a_power_law_policy.npz
+
+# --- the ladder -------------------------------------------------------------
+# Carried for the artefact's metadata only. This run does NOT build a book: the
+# deployed venue is a shared floor with its own feeder, and posting a
+# counterparty ladder there would be both impossible (the client refuses to build
+# on a non-empty book) and wrong (it would be supplying liquidity to strangers to
+# make its own number look tidy). Every price this run crosses is somebody
+# else's.
+ladder:
+  shapes:
+    reference:
+      centre_ticks: 100000
+      half_spread_ticks: 100
+      spacing_ticks: 100
+      quantities: [300, 260, 220, 180, 150, 120, 100, 80]
+
+runs:
+  deployment:
+    shape: reference
+    build: false
+    label: "deployment run - public venue, demonstration only"
+    metrics: results/m6_anvil_deployment.json
+    # The brief, about this run specifically: "The demo book is a shared,
+    # unauthenticated trading floor: ownership stops a stranger cancelling your
+    # orders, not trading against them. A third-party fill makes it a successful
+    # demonstration and a void measurement, and both halves get reported."
+    #
+    # So this is almost certainly void before it starts — the feeder's entire
+    # flow is third-party — and that is the correct outcome rather than a
+    # failure. Without this flag the artefact would print `void: false` and a
+    # live slippage figure three lines below a four-hundred-count of other
+    # people's fills. An operator note cannot amend a machine-written boolean.
+    void_on_third_party: true
