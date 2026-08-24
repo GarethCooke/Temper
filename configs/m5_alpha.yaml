@@ -1,0 +1,216 @@
+# M5 — alpha-aware execution: the first advantage that comes from information.
+#
+# M4a's advantage was there because the closed form solved the wrong problem.
+# M4b's was there because the market was random and the agent could see it. M5's
+# is there because the agent knows something about what is going to happen, and
+# that is a different kind of claim: the other two are about solving, this one is
+# about knowing.
+#
+# Everything except the signal block and the bars is configs/m4a_power_law.yaml
+# verbatim — same case, same lambda, same seed addressing, same reward scale, same
+# estimator, same PPO hyperparameters, same update budget. That is what makes the
+# result comparable to M4a's, M4b's and M3's. Hyperparameter search is out of
+# scope: if it cannot find 0.08 bps under this brief's estimator, that is the
+# finding, and it is M2's noise-threshold result one rung along.
+#
+# THIS CONFIG EXISTS BEFORE ANY TRAINING CODE FOR THIS MILESTONE. It is committed
+# with task 0's gates so its tolerances are pre-stated (invariant 3) rather than
+# written down after a number was in hand.
+
+milestone: M5
+brief: docs/briefs/M5-alpha-aware-execution.md
+
+# --- the world (task 2) -----------------------------------------------------
+# TWO seams, and the second is new. `cost_encoding` is M4a's power law; `signal`
+# is M5's own, and it is **invented** — FrontierView has no alpha model, so
+# constitution §7's "vendored, not invented" cover does not extend to it and no
+# number derived from it may be reported without saying so.
+#
+# NOT M4b's stochastic liquidity, and that is an attribution decision rather than
+# an omission. Bundled, a red result could not be attributed — the same argument
+# that split M4a from M4b, and stronger here because the two adaptivities respond
+# to different randomness and would compete for the same schedule shape. It also
+# keeps the dynamic program's state at two dimensions instead of three. Stacking
+# them is a real milestone and it is backlog.
+#
+# The model is the smallest one that makes the question well-posed: at the
+# decision point for bin k the observation carries s_k ~ N(0, 1) with
+# E[xi_{k+1} | s_k] = rho * s_k. One step ahead, i.i.d. across bins, one
+# parameter. Nothing else in the world moves: the shock keeps unit variance, the
+# charge is unchanged, the frozen objective gains a term that used to be zero.
+#
+# rho = 0.01 — the signal explains rho^2 = 1e-4 of next-bin return variance, one
+# part in ten thousand — and the number is a SCOPING decision, not a calibration.
+# Per-bin volatility here is 42.99 bps against an objective of 2.38, so a signal
+# an equities researcher would call vanishingly weak still dominates the milestone
+# if it is let: at rho = 0.05 the objective more than halves and at rho = 0.2 it
+# goes negative and the agent is no longer executing an order. 0.01 puts M5's
+# advantage at 0.0808 bps, on the same scale as M4a's 0.0367 and M4b's 0.0621,
+# which is what lets M4b's tolerance machinery transfer rather than be redesigned.
+#
+# DO NOT RAISE rho IF TRAINING STRUGGLES. A larger signal makes the advantage
+# bigger and the milestone easier and also stops it being an execution result.
+world:
+  cost_encoding: power_law
+  signal:
+    model: one_step
+    rho: 0.01
+
+# --- the case ---------------------------------------------------------------
+# M2's, M3's, M4a's and M4b's, unchanged.
+case:
+  id: frontier
+  params_from: core:AAPL:X100000:T6.5:lam1e-05
+  symbol: AAPL
+  order_size: 100000.0
+  horizon_hours: 6.5
+  n_bins: 13
+  params:
+    adv: 60000000
+    sigma: 0.0155
+    half_spread: 0.3
+    eta: 0.142
+    gamma: 0.314
+
+# --- task 0: lambda needs no new reading, and that is a result --------------
+# M2's selection rule, unchanged:
+#   (i)  (J_twap - J_optimal) / J_optimal >= 0.20
+#   (ii) the optimal schedule's largest single-bin fraction <= 0.50
+#
+# M4b had to decide something here and record it: liquidity moved every fixed
+# schedule's objective by E[L^-0.6] = 1.1275, so the rule needed a third READING
+# and the two candidates disagreed — the static reading selected 10^-3.5 and the
+# adaptive one 10^-4.0, by 0.011 percentage points.
+#
+# That does not recur. A zero-mean signal cannot move a DETERMINISTIC schedule's
+# objective by a single float: the alpha term of a fixed schedule's expected cost
+# is -A * rho * sum_k h_k * E[s], and E[s] is exactly zero. So M5's static reading
+# is BIT-IDENTICAL to M4a's, not merely in agreement with it, and it selects
+# 10^-3.5 with a TWAP gap of 62.37 % and a largest bin of 42.25 % — the same point
+# M2, M3, M4a and M4b all committed. tools/m5_reference_table.py asserts the
+# bit-identity field by field rather than stating it.
+lambda_selection:
+  grid: vendor
+  rule:
+    min_twap_gap: 0.20
+    max_bin_fraction: 0.50
+  lambda_risk: 0.00031622776601683794       # 10^-3.5
+
+# --- the pre-stated bar -----------------------------------------------------
+# The denominator is the NET signal advantage J_M4a - J_DP = 0.0808 bps: the gap
+# between the best schedule that cannot see the signal and the optimum over
+# policies that can. Not the tangent advantage — that is M4a's 0.0367 and belongs
+# to a different result — and not the gross alpha, which is 0.1481 and is a
+# NUMERATOR the milestone reports separately.
+#
+#   median   excess over J_DP <= 10 %  ==> net capture c >= 0.90
+#   per seed excess over J_DP <= 25 %  ==> c >= 0.75
+#
+# M4b's bars, transferred rather than reinvented, because the advantages are on
+# one scale. What does NOT transfer is the idea that one fraction is enough. The
+# optimum monetises 0.1481 bps of signal and gives 0.0673 back in worse impact and
+# risk — 45 % of the gross effect — so a policy capturing 0.15 and paying 0.07
+# scores identically to one capturing 0.25 and paying 0.17 at this headline. The
+# milestone therefore reports THREE numbers side by side and never the first
+# alone: alpha capture (>= 0.85 median), execution premium (<= 1.30x the DP's),
+# and this net capture. See the brief's task 6.
+tolerances:
+  denominator: available_advantage
+  epsilon_fraction: 0.10
+  per_seed_fraction: 0.25
+  # The red flag moves to the CERTIFIED half and gets sharper for it. M4b's was
+  # the perfect-information relaxation; measured here, price clairvoyance is worth
+  # about -89 bps against an advantage of 0.081 — roughly 1 100x — and a bound
+  # that loose can never fire. Impact and risk are convex in the trade weights and
+  # carry no signal at all, so E[impact + risk] >= M4a's certified optimum for ANY
+  # policy by Jensen: an agent reporting execution cheaper than 1.8196 bps is a
+  # defect with a proof. J_agent < J_DP alone stays a SOFT flag — reported,
+  # investigated, never auto-failed — because J_DP is converged and not certified.
+  red_flag_rtol: 1.0e-9
+
+# --- randomness -------------------------------------------------------------
+# M3's, M4a's and M4b's addressing exactly, so seed ordinal i occupies the same
+# price streams it did in all three earlier worlds and the results are
+# seed-for-seed comparable. The signal will draw from its OWN pools when the seam
+# that draws it lands (brief task 2): a signal variate taken out of the price
+# generator would shift every downstream price draw and Phase 1, M4a and M4b would
+# stop reproducing. The oracle's own sampling already has its address —
+# temper.seeding.M5_REFERENCE_POOL — and spends no eval stream.
+seeding:
+  root_seed: 20260805
+  train_pool: train
+  eval_pool: eval
+  n_seeds: 10
+  env_stream_stride: 4096
+  eval_streams: [0, 1]
+
+# --- the estimator ----------------------------------------------------------
+estimator:
+  regime: antithetic
+  claim: >-
+    PPO trained on the antithetic-averaged reward in FrontierView's calibrated
+    0.6-power temporary-impact world, with a ONE-PARAMETER INVENTED one-step-ahead
+    price signal: the observation carries s_k ~ N(0, 1) at the decision point for
+    bin k, with E[xi_{k+1} | s_k] = rho * s_k and rho = 0.01, so the signal
+    explains one part in ten thousand of next-bin return variance. FrontierView
+    has no alpha model, so §7's vendored-not-invented cover does not reach any
+    number here. Liquidity is DETERMINISTIC: this is M4a's world plus a signal,
+    not M4b's world plus a signal, because stacking the two adaptivities would
+    destroy attribution. The pair mirrors the SIGNAL draws; action identity ends
+    by design, because the two halves see signals they disagree about. The agent
+    is graded by conditional expectation E[cost | s] -- exact given the signal
+    path, with NO price sampling anywhere -- against the DYNAMIC-PROGRAMMING
+    optimum over (inventory, signal), which is CONVERGED and not certified, and
+    the report says which. The denominator is the NET advantage J_M4a - J_DP.
+    The claim is reported in three parts because the advantage is a difference of
+    larger numbers: the optimum monetises 0.1481 bps of gross alpha and pays
+    0.0673 bps of it back in worse impact and risk, so alpha capture and execution
+    premium are graded separately and the net figure never appears alone. The
+    execution half is bounded below by M4a's CERTIFIED optimum, rigorously, by
+    convexity -- impact and risk carry no signal. This is NOT a claim about real
+    alpha, real fills or real markets: the signal is Temper's own invention, and
+    the claim is that with a signal explaining 1e-4 of next-bin variance, seeing
+    it is worth 3.4 % of the objective.
+
+# --- reward scaling ---------------------------------------------------------
+# M2's committed constant, unchanged and checked rather than assumed: it was set
+# against a Phase-1 objective of 2.3546 bps, and this world's best deterministic
+# schedule costs 2.3832 while the alpha-aware optimum costs 2.3025 -- 1.2 % and
+# 2.2 % away, so the scale carries at the episode level. The per-episode SPREAD is
+# what is new: a policy that reacts to the signal has an objective that moves with
+# the signal path, and tools/train.py records the scaled per-step reward range
+# before training so the check is an artefact rather than an assurance.
+reward:
+  scale: 0.02
+
+# --- PPO --------------------------------------------------------------------
+# M4a's, verbatim, and M4b's for the same reason. Out of scope: hyperparameter
+# search. The observation grows by exactly one number and nothing else changes.
+ppo:
+  total_timesteps: 5000000
+  num_envs: 512
+  num_steps: 13
+  learning_rate: 1.0e-3
+  anneal_lr: true
+  gamma: 1.0
+  gae_lambda: 1.0
+  num_minibatches: 4
+  update_epochs: 10
+  clip_coef: 0.2
+  clip_vloss: true
+  ent_coef: 0.0
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  norm_adv: true
+  torch_threads: 8
+  hidden_sizes: [64, 64]
+  log_std_init: -1.0
+  max_seconds: 5400
+runtime:
+  seconds_per_seed: 1200
+  sweep_seconds: 14000
+results:
+  metrics: results/m5_alpha.json
+  figure: results/m5_alpha
+  formats: [png]
+  trace_points: 128

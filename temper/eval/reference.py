@@ -34,15 +34,22 @@ from temper.oracle import (
     BPS,
     DEFAULT_GRID_POINTS,
     DEFAULT_QUADRATURE_NODES,
+    DEFAULT_SIGNAL_GRID_POINTS,
+    DEFAULT_SIGNAL_QUADRATURE_NODES,
     LINEAR_ENCODING,
     POWER_LAW_ENCODING,
     VENDOR_LAMBDA_GRID,
+    AlphaOptimum,
+    AlphaSignal,
     Market,
     ac_trajectory,
     adaptive_optimum,
+    alpha_optimum,
     charge_for,
     clairvoyant_trajectories,
     cost_moments,
+    execution_floor_bps,
+    expected_alpha_bps,
     expected_cost_moments,
     local_curvature_floor,
     objective_curvature_floor,
@@ -51,11 +58,12 @@ from temper.oracle import (
     path_objective_bps,
     power_law_optimum,
     schedule_moments,
+    signal_path_objective_bps,
     static_optimum,
     trades,
     twap_trajectory,
 )
-from temper.seeding import M4B_REFERENCE_POOL, pool_rng
+from temper.seeding import M4B_REFERENCE_POOL, M5_REFERENCE_POOL, pool_rng
 
 #: The schedules every table and figure carries, per world (invariant 4). Order
 #: is the reporting order and is part of the committed contract.
@@ -944,4 +952,382 @@ def liquidity_reference_table(
             quadrature_nodes=quadrature_nodes,
         )
         for index, lam in enumerate(ordered)
+    ]
+# ---------------------------------------------------------------------------
+# M5 — the alpha-aware world: one more reading, and a second kind of confidence
+# ---------------------------------------------------------------------------
+
+#: The schedules M5's table carries, in reporting order. Identical to the
+#: power-law world's, and that is the milestone's first result rather than an
+#: omission: a zero-mean signal leaves every *fixed* schedule exactly where M4a
+#: left it, so there is no fifth rung here the way ``static`` was M4b's. What the
+#: signal adds is not a schedule but a policy, and a policy has no row in a table
+#: of trajectories.
+SIGNAL_SCHEDULES: tuple[str, ...] = REFERENCE_SCHEDULES[POWER_LAW_ENCODING]
+
+#: Signal paths drawn for the feasible upper bound. Matches M4b's committed count
+#: so the half-width it reports is the one grading will achieve.
+SIGNAL_BOUND_PATHS = 20_000
+
+
+def _signal_schedule_reference(
+    name: str,
+    trajectory: np.ndarray,
+    market: Market,
+    order_size: float,
+    lambda_risk: float,
+    floor: float,
+    signal: AlphaSignal,
+) -> ScheduleReference:
+    """A *fixed* schedule's row in the signal world — M4a's, plus exactly zero.
+
+    The alpha term is computed rather than reasoned away
+    (:func:`~temper.oracle.alpha.expected_alpha_bps`): a deterministic schedule's
+    holdings do not depend on ``s``, so its expected alpha is
+    ``-A rho sum h_k E[s]`` and ``E[s]`` is a float zero. Adding a float zero to
+    an objective is the identity operation on every finite float, which is what
+    makes "M5's static reading is **bit-identical** to M4a's" an assertion the
+    reference table can make rather than a claim it has to be believed on.
+
+    ``variance`` is untouched: the signal moves ``E[cost]`` through a term that
+    used to be zero and never touches ``V``, so invariant 7 needs no amendment.
+    """
+    moments = cost_moments(trajectory, market)
+    alpha = expected_alpha_bps(trajectory, market, order_size, signal)
+    return ScheduleReference(
+        name=name,
+        trajectory=trajectory,
+        expected=moments.expected + alpha,
+        variance=moments.variance,
+        risk=lambda_risk * moments.variance,
+        excess_risk=lambda_risk * (moments.variance - floor),
+        objective=moments.objective(lambda_risk) + alpha,
+        max_bin_fraction=float(np.max(trades(trajectory, market))) / order_size,
+    )
+
+
+def signal_static_row(
+    market: Market, order_size: float, lambda_risk: float, signal: AlphaSignal
+) -> ReferenceRow:
+    """The signal world's *fixed* rungs at one lambda. No dynamic program.
+
+    What the lambda selection rule is applied to, and the whole of M5's answer to
+    the question M4b had to decide: liquidity moved every fixed schedule's
+    objective by ``E[L^-beta] > 1``, so the rule needed a third *reading* and a
+    recorded choice between two candidates that disagreed. A zero-mean signal
+    moves nothing, so this returns a row that is M4a's to the last bit and the
+    selection cannot differ. ``tools/m5_reference_table.py`` asserts exactly that,
+    field by field, rather than stating it.
+    """
+    floor = variance_floor_bps2(market)
+    trajectories = reference_trajectories(
+        POWER_LAW_ENCODING, market, order_size, lambda_risk
+    )
+    return ReferenceRow(
+        lambda_risk=lambda_risk,
+        schedules={
+            name: _signal_schedule_reference(
+                name,
+                trajectories[name],
+                market,
+                order_size,
+                lambda_risk,
+                floor,
+                signal,
+            )
+            for name in SIGNAL_SCHEDULES
+        },
+        variance_floor=floor,
+        kappa_horizon=(
+            optimal_kappa(market, order_size, lambda_risk) * market.horizon_hours
+        ),
+        encoding=POWER_LAW_ENCODING,
+    )
+
+
+def signal_static_table(
+    market: Market,
+    order_size: float,
+    signal: AlphaSignal,
+    lambdas: Iterable[float] = VENDOR_LAMBDA_GRID,
+) -> list[ReferenceRow]:
+    """The signal world's static table over a grid — what :func:`select_lambda` reads."""
+    return [
+        signal_static_row(market, order_size, lam, signal) for lam in sorted(lambdas)
+    ]
+
+
+@dataclass(frozen=True)
+class AlphaReferenceRow:
+    """One lambda in the alpha-aware world: four schedules, a policy, and a floor.
+
+    **The signal is not a cost encoding**, for the reason liquidity was not one:
+    the functional is unchanged — the charge is still ``eta sigma p**beta`` — and
+    what M5 adds is information about the *market*. :attr:`encoding` stays
+    ``power_law`` and §9's *A metric grades the world that charges it* needs no
+    amendment.
+
+    **Two kinds of confidence, in one row, and it says which is which.**
+    :attr:`optimal` is M4a's **certified** optimum, which is also the best
+    deterministic schedule here and therefore the denominator's top rung.
+    :attr:`adaptive_bps` is a dynamic program's value — **converged**, not
+    certified. :attr:`execution_floor` is certified again, and it bounds only the
+    half of the objective the signal cannot touch. M5 is the first milestone to
+    need all three words in one place, so nothing here is called "the optimum"
+    without a qualifier.
+
+    **Why three numbers rather than one.** The optimum monetises
+    :attr:`alpha_available` of signal and pays :attr:`execution_premium` of it
+    back in worse impact and risk — about 45 % at the trained ``rho``. A single
+    capture fraction against :attr:`signal_advantage` scores a policy that
+    captures 0.15 and pays 0.07 identically to one that captures 0.25 and pays
+    0.17, at a headline that is supposed to be about execution quality and reports
+    neither. So the parts are first-class here, and the brief requires them
+    reported together everywhere the headline appears.
+    """
+
+    lambda_risk: float
+    schedules: dict[str, ScheduleReference]
+    variance_floor: float
+    signal: dict
+    #: M4a's certified optimum on the schedule-varying part — the rigorous lower
+    #: bound under ``E[impact + risk]`` for *any* policy, by convexity.
+    execution_floor: float
+    encoding: str = POWER_LAW_ENCODING
+    #: The adaptive half, absent on a row built by :func:`signal_static_row`. The
+    #: lambda rule reads only the fixed rungs, and those are closed forms and a
+    #: certified Newton solve where the dynamic program is seconds to minutes.
+    optimum: AlphaOptimum | None = None
+    feasible: PathBound | None = None
+    mean_schedule_max_bin: float | None = None
+
+    def _optimum(self) -> AlphaOptimum:
+        if self.optimum is None:
+            raise ValueError(
+                f"the row at lambda = {self.lambda_risk:.6e} was built without the "
+                "dynamic program; build it with alpha_reference_row to read an "
+                "adaptive quantity"
+            )
+        return self.optimum
+
+    @property
+    def twap(self) -> ScheduleReference:
+        return self.schedules["twap"]
+
+    @property
+    def ac(self) -> ScheduleReference:
+        return self.schedules["ac"]
+
+    @property
+    def tangent(self) -> ScheduleReference:
+        """The sinh derived at the tangent — still not this world's optimum."""
+        return self.schedules["tangent"]
+
+    @property
+    def optimal(self) -> ScheduleReference:
+        """M4a's **certified** optimum: the best schedule that cannot see anything.
+
+        Both what the lambda rule reads and the top of M5's denominator. Unlike
+        M4b there is no gap between "the best fixed schedule that knows the law"
+        and "M4a's schedule" for a level shift to hide in: a zero-mean signal
+        gives a fixed schedule nothing to re-solve for, so the two rungs are one
+        rung and the whole advantage is information.
+        """
+        return self.schedules["optimal"]
+
+    @property
+    def adaptive_bps(self) -> float:
+        """``J_DP`` — the optimum over all policies that see the signal. Converged."""
+        return self._optimum().objective_bps
+
+    @property
+    def twap_gap(self) -> float:
+        """``(J_twap - J_M4a) / J_M4a`` — the rule's condition (i), M4a's exactly."""
+        return (self.twap.objective - self.optimal.objective) / self.optimal.objective
+
+    @property
+    def adaptive_twap_gap(self) -> float:
+        """The same gap read against the DP — the reading *not* used, recorded."""
+        adaptive = self.adaptive_bps
+        return (self.twap.objective - adaptive) / adaptive
+
+    @property
+    def signal_advantage(self) -> float:
+        """``J_M4a - J_DP`` in bps — **the milestone's denominator**, and net.
+
+        Net of the execution premium the optimum pays to collect its alpha, which
+        is why it is roughly half of :attr:`alpha_available` and why reporting it
+        alone would hide the more interesting half of the result.
+        """
+        return self.optimal.objective - self.adaptive_bps
+
+    @property
+    def advantage_fraction(self) -> float:
+        """The net advantage as a fraction of ``J_M4a`` — task 0's gate 2."""
+        return self.signal_advantage / self.optimal.objective
+
+    @property
+    def alpha_available(self) -> float:
+        """``-E[alpha]`` at the optimum, bps — the **gross** value of the signal."""
+        return -self._optimum().alpha_bps
+
+    @property
+    def execution_premium(self) -> float:
+        """``E[impact + risk] - J_M4a_varying`` at the optimum, bps.
+
+        What the optimum pays for its alpha, measured against a floor that is
+        certified. Non-negative for any policy by convexity; if this ever came
+        back negative the defect would be in the machinery, not in the market.
+        """
+        return self._optimum().execution_bps - self.execution_floor
+
+    @property
+    def premium_fraction(self) -> float:
+        """The execution premium as a fraction of the gross alpha — task 0's gate 3.
+
+        The gate that matters most. Below 25 % the decomposition is decorative and
+        one headline would do; above 75 % the advantage is a small difference of
+        large numbers and the milestone is a different milestone.
+        """
+        return self.execution_premium / self.alpha_available
+
+    def as_dict(self) -> dict:
+        document = {
+            "lambda": self.lambda_risk,
+            "encoding": self.encoding,
+            "signal": self.signal,
+            "twap_gap": self.twap_gap,
+            "execution_floor_bps": self.execution_floor,
+            "variance_floor_bps2": self.variance_floor,
+            "schedules": {
+                name: schedule.as_dict() for name, schedule in self.schedules.items()
+            },
+        }
+        if self.optimum is not None:
+            document |= {
+                "adaptive_bps": self.adaptive_bps,
+                "adaptive_twap_gap": self.adaptive_twap_gap,
+                "adaptive": self.optimum.as_dict(),
+                "signal_advantage_bps": self.signal_advantage,
+                "advantage_fraction": self.advantage_fraction,
+                "alpha_available_bps": self.alpha_available,
+                "execution_premium_bps": self.execution_premium,
+                "premium_fraction": self.premium_fraction,
+                "feasible_upper": (
+                    None if self.feasible is None else self.feasible.as_dict()
+                ),
+                "mean_schedule_max_bin": self.mean_schedule_max_bin,
+            }
+        return document
+
+
+def alpha_reference_row(
+    market: Market,
+    order_size: float,
+    lambda_risk: float,
+    signal: AlphaSignal,
+    *,
+    root_seed: int,
+    stream_index: int = 0,
+    paths: int = SIGNAL_BOUND_PATHS,
+    grid_points: int = DEFAULT_SIGNAL_GRID_POINTS,
+    quadrature_nodes: int = DEFAULT_SIGNAL_QUADRATURE_NODES,
+) -> AlphaReferenceRow:
+    """One row of M5's table: four fixed schedules, the DP, and a feasible bound.
+
+    The Monte-Carlo paths come from :data:`~temper.seeding.M5_REFERENCE_POOL` —
+    the oracle's own pool — for M4b's reason unchanged: spending ``eval`` streams
+    on a reference table would burn addresses a trained result is reported at, on
+    a computation with no agent in it.
+
+    Only *one* bound is sampled here, and the asymmetry is the milestone's finding
+    rather than an omission. The feasible upper bound is a statement about a
+    policy and survives; the perfect-information lower bound is a statement about
+    *price* information and is three orders too loose to say anything
+    (:func:`~temper.oracle.alpha.clairvoyant_price_values` computes it anyway, in
+    task 0, because retiring an inherited test needs evidence). What replaces it
+    is :attr:`AlphaReferenceRow.execution_floor`, which is certified and needs no
+    sampling at all.
+    """
+    static = signal_static_row(market, order_size, lambda_risk, signal)
+    optimum = alpha_optimum(
+        market,
+        order_size,
+        lambda_risk,
+        signal,
+        points=grid_points,
+        nodes=quadrature_nodes,
+    )
+
+    rng = pool_rng(root_seed, M5_REFERENCE_POOL, stream_index)
+    signals = signal.draw(rng, (paths, market.n_bins))
+    reference_weights = (
+        trades(static.schedules["optimal"].trajectory, market) / order_size
+    )
+    reference_cost = signal_path_objective_bps(
+        reference_weights, signals, market, order_size, lambda_risk, signal
+    )
+    greedy = optimum.greedy_weights(signals)
+    paired = _paired_bound(
+        "feasible_upper",
+        signal_path_objective_bps(
+            greedy, signals, market, order_size, lambda_risk, signal
+        ),
+        reference_cost,
+        static.schedules["optimal"].objective,
+    )
+    # `_paired_bound` records what it was paired against, and here that is M4a's
+    # certified optimum rather than M4b's static one: in this world they are the
+    # same schedule, and the certified name is the honest one to write down.
+    feasible = PathBound(
+        name=paired.name,
+        value_bps=paired.value_bps,
+        half_width_bps=paired.half_width_bps,
+        paired_sd_bps=paired.paired_sd_bps,
+        unpaired_sd_bps=paired.unpaired_sd_bps,
+        paths=paired.paths,
+        paired_against="optimal",
+    )
+
+    return AlphaReferenceRow(
+        lambda_risk=lambda_risk,
+        schedules=static.schedules,
+        variance_floor=static.variance_floor,
+        signal=signal.as_dict(),
+        execution_floor=execution_floor_bps(market, order_size, lambda_risk),
+        optimum=optimum,
+        feasible=feasible,
+        mean_schedule_max_bin=float(np.max(greedy.mean(axis=0))),
+    )
+
+
+def alpha_reference_table(
+    market: Market,
+    order_size: float,
+    signal: AlphaSignal,
+    lambdas: Iterable[float] = VENDOR_LAMBDA_GRID,
+    *,
+    root_seed: int,
+    paths: int = SIGNAL_BOUND_PATHS,
+    grid_points: int = DEFAULT_SIGNAL_GRID_POINTS,
+    quadrature_nodes: int = DEFAULT_SIGNAL_QUADRATURE_NODES,
+) -> list[AlphaReferenceRow]:
+    """The whole alpha table, ascending in lambda. M0's 17-point grid by default.
+
+    Each row gets its **own** stream index, so adding a lambda cannot move the
+    signal paths an already-committed row was measured on.
+    """
+    return [
+        alpha_reference_row(
+            market,
+            order_size,
+            lam,
+            signal,
+            root_seed=root_seed,
+            stream_index=index,
+            paths=paths,
+            grid_points=grid_points,
+            quadrature_nodes=quadrature_nodes,
+        )
+        for index, lam in enumerate(sorted(lambdas))
     ]

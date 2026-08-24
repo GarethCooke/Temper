@@ -22,6 +22,14 @@ in the world that multiplier makes — a dynamic program, so **converged and
 bracketed rather than certified**. Read `liquidity`'s docstring before reporting
 any number that depends on it: FrontierView has no liquidity process, so §7's
 "vendored, not invented" cover does not reach these two.
+
+M5 adds the same pair one rung along, and the same warning applies twice over:
+:mod:`~temper.oracle.signal` is a one-step-ahead price signal — invented,
+FrontierView has no alpha model — and :mod:`~temper.oracle.alpha` is the optimum
+over policies that can see it, again a dynamic program and again **converged
+rather than certified**. It is the first module here to use both kinds of
+confidence at once: its own value is converged, and the floor it grades execution
+against is M4a's *certified* optimum. Read it before reporting any number from it.
 """
 
 from .adaptive import (
@@ -36,6 +44,19 @@ from .adaptive import (
     path_objective_bps,
     richardson_residual,
     static_optimum,
+)
+from .alpha import (
+    CLAIRVOYANT_GRID_POINTS,
+    CLAIRVOYANT_PATHS,
+    DEFAULT_SIGNAL_GRID_POINTS,
+    DEFAULT_SIGNAL_QUADRATURE_NODES,
+    AlphaOptimum,
+    alpha_coefficient,
+    alpha_optimum,
+    clairvoyant_price_values,
+    execution_floor_bps,
+    expected_alpha_bps,
+    signal_path_objective_bps,
 )
 from .cost import (
     CostMoments,
@@ -114,14 +135,29 @@ from .schedules import (
     sinh_trajectory,
     twap_trajectory,
 )
+from .signal import (
+    NO_SIGNAL,
+    ONE_STEP_SIGNAL,
+    SIGNAL_MODELS,
+    AlphaSignal,
+    NoSignal,
+    OneStepSignal,
+    signal_for,
+)
 
 __all__ = [
     "AdaptiveOptimum",
+    "AlphaOptimum",
+    "AlphaSignal",
     "AugmentedOptimum",
     "BPS",
+    "CLAIRVOYANT_GRID_POINTS",
+    "CLAIRVOYANT_PATHS",
     "CostMoments",
     "DEFAULT_GRID_POINTS",
     "DEFAULT_QUADRATURE_NODES",
+    "DEFAULT_SIGNAL_GRID_POINTS",
+    "DEFAULT_SIGNAL_QUADRATURE_NODES",
     "DETERMINISTIC_LIQUIDITY",
     "DeterministicLiquidity",
     "ENCODINGS",
@@ -135,8 +171,13 @@ __all__ = [
     "LiquidityLaw",
     "LognormalLiquidity",
     "Market",
+    "NO_SIGNAL",
+    "NoSignal",
+    "ONE_STEP_SIGNAL",
+    "OneStepSignal",
     "PARTICIPATION_FLOOR",
     "POWER_LAW_ENCODING",
+    "SIGNAL_MODELS",
     "SINH_OVERFLOW_KT",
     "SymbolParams",
     "TEMP_EXPONENT",
@@ -148,11 +189,16 @@ __all__ = [
     "ac_kappa",
     "ac_trajectory",
     "adaptive_optimum",
+    "alpha_coefficient",
+    "alpha_optimum",
     "augmented_optimum",
     "charge_for",
+    "clairvoyant_price_values",
     "clairvoyant_trajectories",
     "cost_moments",
     "default_n_bins",
+    "execution_floor_bps",
+    "expected_alpha_bps",
     "expected_cost_moments",
     "inventory_penalty_scale",
     "kkt_residual",
@@ -183,6 +229,8 @@ __all__ = [
     "schedule_invariant_bps",
     "schedule_moments",
     "shortfall_variance_bps2",
+    "signal_for",
+    "signal_path_objective_bps",
     "sinh_trajectory",
     "static_optimum",
     "tangent_charge",

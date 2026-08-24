@@ -26,14 +26,17 @@ import yaml
 from temper.agents.ppo import PPOConfig
 from temper.eval.provenance import Provenance, stamp
 from temper.eval.reference import (
+    AlphaReferenceRow,
     LambdaRule,
     LiquidityReferenceRow,
     ReferenceRow,
     TrajectoryBand,
+    alpha_reference_row,
     liquidity_reference_row,
     reference_row,
     reference_table,
     select_lambda,
+    signal_static_table,
     static_liquidity_table,
     trajectory_band,
 )
@@ -41,11 +44,14 @@ from temper.oracle import (
     ENCODINGS,
     LINEAR_ENCODING,
     VENDOR_LAMBDA_GRID,
+    AlphaSignal,
     DeterministicLiquidity,
     LiquidityLaw,
     Market,
+    NoSignal,
     SymbolParams,
     liquidity_for,
+    signal_for,
 )
 
 #: Lambda grids a config may name. ``vendor`` is M0's 17-point log-half-decade
@@ -93,6 +99,18 @@ class ExecutionCase:
             },
         }
 
+
+#: The key the signal world's reading of the lambda rule would be reported under,
+#: if it needed one. It does not, and that is M5 task 0's recorded result rather
+#: than an omission: a zero-mean signal cannot move a *deterministic* schedule's
+#: objective by a single float, so this reading is **bit-identical** to the
+#: power-law one and cannot select a different point. M4b had to choose between
+#: two readings that disagreed and record why; here there is nothing to choose.
+#: Kept as a name so the claim is greppable, and asserted field by field in
+#: ``tools/m5_reference_table.py`` and ``tests/test_m5_alpha_oracle.py`` rather
+#: than checked on the hot path, where it would cost seventeen Newton solves per
+#: run to re-derive an equality that holds bitwise.
+SIGNAL_READING = "power_law+signal"
 
 #: The key the liquidity world's reading of the lambda rule is reported under.
 #: Deliberately *not* a member of :data:`~temper.oracle.model.ENCODINGS`:
@@ -355,6 +373,14 @@ class Experiment:
     #: ``tests/test_repo_invariants.py`` check: a config written for M2, M3 or M4a
     #: and re-run after M4b landed must not silently acquire a second noise source.
     liquidity: LiquidityLaw
+    #: The alpha signal this experiment's observation carries. The third seam,
+    #: under the first two seams' rule and for the third time the same reason:
+    #: defaulted to :class:`~temper.oracle.signal.NoSignal` at the loader, never
+    #: inherited, so a config written before M5 and re-run after it cannot
+    #: silently acquire a predictive observation. **Invented** — FrontierView has
+    #: no alpha model — so anything derived from it carries that in the same
+    #: sentence as the result.
+    signal: AlphaSignal
     rule: LambdaRule
     #: The frontier sub-grid this experiment is one point of, or ``None`` when
     #: its lambda is the rule-selected one (M2, and M3's validation run).
@@ -420,6 +446,37 @@ class Experiment:
             self.case.order_size,
             self.liquidity,
             LAMBDA_GRIDS[self.lambda_grid],
+        )
+
+    def signal_table(self) -> list[ReferenceRow]:
+        """The signal world's *fixed* table over the committed grid.
+
+        Fixed, because that is the only reading there is: a policy has no single
+        schedule and a zero-mean signal moves no schedule at all, so this is
+        M4a's table computed through the signal world's own pricing route. That
+        it comes back bit-identical is the assertion M5 task 0 makes.
+        """
+        return signal_static_table(
+            self.case.market,
+            self.case.order_size,
+            self.signal,
+            LAMBDA_GRIDS[self.lambda_grid],
+        )
+
+    def alpha_reference(self, **kwargs) -> AlphaReferenceRow:
+        """The full alpha row at the committed lambda — the DP and its decomposition.
+
+        Seconds to minutes, not milliseconds: the caller is a reference-table
+        driver or a grading path that needs the dynamic program, never a config
+        check.
+        """
+        kwargs.setdefault("root_seed", self.seeds.root_seed)
+        return alpha_reference_row(
+            self.case.market,
+            self.case.order_size,
+            self.lambda_risk,
+            self.signal,
+            **kwargs,
         )
 
     def liquidity_reference(self, **kwargs) -> LiquidityReferenceRow:
@@ -586,7 +643,30 @@ class Experiment:
                 "(temper.eval.sweep.liquidity_reference) rather than letting this "
                 "fall back to the deterministic world's tangent advantage"
             )
+        if self.signal.informative and reference is None:
+            # Refused for M4b's reason, in M5's numbers. Here the denominator is
+            # the NET signal advantage J_M4a - J_DP = 0.0808 bps and it needs the
+            # dynamic program; the analytic row would hand back M4a's tangent
+            # advantage of 0.0367, so a bar stated as "10 % of the denominator"
+            # would print as 0.0037 bps where it is really 0.0081 and an agent
+            # would be reported against a bar 2.2x tighter than the one it was
+            # held to. The caller passes the row it already has.
+            raise ValueError(
+                f"{self.path.name} runs in an alpha-aware world, where the "
+                "denominator is the net signal advantage J_M4a - J_DP and needs "
+                "the dynamic program. Pass the AlphaReferenceRow "
+                "(Experiment.alpha_reference) rather than letting this fall back "
+                "to the deterministic world's tangent advantage"
+            )
         row = self.reference() if reference is None else reference
+        if isinstance(row, AlphaReferenceRow):
+            if self.tolerances.denominator != AVAILABLE_ADVANTAGE:
+                raise ValueError(
+                    f"{self.path.name} grades in the alpha-aware world against the "
+                    f"{self.tolerances.denominator!r} denominator; the only "
+                    "denominator that exists there is the net signal advantage"
+                )
+            return row.signal_advantage
         if isinstance(row, LiquidityReferenceRow):
             if self.tolerances.denominator != AVAILABLE_ADVANTAGE:
                 raise ValueError(
@@ -643,6 +723,7 @@ class Experiment:
             "lambda_grid": self.lambda_grid,
             "cost_encoding": self.cost_encoding,
             "liquidity": self.liquidity.as_dict(),
+            "signal": self.signal.as_dict(),
             "frontier_grid": self.frontier_grid,
             "lambda_rule": {
                 "min_twap_gap": self.rule.min_twap_gap,
@@ -688,6 +769,29 @@ def _liquidity(document: dict) -> LiquidityLaw:
         return DeterministicLiquidity()
     parameters = {key: value for key, value in block.items() if key != "model"}
     return liquidity_for(str(block["model"]), **parameters)
+
+
+def _signal(document: dict) -> AlphaSignal:
+    """The alpha signal a config names, defaulting to none at all.
+
+    The third seam under the first two seams' rule, and the rule is a sentence
+    about defaults: constitution §4's "additive alternatives behind the same
+    interface, never silent modifications of Phase 1". A config with no
+    ``world.signal`` block gets :class:`~temper.oracle.signal.NoSignal`, which is
+    exactly the observation M0 through M4b ran with, and one that wants a
+    predictive observation has to write it down where a reader and a digest can
+    both see it.
+
+    The stake is higher here than for either earlier seam. A signal acquired by
+    omission would not merely change a number — it would make every Phase-1 and
+    Phase-2 result a claim about a world where the agent could see the future,
+    and every one of them would still regenerate from its own config.
+    """
+    block = (document.get("world") or {}).get("signal")
+    if block is None:
+        return NoSignal()
+    parameters = {key: value for key, value in block.items() if key != "model"}
+    return signal_for(str(block["model"]), **parameters)
 
 
 def _cost_encoding(document: dict) -> str:
@@ -790,6 +894,7 @@ def load_experiment(path: str | Path) -> Experiment:
         lambda_grid=grid,
         cost_encoding=_cost_encoding(document),
         liquidity=_liquidity(document),
+        signal=_signal(document),
         frontier_grid=(
             None
             if selection.get("frontier_grid") is None

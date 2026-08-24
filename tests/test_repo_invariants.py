@@ -244,6 +244,58 @@ def test_a_config_that_names_an_unknown_world_is_refused():
             load_experiment(path)
 
 
+def test_no_config_can_inherit_a_predictive_observation_by_default():
+    """Constitution §4 again, for M5's seam, and the stake is higher than before.
+
+    A Phase-2 *world* acquired by omission changes a number. A predictive
+    *observation* acquired by omission changes what every earlier result means: M0
+    through M4b would become claims about a market where the agent could see one
+    step of the future, and every one of them would still regenerate from its own
+    config. So the default is checked at the loader and every committed config
+    that resolves to an informative signal is required to say so in its own bytes.
+    """
+    import yaml
+
+    from temper.eval.experiment import load_experiment
+    from temper.oracle import NoSignal
+
+    for path in sorted((REPO_ROOT / "configs").rglob("*.yaml")):
+        document = yaml.safe_load(path.read_text(encoding="utf-8"))
+        if "lambda_selection" not in document:  # not an experiment config
+            continue
+        experiment = load_experiment(path)
+        if not experiment.signal.informative:
+            assert experiment.signal == NoSignal() or experiment.signal.correlation() == 0.0
+            continue
+        assert "world" in document and "signal" in document["world"], (
+            f"{path.relative_to(REPO_ROOT)} resolves to a predictive observation "
+            "without naming it; a seam is never inherited (constitution §4)"
+        )
+        assert document["world"]["signal"]["model"] == experiment.signal.name
+        assert experiment.signal.as_dict()["invented"] is True, (
+            "an alpha signal is Temper's own invention and every config that "
+            "carries one has to record that it is"
+        )
+
+
+def test_a_config_that_names_an_unknown_signal_is_refused():
+    """The named signal is checked against the oracle's list, not merely read."""
+    import tempfile
+
+    import yaml
+
+    from temper.eval.experiment import load_experiment
+
+    source = REPO_ROOT / "configs" / "m5_alpha.yaml"
+    document = yaml.safe_load(source.read_text(encoding="utf-8"))
+    document["world"]["signal"] = {"model": "hunch", "rho": 0.5}
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / "bad.yaml"
+        path.write_text(yaml.safe_dump(document), encoding="utf-8")
+        with pytest.raises(ValueError, match="unknown signal model"):
+            load_experiment(path)
+
+
 #: The packages a policy's code lives in. M2's PPO lands under `agents/`, so
 #: `rglob` covers "any future training path" without this list needing an edit.
 POLICY_PACKAGES = ("agents",)

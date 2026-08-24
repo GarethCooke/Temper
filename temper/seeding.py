@@ -64,6 +64,15 @@ from numpy.random import Generator, SeedSequence, default_rng
 #: bound draw tens of thousands of paths, and doing that from ``eval`` would burn
 #: streams the trained result is addressed by. ``m4b/differential`` is M1's
 #: differential once more, in the liquidity world.
+#:
+#: ``m5/reference`` is the last of them, and it is ``m4b/reference`` one milestone
+#: along: the alpha oracle draws signal paths for its feasible upper bound and
+#: shock paths for the price-clairvoyant relaxation, and spending ``eval`` streams
+#: on a reference table would burn addresses a trained result is reported at, on a
+#: computation with no agent in it. M5's *observation* streams — the signal an env
+#: shows a policy — are a separate matter and are deliberately not here yet: a
+#: pool nothing addresses is a promise rather than a contract, and this milestone's
+#: gates run before any of that exists.
 POOLS: tuple[str, ...] = (
     "train",
     "eval",
@@ -75,6 +84,7 @@ POOLS: tuple[str, ...] = (
     "m4b/liquidity-eval",
     "m4b/reference",
     "m4b/differential",
+    "m5/reference",
 )
 
 #: The pool M1's Monte-Carlo differential draws from. Named here rather than
@@ -107,6 +117,11 @@ M4B_REFERENCE_POOL = "m4b/reference"
 #: The pool M4b's differential draws from — the liquidity process's own moments
 #: and the world's E[cost] at M1's tiers.
 M4B_DIFFERENTIAL_POOL = "m4b/differential"
+
+#: The pool M5's oracle draws from — the feasible upper bound's signal paths and
+#: the price-clairvoyant relaxation's shock paths. Reported numbers, but no agent
+#: is involved and no stream a graded result is addressed by may be spent on them.
+M5_REFERENCE_POOL = "m5/reference"
 
 _POOL_INDEX = {name: index for index, name in enumerate(POOLS)}
 
