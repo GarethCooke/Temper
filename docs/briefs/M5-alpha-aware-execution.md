@@ -14,6 +14,47 @@ tolerance's denominator is the available advantage, not the TWAP gap*. Also the 
 *No code path may be reachable only at the end of a long run*, which M5's ROADMAP row already
 carries as a definition-of-done item rather than as advice.
 
+## Amendments (invariant 3 — recorded before the work they govern)
+
+**1. The soft red flag is calibrated against the evaluation half-width, not only the
+DP's residual (2026-08-24, recorded after task 0 and before task 1).** The pre-stated
+table said `J_agent < J_DP` *beyond the DP's own convergence residual*. Task 0 shows
+that threshold is too tight by nearly three orders, and it shows it with the least
+ambiguous possible witness: **the dynamic program's own greedy policy priced 0.6558 %
+of the advantage below `J_DP`** at M = 20 000 held-out signal paths. That policy is
+the DP's optimum rolled out — it cannot be a defect — so the old rule would have
+raised a flag on the reference against itself.
+
+The residual was never the binding uncertainty. Richardson on the inventory grid gives
+**1.49e-06 bps = 0.0019 % of the advantage**; the *evaluation* half-width at M = 20 000
+is **0.00084 bps = 1.0405 %**, five hundred times larger. A grade is a Monte-Carlo
+estimate and the threshold has to be stated in its units.
+
+Restated, with the M named so the threshold is a number rather than a policy:
+
+> `J_agent < J_DP - (Richardson residual + evaluation half-width)`, which at the
+> committed **M = 200 000** is `J_DP - 0.000261 bps` — **0.3238 % of the advantage**.
+
+**M = 200 000, not M4b's 20 000.** Task 0 measured both on the same machinery: the
+half-width falls from 1.0405 % of the advantage to **0.3219 %** for ~20 s of extra
+rollout per policy, and the soft flag is only worth stating at a resolution where it
+can distinguish a defect from a draw. It also puts the median tolerance bar **31x**
+above the measurement floor, against M4b's 7.4x. `SIGNAL_BOUND_PATHS` in
+`temper/eval/reference.py` is the reference table's own count and stays at 20 000;
+this is the *grading* count and task 6 states it.
+
+The false-alarm rate is stated rather than left implied: a policy that is exactly
+optimal sits below a one-half-width threshold about **2.5 % of the time per seed**, so
+across ten seeds roughly one run in five will show a flag from sampling alone. That is
+precisely why this flag is **soft** — reported and investigated, never auto-failed —
+and it is what the hard flag of the row above is for.
+
+**Amended now rather than at task 6, on purpose.** The calibration exists as of task 0;
+a tolerance loosened with ten trained seeds already in hand is not a pre-stated
+tolerance, whatever the arithmetic behind it says.
+
+---
+
 ## Objective
 
 The observation becomes partially predictive of the price the order will pay. This is the
@@ -257,9 +298,9 @@ almost exactly the premium it paid.
 | Alpha capture, median | >= **0.85**, reported beside the net figure and never instead of it |
 | Execution premium, median | <= **1.30x** the DP's — an agent may pay more for its alpha than the optimum does, but not half as much again |
 | Red flag (hard) | `E[impact + risk] < 1.819586 - eps`. **Rigorous and certified**, not numerical |
-| Red flag (soft) | `J_agent < J_DP` beyond the DP's own convergence residual — report, do not auto-fail |
+| Red flag (soft) | `J_agent < J_DP - (Richardson residual + eval half-width)` = `J_DP - 0.000261 bps` = **0.3238 % of the advantage** at the committed M. Calibrated in **amendment 1** rather than guessed: the DP's own greedy policy sat 0.6558 % below `J_DP` at M = 20 k and was noise. Fires by chance ~2.5 % per seed — report and investigate, **never auto-fail** |
 | Shuffled control | net capture <= **-0.50**; predicted -0.83 |
-| Eval draws | paired signal paths, common random numbers across every policy; report the achieved half-width |
+| Eval draws | **M = 200 000** paired signal paths, common random numbers across every policy; report the achieved half-width. 200 k rather than M4b's 20 k for the reason in **amendment 1**: the half-width falls from 1.0405 % of the advantage to 0.3219 % for seconds of rollout, which puts the median bar 31x above the measurement floor |
 | Price clairvoyance | recorded and **retired** as a red flag: -84.39 +/- 8.77 bps, 1 075x the advantage |
 | Pairing | mirror the **signal**; action identity ends by design and its assertion retires with a recorded reason |
 | Objective | unchanged. The per-path functional gains a term that used to be zero. **No amendment to invariant 7** |
@@ -327,6 +368,19 @@ order still finishes. New dependencies. Re-rendering or restyling any committed 
 Anvil wire.
 
 ## Session notes
+
+- **Gate 3's lambda-invariance is a candidate §9 entry, not a task-0 detail — noted
+  here so it is not lost between tasks (measured 2026-08-24, task 0).** The execution
+  premium is **44.9-49.9 % of the gross alpha across all seventeen lambdas** of the
+  vendor grid, while the advantage it is a fraction of moves from 13.9 % of the
+  objective at 10^-9 to 0.0003 % at 10^-1. That is what turns entry 4 of the list above
+  — *an advantage that is a difference of larger numbers is graded in its parts* — from
+  an accommodation for one operating point into a structural claim: the decomposition is
+  needed everywhere on the grid, not at the lambda M2's rule happened to select. **M5's
+  execution-premium tolerance rests on it**, because a bar of 1.30x the DP's premium
+  means something only if that premium is a property of the problem rather than of the
+  point. It lands with the milestone's other §9 amendments; task 1 confirms it is not a
+  discretisation artefact before it is promoted anywhere.
 
 - **The gate that matters most is the execution premium**, not the advantage. Everything else
   in this brief follows from 45 % of the gross alpha being paid back, and if that number
