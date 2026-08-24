@@ -454,6 +454,12 @@ POOL_ALLOWANCE: dict[str, frozenset[str]] = {
     # checked against the grade it earned, never retrained here — a test that
     # needed `train` would be a training run wearing a test's clothes.
     "test_policy_checkpoint.py": frozenset({"eval"}),
+    # M5's seam regression is M4b's three times over — one committed seed per
+    # world — so it holds the same two reserved pools for the same reason. It also
+    # builds envs at `train` addresses to assert the observation *width* and the
+    # third seed address without stepping them, and drives its own seam checks
+    # from `m5/differential`, which is what that pool is for.
+    "test_m5_signal_seam.py": frozenset({"m5/differential", "train", "eval"}),
 }
 
 #: The modules that regenerate a committed result and so legitimately hold both
@@ -471,6 +477,13 @@ SWEEP_REGENERATORS: tuple[str, ...] = (
     # the second seam demands: an env that draws a *second* noise source has to
     # be shown not to have moved either of the milestones that predate it.
     "test_m4b_phase1_regression.py",
+    # M5's is that check a third time, and it is the one whose failure mode is
+    # worst. The signal is correlated with the price shocks *on purpose*, so a
+    # seam that reached into the price generator would not merely move committed
+    # numbers — it would manufacture part of the correlation the milestone exists
+    # to measure, and every M5 result would be a claim about a world nobody
+    # described. Three committed seeds, three worlds, bitwise.
+    "test_m5_signal_seam.py",
 )
 
 DEFAULT_POOL_ALLOWANCE = frozenset({"m1/differential"})

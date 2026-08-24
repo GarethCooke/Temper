@@ -432,6 +432,14 @@ def test_the_shock_is_published_through_info_and_nowhere_else(env):
         # realised path is reachable only through `multipliers`, which is the
         # market the agent is *shown* and deliberately not the price it is not.
         "liquidity",
+        # M5: the signal stream, on the same terms. It carries a law and a pool
+        # name and no path; the realised signal is reachable through `signals`.
+        # This is the closest anything the agent is shown has ever been to the
+        # price path — it is a noisy prediction of a shock that has not landed —
+        # and it is still not the walk: `info[SHOCK_KEY]` remains the one route to
+        # that, and the shock a signal predicts is one the observation carrying it
+        # cannot yet have seen.
+        "signal",
         "action_space",
         "observation_space",
     }, "the env grew a public attribute; if it exposes the price path, §4 is broken"
@@ -448,6 +456,14 @@ def test_the_shock_is_published_through_info_and_nowhere_else(env):
         # exactly one public route and it is `info[SHOCK_KEY]`.
         "liquidity_address",
         "multipliers",
+        # M5's third address and third published path, and the asymmetry with
+        # SHOCK_KEY holds for a third time: `signals` is what the agent is shown
+        # on purpose, `signal_address` is where it was drawn, and neither is the
+        # realised walk. The observation-minimality guard refuses this world until
+        # M5 task 3 amends it — deliberately, and the refusal is the evidence that
+        # the amendment narrows something real rather than deleting a formality.
+        "signal_address",
+        "signals",
         "step_count",
         "reset",
         "step",

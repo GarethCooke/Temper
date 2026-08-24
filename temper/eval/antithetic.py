@@ -204,6 +204,17 @@ def mirror_of(env: ExecutionEnv) -> MirrorEnv:
     liquidity uniform would make the two halves disagree about ``L``, hence about
     their actions, and would trade the pairing's one exact property for a partial
     second one.
+
+    **The signal stream is the third**, and it is handed over for M4a's reason
+    rather than M4b's: a mirror that defaulted would be a *signal-free* env
+    averaged against a signal-bearing primary, which is precisely the shape of the
+    bug M4a task 4 caught at 0.06 bps per step. Handed over unchanged — same
+    signal, same pool, same index, so both halves see the same ``s`` — which keeps
+    this constructor's behaviour identical to what it was for every world that has
+    no signal, and leaves entirely open the question M5 task 4 has to answer: the
+    brief predicts the pair should mirror the *signal* draws rather than share
+    them, and deciding that is not task 2's to make. What task 2 owes is that the
+    mirror is in the same world as the primary.
     """
     if not isinstance(env, ExecutionEnv):
         raise TypeError(f"mirror_of takes a raw ExecutionEnv, got {type(env)!r}")
@@ -214,6 +225,7 @@ def mirror_of(env: ExecutionEnv) -> MirrorEnv:
         env.lambda_risk,
         temporary_impact=env.temporary_impact,
         liquidity=env.liquidity,
+        signal=env.signal,
         root_seed=root_seed,
         pool=pool,
         stream_index=stream,

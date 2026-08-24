@@ -165,6 +165,39 @@ class AlphaSignal:
         """``E[xi_{k+1} | s_k] = rho s_k`` — the whole model, in one line."""
         return self.correlation() * np.asarray(signals, dtype=float)
 
+    @property
+    def residual_scale(self) -> float:
+        """``sqrt(1 - rho^2)`` — the weight on the shock's *own* draw.
+
+        Published rather than left inside :meth:`shocks_from` because the env
+        composes the same two coefficients per step, from its own price generator,
+        and may not import the oracle's sampling route: the two are deliberately
+        different paths to one distribution, which is what lets the differential
+        measure the env's realised draws against these closed forms instead of
+        against themselves. One owner for the numbers, two owners for the loops.
+
+        It is ``1.0`` exactly at ``rho = 0``, which is the arithmetic behind every
+        pre-M5 result reproducing bitwise through the seam: the composed shock is
+        ``0.0 * s + 1.0 * e``, and that is ``e``.
+        """
+        return math.sqrt(1.0 - self.correlation() ** 2)
+
+    def shocks_from(self, signals, independent):
+        """Compose the shock path this signal predicts, from an independent one.
+
+        ``xi_{k+lag} = rho s_k + sqrt(1 - rho^2) e_{k+lag}``, elementwise, with the
+        first ``lag`` shocks left as their own draws because nothing predicts them.
+        Unit variance whatever ``rho`` is — a mixture that did not renormalise
+        would quietly change the market the signal is a signal *about*, and M1's
+        variance identity and invariant 7 are statements about ``sigma_bin``.
+
+        Separate from :meth:`draw_pair` because the env cannot use that one: there
+        the signal comes from its own seed pool and the independent component from
+        the price pool, and the whole point of the two pools is that no single
+        generator produces both.
+        """
+        raise NotImplementedError
+
     def quadrature(self, nodes: int) -> tuple[np.ndarray, np.ndarray]:
         """``(s values, weights)`` integrating ``E[f(s)]`` — the DP's expectation."""
         raise NotImplementedError
@@ -254,6 +287,10 @@ class NoSignal(AlphaSignal):
 
     def draw(self, rng: Generator, size) -> np.ndarray:
         return np.zeros(size, dtype=float)
+
+    def shocks_from(self, signals, independent):
+        """The independent path, unchanged. Not merely equal to it — *it*."""
+        return np.asarray(independent, dtype=float)
 
     def draw_pair(self, rng: Generator, shape) -> tuple[np.ndarray, np.ndarray]:
         return np.zeros(shape, dtype=float), rng.standard_normal(shape)
@@ -363,16 +400,25 @@ class OneStepSignal(AlphaSignal):
         """
         signals = rng.standard_normal(shape)
         independent = rng.standard_normal(shape)
-        shocks = np.empty_like(independent)
-        residual = math.sqrt(1.0 - self.rho**2)
+        return signals, self.shocks_from(signals, independent)
+
+    def shocks_from(self, signals, independent):
+        s = np.asarray(signals, dtype=float)
+        e = np.asarray(independent, dtype=float)
+        if s.shape != e.shape:
+            raise ValueError(
+                f"the signal and independent paths must have the same shape, got "
+                f"{s.shape} and {e.shape}"
+            )
         lag = self.bins_ahead
+        shocks = np.empty_like(e)
         if lag:
-            shocks[..., :lag] = independent[..., :lag]
+            shocks[..., :lag] = e[..., :lag]
         shocks[..., lag:] = (
-            self.rho * signals[..., : signals.shape[-1] - lag]
-            + residual * independent[..., lag:]
+            self.rho * s[..., : s.shape[-1] - lag]
+            + self.residual_scale * e[..., lag:]
         )
-        return signals, shocks
+        return shocks
 
     def as_dict(self) -> dict:
         return {

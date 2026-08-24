@@ -32,7 +32,7 @@ import numpy as np
 
 from temper.agents.execution import PPOPolicy, execution_env_factory
 from temper.agents.ppo import TrainResult, train
-from temper.env import LiquidityStream, impact_for
+from temper.env import LiquidityStream, SignalStream, impact_for
 from temper.eval.antithetic import PairLedger, PairUpdateStats, antithetic_reward
 from temper.eval.conditional import (
     DEFAULT_EVAL_PATHS,
@@ -58,6 +58,8 @@ from temper.seeding import (
     LIQUIDITY_EVAL_POOL,
     LIQUIDITY_TRAIN_POOL,
     M4B_REFERENCE_POOL,
+    SIGNAL_EVAL_POOL,
+    SIGNAL_TRAIN_POOL,
     pool_seeds,
 )
 
@@ -114,6 +116,28 @@ def training_liquidity(experiment: Experiment) -> LiquidityStream:
 def evaluation_liquidity(experiment: Experiment) -> LiquidityStream:
     """The liquidity stream every graded rollout draws from — the *eval* pool."""
     return LiquidityStream(law=experiment.liquidity, pool=LIQUIDITY_EVAL_POOL)
+
+
+def training_signal(experiment: Experiment) -> SignalStream:
+    """The signal stream training draws from — the *train* pool, always.
+
+    The third seam under the second seam's rule, and invariant 5 does the same
+    out-of-sample work: a training signal path and an evaluation one cannot be the
+    same object when their spawn keys differ, which is why
+    :data:`~temper.seeding.SIGNAL_TRAIN_POOL` and
+    :data:`~temper.seeding.SIGNAL_EVAL_POOL` are two pools rather than one split by
+    a stride nobody re-checks.
+
+    These are the sanctioned constructors, and they exist from the moment the pools
+    do: a pool nobody addresses by name is a pool the next session addresses by
+    literal.
+    """
+    return SignalStream(signal=experiment.signal, pool=SIGNAL_TRAIN_POOL)
+
+
+def evaluation_signal(experiment: Experiment) -> SignalStream:
+    """The signal stream every graded rollout draws from — the *eval* pool."""
+    return SignalStream(signal=experiment.signal, pool=SIGNAL_EVAL_POOL)
 
 
 def train_seed(

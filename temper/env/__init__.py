@@ -29,19 +29,27 @@ from .liquidity import (
     LiquidityStream,
     liquidity_stream,
 )
+from .signal import (
+    NO_SIGNAL_STREAM,
+    SignalStream,
+    signal_stream,
+)
 
 __all__ = [
     "DETERMINISTIC_LIQUIDITY",
     "EPISODE_KEY",
-    "LIQUIDITY_KEY",
-    "LiquidityStream",
-    "SHOCK_KEY",
     "ExecutionEnv",
+    "LIQUIDITY_KEY",
     "LinearTemporary",
+    "LiquidityStream",
+    "NO_SIGNAL_STREAM",
     "PowerLawTemporary",
+    "SHOCK_KEY",
+    "SignalStream",
     "TemporaryImpact",
     "impact_for",
     "linear_temporary",
     "liquidity_stream",
     "power_law_temporary",
+    "signal_stream",
 ]

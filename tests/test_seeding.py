@@ -6,6 +6,8 @@ environment exists rather than after it starts producing numbers.
 
 from __future__ import annotations
 
+import itertools
+
 import numpy as np
 import pytest
 
@@ -47,6 +49,35 @@ def test_pools_are_disjoint_across_several_root_seeds():
     """Not a fluke of one root seed."""
     for root in (0, 1, 7, 20260804, 2**63 - 1):
         assert disjoint(pool_seeds(root, "train", 32), pool_seeds(root, "eval", 32))
+
+
+def test_every_pair_of_pools_is_disjoint_by_construction():
+    """Invariant 5, pairwise and exhaustive, over **every** pool there is.
+
+    :func:`disjoint` on the whole set answers "are all of these distinct", which is
+    what invariant 5 asks for and is checked below. This asks the sharper
+    question — *which* pair collided — over all ``len(POOLS) * (len(POOLS) - 1) / 2``
+    of them, and it is written over ``POOLS`` rather than over a list of the pools
+    a session happened to add.
+
+    That generality is the point rather than tidiness. M4b's seam arrived with two
+    new pools and M5's arrives with two more; a check that compared the newest pair
+    against the old ones would have been a construction check exactly until the
+    next pair arrived, at which point it would quietly become a check of something
+    else. Written this way it covers a pool that does not exist yet.
+    """
+    seeds = {pool: set(pool_seeds(ROOT_SEED, pool, 64)) for pool in POOLS}
+    assert len(POOLS) == len(set(POOLS)), "a pool name appears twice"
+    for first, second in itertools.combinations(POOLS, 2):
+        shared = seeds[first] & seeds[second]
+        assert not shared, (
+            f"{first} and {second} share {len(shared)} of 64 streams; the two are "
+            "the same generator by another name, and whichever of them was added "
+            "later has been silently spending the other's addresses"
+        )
+    # Non-vacuity: a pool really is *not* disjoint from itself, so the loop above
+    # is comparing something.
+    assert seeds[POOLS[0]] & seeds[POOLS[0]]
 
 
 def test_every_pool_is_disjoint_from_every_other():

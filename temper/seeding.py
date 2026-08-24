@@ -73,6 +73,16 @@ from numpy.random import Generator, SeedSequence, default_rng
 #: shows a policy — are a separate matter and are deliberately not here yet: a
 #: pool nothing addresses is a promise rather than a contract, and this milestone's
 #: gates run before any of that exists.
+#:
+#: They arrive now, with the seam that draws them, and the hazard they close is the
+#: sharpest of the three. Liquidity out of the price generator would have shifted
+#: every downstream shock; a *signal* out of the price generator would do that AND
+#: manufacture the correlation the milestone exists to measure — the seam would
+#: look right and mean nothing, because the agent would be reading the shock rather
+#: than a noisy prediction of it. Two pools rather than one split by a stride, for
+#: invariant 5's reason unchanged: a training signal path and an evaluation one
+#: cannot be the same object when their spawn keys differ, where a shared pool can
+#: only be *checked* not to collide.
 POOLS: tuple[str, ...] = (
     "train",
     "eval",
@@ -85,6 +95,9 @@ POOLS: tuple[str, ...] = (
     "m4b/reference",
     "m4b/differential",
     "m5/reference",
+    "m5/signal-train",
+    "m5/signal-eval",
+    "m5/differential",
 )
 
 #: The pool M1's Monte-Carlo differential draws from. Named here rather than
@@ -122,6 +135,20 @@ M4B_DIFFERENTIAL_POOL = "m4b/differential"
 #: the price-clairvoyant relaxation's shock paths. Reported numbers, but no agent
 #: is involved and no stream a graded result is addressed by may be spent on them.
 M5_REFERENCE_POOL = "m5/reference"
+
+#: M5's signal streams — the *third* noise source, addressed away from both the
+#: price streams and the liquidity streams so that a signal draw cannot move a
+#: shock and a shock cannot be what a signal is made of.
+SIGNAL_TRAIN_POOL = "m5/signal-train"
+SIGNAL_EVAL_POOL = "m5/signal-eval"
+
+#: The pool M5's env-side diagnostics draw from, and :class:`SignalStream`'s
+#: default. M1's differential once more, in the alpha world — and the default
+#: matters more here than the name does: a stream constructed without a pool named
+#: must land somewhere inert, and "somewhere inert" cannot be a pool a reported
+#: number is addressed by. Pointing it at ``m5/reference`` would put a carelessly
+#: built env on the oracle's own bound-sampling addresses.
+M5_DIFFERENTIAL_POOL = "m5/differential"
 
 _POOL_INDEX = {name: index for index, name in enumerate(POOLS)}
 
