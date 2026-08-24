@@ -101,6 +101,7 @@
       "train_pool": "train"
     },
     "signal": {
+      "bins_ahead": 1,
       "explained_variance_fraction": 0.0001,
       "invented": true,
       "model": "one_step",
@@ -121,6 +122,13 @@
       "401": 2.30247687235135,
       "801": 2.302459089616093
     },
+    "premium_fraction_by_grid": {
+      "1601": 0.45460888452143283,
+      "201": 0.4554172360014758,
+      "401": 0.45481910238494394,
+      "801": 0.4547644235388117
+    },
+    "premium_fraction_grid_span": 0.0008083514800429903,
     "quadrature": {
       "15": 2.30245461214495,
       "21": 2.3024546531801167,
@@ -147,6 +155,7 @@
   },
   "decomposition_at_rho_zero": {
     "alpha_bps": 0.0,
+    "bins_ahead": 1,
     "certified": false,
     "execution_bps": 1.8195879941162598,
     "grid_points": 1601,
@@ -161,7 +170,7 @@
     "risk_bps": 0.911838492636835,
     "signal": "one_step"
   },
-  "elapsed_seconds": 281.8013747000077,
+  "elapsed_seconds": 296.1638617000135,
   "feasible_refinement": {
     "gap_bps": -9.71630549404523e-05,
     "gap_fraction": -0.0012030973199605801,
@@ -182,12 +191,12 @@
       "clairvoyant": {
         "401": {
           "half_width_bps": 9.940027463517506,
-          "seconds": 26.876957100001164,
+          "seconds": 25.7643129999924,
           "value_bps": -89.54688484445967
         },
         "801": {
           "half_width_bps": 9.940027448249449,
-          "seconds": 64.2496828000003,
+          "seconds": 53.24703379999846,
           "value_bps": -89.54688523803945
         }
       },
@@ -231,6 +240,7 @@
       "green": true
     }
   },
+  "gates_green": true,
   "milestone": "M5",
   "paths": 20000,
   "predicted_by_brief": {
@@ -264,12 +274,13 @@
     "config": "m5_alpha.yaml",
     "config_sha256": "f4dc1716fbab0c89bed8506e3413766ae79881b31ddd7273e580396f3fecd3f4",
     "git_dirty": false,
-    "git_rev": "78c69bc28ecffa71e2d9d91c1ac4ac62fd59b71d",
+    "git_rev": "c0de67cf5c9b6b3946a700dc0d4dad2347c26b34",
     "python": "3.12.2"
   },
   "selected": {
     "adaptive": {
       "alpha_bps": -0.14807861470630337,
+      "bins_ahead": 1,
       "certified": false,
       "execution_bps": 1.8869040601845866,
       "grid_points": 1601,
@@ -303,6 +314,24 @@
     "lambda": 0.00031622776601683794,
     "mean_schedule_max_bin": 0.4165118147833029,
     "premium_fraction": 0.45460888452143283,
+    "reference_kinds": {
+      "adaptive_optimum": {
+        "certified": false,
+        "evidence": "Grid and quadrature convergence reported with a Richardson residual; (k, x_k, s_k) sufficiency measured on an augmented state carrying s_{k-1}; the decomposition identity asserted at every node; a feasible upper bound from the DP's own greedy policy; and the value returning M4a's certified number at rho = 0.",
+        "kind": "converged",
+        "name": "adaptive_optimum",
+        "role": "The optimum over all policies that see the signal, and the bottom rung of the milestone's denominator. What an agent is graded against. NOT certified and not bracketed: M4b could bound its DP from below with perfect information and M5 cannot, because that relaxation is three orders too loose here.",
+        "value_bps": 2.30245461214495
+      },
+      "execution_floor": {
+        "certified": true,
+        "evidence": "Cholesky-PD Hessian, relative KKT residual 1.2e-15 against a 1e-12 bar, 3 600 perturbations uphill, and an independent bisection solver agreeing to 3.1e-15 of X (tests/test_power_law_certificate.py).",
+        "kind": "certified",
+        "name": "execution_floor",
+        "role": "M4a's optimum on the schedule-varying objective. A rigorous lower bound on E[impact + risk] for ANY policy, adapted or not, by convexity and Jensen \u2014 the signal appears in neither term. It is M5's hard red flag and it is NOT the optimum: the objective it bounds is the whole objective less alpha and less the schedule-invariant constant.",
+        "value_bps": 1.819586206331475
+      }
+    },
     "schedules": {
       "ac": {
         "excess_risk_bps": 0.11881294388748699,
@@ -406,6 +435,7 @@
       }
     },
     "signal": {
+      "bins_ahead": 1,
       "explained_variance_fraction": 0.0001,
       "invented": true,
       "model": "one_step",
@@ -416,6 +446,7 @@
     "variance_floor_bps2": 1848.0769230769229
   },
   "signal": {
+    "bins_ahead": 1,
     "explained_variance_fraction": 0.0001,
     "invented": true,
     "model": "one_step",
@@ -2314,6 +2345,7 @@
     {
       "adaptive": {
         "alpha_bps": -0.26972836752564705,
+        "bins_ahead": 1,
         "certified": false,
         "execution_bps": 0.5992428644296259,
         "grid_points": 1601,
@@ -2347,6 +2379,24 @@
       "lambda": 1e-09,
       "mean_schedule_max_bin": 0.07854479265143982,
       "premium_fraction": 0.4644948555137226,
+      "reference_kinds": {
+        "adaptive_optimum": {
+          "certified": false,
+          "evidence": "Grid and quadrature convergence reported with a Richardson residual; (k, x_k, s_k) sufficiency measured on an augmented state carrying s_{k-1}; the decomposition identity asserted at every node; a feasible upper bound from the DP's own greedy policy; and the value returning M4a's certified number at rho = 0.",
+          "kind": "converged",
+          "name": "adaptive_optimum",
+          "role": "The optimum over all policies that see the signal, and the bottom rung of the milestone's denominator. What an agent is graded against. NOT certified and not bracketed: M4b could bound its DP from below with perfect information and M5 cannot, because that relaxation is three orders too loose here.",
+          "value_bps": 0.8931436635706456
+        },
+        "execution_floor": {
+          "certified": true,
+          "evidence": "Cholesky-PD Hessian, relative KKT residual 1.2e-15 against a 1e-12 bar, 3 600 perturbations uphill, and an independent bisection solver agreeing to 3.1e-15 of X (tests/test_power_law_certificate.py).",
+          "kind": "certified",
+          "name": "execution_floor",
+          "role": "M4a's optimum on the schedule-varying objective. A rigorous lower bound on E[impact + risk] for ANY policy, adapted or not, by convexity and Jensen \u2014 the signal appears in neither term. It is M5's hard red flag and it is NOT the optimum: the objective it bounds is the whole objective less alpha and less the schedule-invariant constant.",
+          "value_bps": 0.47395542532784823
+        }
+      },
       "schedules": {
         "ac": {
           "excess_risk_bps": 7.107540465696143e-06,
@@ -2450,6 +2500,7 @@
         }
       },
       "signal": {
+        "bins_ahead": 1,
         "explained_variance_fraction": 0.0001,
         "invented": true,
         "model": "one_step",
@@ -2462,6 +2513,7 @@
     {
       "adaptive": {
         "alpha_bps": -0.2697277900948238,
+        "bins_ahead": 1,
         "certified": false,
         "execution_bps": 0.5992618880435057,
         "grid_points": 1601,
@@ -2495,6 +2547,24 @@
       "lambda": 3.1622776601683795e-09,
       "mean_schedule_max_bin": 0.07836705348330664,
       "premium_fraction": 0.4644945842466802,
+      "reference_kinds": {
+        "adaptive_optimum": {
+          "certified": false,
+          "evidence": "Grid and quadrature convergence reported with a Richardson residual; (k, x_k, s_k) sufficiency measured on an augmented state carrying s_{k-1}; the decomposition identity asserted at every node; a feasible upper bound from the DP's own greedy policy; and the value returning M4a's certified number at rho = 0.",
+          "kind": "converged",
+          "name": "adaptive_optimum",
+          "role": "The optimum over all policies that see the signal, and the bottom rung of the milestone's denominator. What an agent is graded against. NOT certified and not bracketed: M4b could bound its DP from below with perfect information and M5 cannot, because that relaxation is three orders too loose here.",
+          "value_bps": 0.8931632646153486
+        },
+        "execution_floor": {
+          "certified": true,
+          "evidence": "Cholesky-PD Hessian, relative KKT residual 1.2e-15 against a 1e-12 bar, 3 600 perturbations uphill, and an independent bisection solver agreeing to 3.1e-15 of X (tests/test_power_law_certificate.py).",
+          "kind": "certified",
+          "name": "execution_floor",
+          "role": "M4a's optimum on the schedule-varying objective. A rigorous lower bound on E[impact + risk] for ANY policy, adapted or not, by convexity and Jensen \u2014 the signal appears in neither term. It is M5's hard red flag and it is NOT the optimum: the objective it bounds is the whole objective less alpha and less the schedule-invariant constant.",
+          "value_bps": 0.47397479032363465
+        }
+      },
       "schedules": {
         "ac": {
           "excess_risk_bps": 2.247295577162065e-05,
@@ -2598,6 +2668,7 @@
         }
       },
       "signal": {
+        "bins_ahead": 1,
         "explained_variance_fraction": 0.0001,
         "invented": true,
         "model": "one_step",
@@ -2610,6 +2681,7 @@
     {
       "adaptive": {
         "alpha_bps": -0.2697259760346651,
+        "bins_ahead": 1,
         "certified": false,
         "execution_bps": 0.5993220549097092,
         "grid_points": 1601,
@@ -2643,6 +2715,24 @@
       "lambda": 1e-08,
       "mean_schedule_max_bin": 0.0784646247412558,
       "premium_fraction": 0.4644937516885297,
+      "reference_kinds": {
+        "adaptive_optimum": {
+          "certified": false,
+          "evidence": "Grid and quadrature convergence reported with a Richardson residual; (k, x_k, s_k) sufficiency measured on an augmented state carrying s_{k-1}; the decomposition identity asserted at every node; a feasible upper bound from the DP's own greedy policy; and the value returning M4a's certified number at rho = 0.",
+          "kind": "converged",
+          "name": "adaptive_optimum",
+          "role": "The optimum over all policies that see the signal, and the bottom rung of the milestone's denominator. What an agent is graded against. NOT certified and not bracketed: M4b could bound its DP from below with perfect information and M5 cannot, because that relaxation is three orders too loose here.",
+          "value_bps": 0.8932252455417108
+        },
+        "execution_floor": {
+          "certified": true,
+          "evidence": "Cholesky-PD Hessian, relative KKT residual 1.2e-15 against a 1e-12 bar, 3 600 perturbations uphill, and an independent bisection solver agreeing to 3.1e-15 of X (tests/test_power_law_certificate.py).",
+          "kind": "certified",
+          "name": "execution_floor",
+          "role": "M4a's optimum on the schedule-varying objective. A rigorous lower bound on E[impact + risk] for ANY policy, adapted or not, by convexity and Jensen \u2014 the signal appears in neither term. It is M5's hard red flag and it is NOT the optimum: the objective it bounds is the whole objective less alpha and less the schedule-invariant constant.",
+          "value_bps": 0.4740360243735172
+        }
+      },
       "schedules": {
         "ac": {
           "excess_risk_bps": 7.103513605620494e-05,
@@ -2746,6 +2836,7 @@
         }
       },
       "signal": {
+        "bins_ahead": 1,
         "explained_variance_fraction": 0.0001,
         "invented": true,
         "model": "one_step",
@@ -2758,6 +2849,7 @@
     {
       "adaptive": {
         "alpha_bps": -0.2697211281554229,
+        "bins_ahead": 1,
         "certified": false,
         "execution_bps": 0.5995131774218023,
         "grid_points": 1601,
@@ -2791,6 +2883,24 @@
       "lambda": 3.162277660168379e-08,
       "mean_schedule_max_bin": 0.07866611081001537,
       "premium_fraction": 0.46449289777414215,
+      "reference_kinds": {
+        "adaptive_optimum": {
+          "certified": false,
+          "evidence": "Grid and quadrature convergence reported with a Richardson residual; (k, x_k, s_k) sufficiency measured on an augmented state carrying s_{k-1}; the decomposition identity asserted at every node; a feasible upper bound from the DP's own greedy policy; and the value returning M4a's certified number at rho = 0.",
+          "kind": "converged",
+          "name": "adaptive_optimum",
+          "role": "The optimum over all policies that see the signal, and the bottom rung of the milestone's denominator. What an agent is graded against. NOT certified and not bracketed: M4b could bound its DP from below with perfect information and M5 cannot, because that relaxation is three orders too loose here.",
+          "value_bps": 0.8934212159330461
+        },
+        "execution_floor": {
+          "certified": true,
+          "evidence": "Cholesky-PD Hessian, relative KKT residual 1.2e-15 against a 1e-12 bar, 3 600 perturbations uphill, and an independent bisection solver agreeing to 3.1e-15 of X (tests/test_power_law_certificate.py).",
+          "kind": "certified",
+          "name": "execution_floor",
+          "role": "M4a's optimum on the schedule-varying objective. A rigorous lower bound on E[impact + risk] for ANY policy, adapted or not, by convexity and Jensen \u2014 the signal appears in neither term. It is M5's hard red flag and it is NOT the optimum: the objective it bounds is the whole objective less alpha and less the schedule-invariant constant.",
+          "value_bps": 0.4742296290139792
+        }
+      },
       "schedules": {
         "ac": {
           "excess_risk_bps": 0.0002243274509998217,
@@ -2894,6 +3004,7 @@
         }
       },
       "signal": {
+        "bins_ahead": 1,
         "explained_variance_fraction": 0.0001,
         "invented": true,
         "model": "one_step",
@@ -2906,6 +3017,7 @@
     {
       "adaptive": {
         "alpha_bps": -0.26971004640398993,
+        "bins_ahead": 1,
         "certified": false,
         "execution_bps": 0.6001215128917932,
         "grid_points": 1601,
@@ -2939,6 +3051,24 @@
       "lambda": 1e-07,
       "mean_schedule_max_bin": 0.07855326816261336,
       "premium_fraction": 0.46449881233572404,
+      "reference_kinds": {
+        "adaptive_optimum": {
+          "certified": false,
+          "evidence": "Grid and quadrature convergence reported with a Richardson residual; (k, x_k, s_k) sufficiency measured on an augmented state carrying s_{k-1}; the decomposition identity asserted at every node; a feasible upper bound from the DP's own greedy policy; and the value returning M4a's certified number at rho = 0.",
+          "kind": "converged",
+          "name": "adaptive_optimum",
+          "role": "The optimum over all policies that see the signal, and the bottom rung of the milestone's denominator. What an agent is graded against. NOT certified and not bracketed: M4b could bound its DP from below with perfect information and M5 cannot, because that relaxation is three orders too loose here.",
+          "value_bps": 0.8940406331544698
+        },
+        "execution_floor": {
+          "certified": true,
+          "evidence": "Cholesky-PD Hessian, relative KKT residual 1.2e-15 against a 1e-12 bar, 3 600 perturbations uphill, and an independent bisection solver agreeing to 3.1e-15 of X (tests/test_power_law_certificate.py).",
+          "kind": "certified",
+          "name": "execution_floor",
+          "role": "M4a's optimum on the schedule-varying objective. A rigorous lower bound on E[impact + risk] for ANY policy, adapted or not, by convexity and Jensen \u2014 the signal appears in neither term. It is M5's hard red flag and it is NOT the optimum: the objective it bounds is the whole objective less alpha and less the schedule-invariant constant.",
+          "value_bps": 0.4748415166621268
+        }
+      },
       "schedules": {
         "ac": {
           "excess_risk_bps": 0.0007063485188803831,
@@ -3042,6 +3172,7 @@
         }
       },
       "signal": {
+        "bins_ahead": 1,
         "explained_variance_fraction": 0.0001,
         "invented": true,
         "model": "one_step",
@@ -3054,6 +3185,7 @@
     {
       "adaptive": {
         "alpha_bps": -0.26966787895405064,
+        "bins_ahead": 1,
         "certified": false,
         "execution_bps": 0.60203513783222,
         "grid_points": 1601,
@@ -3087,6 +3219,24 @@
       "lambda": 3.162277660168379e-07,
       "mean_schedule_max_bin": 0.0790628211685551,
       "premium_fraction": 0.4645050554597457,
+      "reference_kinds": {
+        "adaptive_optimum": {
+          "certified": false,
+          "evidence": "Grid and quadrature convergence reported with a Richardson residual; (k, x_k, s_k) sufficiency measured on an augmented state carrying s_{k-1}; the decomposition identity asserted at every node; a feasible upper bound from the DP's own greedy policy; and the value returning M4a's certified number at rho = 0.",
+          "kind": "converged",
+          "name": "adaptive_optimum",
+          "role": "The optimum over all policies that see the signal, and the bottom rung of the milestone's denominator. What an agent is graded against. NOT certified and not bracketed: M4b could bound its DP from below with perfect information and M5 cannot, because that relaxation is three orders too loose here.",
+          "value_bps": 0.8959964255448358
+        },
+        "execution_floor": {
+          "certified": true,
+          "evidence": "Cholesky-PD Hessian, relative KKT residual 1.2e-15 against a 1e-12 bar, 3 600 perturbations uphill, and an independent bisection solver agreeing to 3.1e-15 of X (tests/test_power_law_certificate.py).",
+          "kind": "certified",
+          "name": "execution_floor",
+          "role": "M4a's optimum on the schedule-varying objective. A rigorous lower bound on E[impact + risk] for ANY policy, adapted or not, by convexity and Jensen \u2014 the signal appears in neither term. It is M5's hard red flag and it is NOT the optimum: the objective it bounds is the whole objective less alpha and less the schedule-invariant constant.",
+          "value_bps": 0.4767730447629567
+        }
+      },
       "schedules": {
         "ac": {
           "excess_risk_bps": 0.002203813252424737,
@@ -3190,6 +3340,7 @@
         }
       },
       "signal": {
+        "bins_ahead": 1,
         "explained_variance_fraction": 0.0001,
         "invented": true,
         "model": "one_step",
@@ -3202,6 +3353,7 @@
     {
       "adaptive": {
         "alpha_bps": -0.2695405510631449,
+        "bins_ahead": 1,
         "certified": false,
         "execution_bps": 0.6080628716117396,
         "grid_points": 1601,
@@ -3235,6 +3387,24 @@
       "lambda": 1e-06,
       "mean_schedule_max_bin": 0.08046587036903602,
       "premium_fraction": 0.46455278253257637,
+      "reference_kinds": {
+        "adaptive_optimum": {
+          "certified": false,
+          "evidence": "Grid and quadrature convergence reported with a Richardson residual; (k, x_k, s_k) sufficiency measured on an augmented state carrying s_{k-1}; the decomposition identity asserted at every node; a feasible upper bound from the DP's own greedy policy; and the value returning M4a's certified number at rho = 0.",
+          "kind": "converged",
+          "name": "adaptive_optimum",
+          "role": "The optimum over all policies that see the signal, and the bottom rung of the milestone's denominator. What an agent is graded against. NOT certified and not bracketed: M4b could bound its DP from below with perfect information and M5 cannot, because that relaxation is three orders too loose here.",
+          "value_bps": 0.9021514872152612
+        },
+        "execution_floor": {
+          "certified": true,
+          "evidence": "Cholesky-PD Hessian, relative KKT residual 1.2e-15 against a 1e-12 bar, 3 600 perturbations uphill, and an independent bisection solver agreeing to 3.1e-15 of X (tests/test_power_law_certificate.py).",
+          "kind": "certified",
+          "name": "execution_floor",
+          "role": "M4a's optimum on the schedule-varying objective. A rigorous lower bound on E[impact + risk] for ANY policy, adapted or not, by convexity and Jensen \u2014 the signal appears in neither term. It is M5's hard red flag and it is NOT the optimum: the objective it bounds is the whole objective less alpha and less the schedule-invariant constant.",
+          "value_bps": 0.4828470586099916
+        }
+      },
       "schedules": {
         "ac": {
           "excess_risk_bps": 0.0066859348581815815,
@@ -3338,6 +3508,7 @@
         }
       },
       "signal": {
+        "bins_ahead": 1,
         "explained_variance_fraction": 0.0001,
         "invented": true,
         "model": "one_step",
@@ -3350,6 +3521,7 @@
     {
       "adaptive": {
         "alpha_bps": -0.2690339937840341,
+        "bins_ahead": 1,
         "certified": false,
         "execution_bps": 0.6267294779199164,
         "grid_points": 1601,
@@ -3383,6 +3555,24 @@
       "lambda": 3.162277660168379e-06,
       "mean_schedule_max_bin": 0.08467362976242493,
       "premium_fraction": 0.46464706159752195,
+      "reference_kinds": {
+        "adaptive_optimum": {
+          "certified": false,
+          "evidence": "Grid and quadrature convergence reported with a Richardson residual; (k, x_k, s_k) sufficiency measured on an augmented state carrying s_{k-1}; the decomposition identity asserted at every node; a feasible upper bound from the DP's own greedy policy; and the value returning M4a's certified number at rho = 0.",
+          "kind": "converged",
+          "name": "adaptive_optimum",
+          "role": "The optimum over all policies that see the signal, and the bottom rung of the milestone's denominator. What an agent is graded against. NOT certified and not bracketed: M4b could bound its DP from below with perfect information and M5 cannot, because that relaxation is three orders too loose here.",
+          "value_bps": 0.921324650802549
+        },
+        "execution_floor": {
+          "certified": true,
+          "evidence": "Cholesky-PD Hessian, relative KKT residual 1.2e-15 against a 1e-12 bar, 3 600 perturbations uphill, and an independent bisection solver agreeing to 3.1e-15 of X (tests/test_power_law_certificate.py).",
+          "kind": "certified",
+          "name": "execution_floor",
+          "role": "M4a's optimum on the schedule-varying objective. A rigorous lower bound on E[impact + risk] for ANY policy, adapted or not, by convexity and Jensen \u2014 the signal appears in neither term. It is M5's hard red flag and it is NOT the optimum: the objective it bounds is the whole objective less alpha and less the schedule-invariant constant.",
+          "value_bps": 0.501723623238319
+        }
+      },
       "schedules": {
         "ac": {
           "excess_risk_bps": 0.01872720240150502,
@@ -3486,6 +3676,7 @@
         }
       },
       "signal": {
+        "bins_ahead": 1,
         "explained_variance_fraction": 0.0001,
         "invented": true,
         "model": "one_step",
@@ -3498,6 +3689,7 @@
     {
       "adaptive": {
         "alpha_bps": -0.2667378319750666,
+        "bins_ahead": 1,
         "certified": false,
         "execution_bps": 0.6823415453688788,
         "grid_points": 1601,
@@ -3531,6 +3723,24 @@
       "lambda": 1e-05,
       "mean_schedule_max_bin": 0.09829166719692126,
       "premium_fraction": 0.4647744014933401,
+      "reference_kinds": {
+        "adaptive_optimum": {
+          "certified": false,
+          "evidence": "Grid and quadrature convergence reported with a Richardson residual; (k, x_k, s_k) sufficiency measured on an augmented state carrying s_{k-1}; the decomposition identity asserted at every node; a feasible upper bound from the DP's own greedy policy; and the value returning M4a's certified number at rho = 0.",
+          "kind": "converged",
+          "name": "adaptive_optimum",
+          "role": "The optimum over all policies that see the signal, and the bottom rung of the milestone's denominator. What an agent is graded against. NOT certified and not bracketed: M4b could bound its DP from below with perfect information and M5 cannot, because that relaxation is three orders too loose here.",
+          "value_bps": 0.9792328800604787
+        },
+        "execution_floor": {
+          "certified": true,
+          "evidence": "Cholesky-PD Hessian, relative KKT residual 1.2e-15 against a 1e-12 bar, 3 600 perturbations uphill, and an independent bisection solver agreeing to 3.1e-15 of X (tests/test_power_law_certificate.py).",
+          "kind": "certified",
+          "name": "execution_floor",
+          "role": "M4a's optimum on the schedule-varying objective. A rigorous lower bound on E[impact + risk] for ANY policy, adapted or not, by convexity and Jensen \u2014 the signal appears in neither term. It is M5's hard red flag and it is NOT the optimum: the objective it bounds is the whole objective less alpha and less the schedule-invariant constant.",
+          "value_bps": 0.5583686291570361
+        }
+      },
       "schedules": {
         "ac": {
           "excess_risk_bps": 0.04351299403118287,
@@ -3634,6 +3844,7 @@
         }
       },
       "signal": {
+        "bins_ahead": 1,
         "explained_variance_fraction": 0.0001,
         "invented": true,
         "model": "one_step",
@@ -3646,6 +3857,7 @@
     {
       "adaptive": {
         "alpha_bps": -0.25593071666656164,
+        "bins_ahead": 1,
         "certified": false,
         "execution_bps": 0.8324887913897581,
         "grid_points": 1601,
@@ -3679,6 +3891,24 @@
       "lambda": 3.1622776601683795e-05,
       "mean_schedule_max_bin": 0.13924914839424948,
       "premium_fraction": 0.4645215628425928,
+      "reference_kinds": {
+        "adaptive_optimum": {
+          "certified": false,
+          "evidence": "Grid and quadrature convergence reported with a Richardson residual; (k, x_k, s_k) sufficiency measured on an augmented state carrying s_{k-1}; the decomposition identity asserted at every node; a feasible upper bound from the DP's own greedy policy; and the value returning M4a's certified number at rho = 0.",
+          "kind": "converged",
+          "name": "adaptive_optimum",
+          "role": "The optimum over all policies that see the signal, and the bottom rung of the milestone's denominator. What an agent is graded against. NOT certified and not bracketed: M4b could bound its DP from below with perfect information and M5 cannot, because that relaxation is three orders too loose here.",
+          "value_bps": 1.140187241389863
+        },
+        "execution_floor": {
+          "certified": true,
+          "evidence": "Cholesky-PD Hessian, relative KKT residual 1.2e-15 against a 1e-12 bar, 3 600 perturbations uphill, and an independent bisection solver agreeing to 3.1e-15 of X (tests/test_power_law_certificate.py).",
+          "kind": "certified",
+          "name": "execution_floor",
+          "role": "M4a's optimum on the schedule-varying objective. A rigorous lower bound on E[impact + risk] for ANY policy, adapted or not, by convexity and Jensen \u2014 the signal appears in neither term. It is M5's hard red flag and it is NOT the optimum: the objective it bounds is the whole objective less alpha and less the schedule-invariant constant.",
+          "value_bps": 0.713603454904382
+        }
+      },
       "schedules": {
         "ac": {
           "excess_risk_bps": 0.07656227877420324,
@@ -3782,6 +4012,7 @@
         }
       },
       "signal": {
+        "bins_ahead": 1,
         "explained_variance_fraction": 0.0001,
         "invented": true,
         "model": "one_step",
@@ -3794,6 +4025,7 @@
     {
       "adaptive": {
         "alpha_bps": -0.2182103802707285,
+        "bins_ahead": 1,
         "certified": false,
         "execution_bps": 1.1756127822835591,
         "grid_points": 1601,
@@ -3827,6 +4059,24 @@
       "lambda": 0.0001,
       "mean_schedule_max_bin": 0.23956461968661966,
       "premium_fraction": 0.460964424391281,
+      "reference_kinds": {
+        "adaptive_optimum": {
+          "certified": false,
+          "evidence": "Grid and quadrature convergence reported with a Richardson residual; (k, x_k, s_k) sufficiency measured on an augmented state carrying s_{k-1}; the decomposition identity asserted at every node; a feasible upper bound from the DP's own greedy policy; and the value returning M4a's certified number at rho = 0.",
+          "kind": "converged",
+          "name": "adaptive_optimum",
+          "role": "The optimum over all policies that see the signal, and the bottom rung of the milestone's denominator. What an agent is graded against. NOT certified and not bracketed: M4b could bound its DP from below with perfect information and M5 cannot, because that relaxation is three orders too loose here.",
+          "value_bps": 1.521031568679497
+        },
+        "execution_floor": {
+          "certified": true,
+          "evidence": "Cholesky-PD Hessian, relative KKT residual 1.2e-15 against a 1e-12 bar, 3 600 perturbations uphill, and an independent bisection solver agreeing to 3.1e-15 of X (tests/test_power_law_certificate.py).",
+          "kind": "certified",
+          "name": "execution_floor",
+          "role": "M4a's optimum on the schedule-varying objective. A rigorous lower bound on E[impact + risk] for ANY policy, adapted or not, by convexity and Jensen \u2014 the signal appears in neither term. It is M5's hard red flag and it is NOT the optimum: the objective it bounds is the whole objective less alpha and less the schedule-invariant constant.",
+          "value_bps": 1.0750255599458602
+        }
+      },
       "schedules": {
         "ac": {
           "excess_risk_bps": 0.10755827244296898,
@@ -3930,6 +4180,7 @@
         }
       },
       "signal": {
+        "bins_ahead": 1,
         "explained_variance_fraction": 0.0001,
         "invented": true,
         "model": "one_step",
@@ -3942,6 +4193,7 @@
     {
       "adaptive": {
         "alpha_bps": -0.14807861470630337,
+        "bins_ahead": 1,
         "certified": false,
         "execution_bps": 1.8869040601845866,
         "grid_points": 1601,
@@ -3975,6 +4227,24 @@
       "lambda": 0.00031622776601683794,
       "mean_schedule_max_bin": 0.4165118147833029,
       "premium_fraction": 0.45460888452143283,
+      "reference_kinds": {
+        "adaptive_optimum": {
+          "certified": false,
+          "evidence": "Grid and quadrature convergence reported with a Richardson residual; (k, x_k, s_k) sufficiency measured on an augmented state carrying s_{k-1}; the decomposition identity asserted at every node; a feasible upper bound from the DP's own greedy policy; and the value returning M4a's certified number at rho = 0.",
+          "kind": "converged",
+          "name": "adaptive_optimum",
+          "role": "The optimum over all policies that see the signal, and the bottom rung of the milestone's denominator. What an agent is graded against. NOT certified and not bracketed: M4b could bound its DP from below with perfect information and M5 cannot, because that relaxation is three orders too loose here.",
+          "value_bps": 2.30245461214495
+        },
+        "execution_floor": {
+          "certified": true,
+          "evidence": "Cholesky-PD Hessian, relative KKT residual 1.2e-15 against a 1e-12 bar, 3 600 perturbations uphill, and an independent bisection solver agreeing to 3.1e-15 of X (tests/test_power_law_certificate.py).",
+          "kind": "certified",
+          "name": "execution_floor",
+          "role": "M4a's optimum on the schedule-varying objective. A rigorous lower bound on E[impact + risk] for ANY policy, adapted or not, by convexity and Jensen \u2014 the signal appears in neither term. It is M5's hard red flag and it is NOT the optimum: the objective it bounds is the whole objective less alpha and less the schedule-invariant constant.",
+          "value_bps": 1.819586206331475
+        }
+      },
       "schedules": {
         "ac": {
           "excess_risk_bps": 0.11881294388748699,
@@ -4078,6 +4348,7 @@
         }
       },
       "signal": {
+        "bins_ahead": 1,
         "explained_variance_fraction": 0.0001,
         "invented": true,
         "model": "one_step",
@@ -4090,6 +4361,7 @@
     {
       "adaptive": {
         "alpha_bps": -0.076889815877854,
+        "bins_ahead": 1,
         "certified": false,
         "execution_bps": 3.49231832603947,
         "grid_points": 1601,
@@ -4123,6 +4395,24 @@
       "lambda": 0.001,
       "mean_schedule_max_bin": 0.6349974352118455,
       "premium_fraction": 0.45132606096128475,
+      "reference_kinds": {
+        "adaptive_optimum": {
+          "certified": false,
+          "evidence": "Grid and quadrature convergence reported with a Richardson residual; (k, x_k, s_k) sufficiency measured on an augmented state carrying s_{k-1}; the decomposition identity asserted at every node; a feasible upper bound from the DP's own greedy policy; and the value returning M4a's certified number at rho = 0.",
+          "kind": "converged",
+          "name": "adaptive_optimum",
+          "role": "The optimum over all policies that see the signal, and the bottom rung of the milestone's denominator. What an agent is graded against. NOT certified and not bracketed: M4b could bound its DP from below with perfect information and M5 cannot, because that relaxation is three orders too loose here.",
+          "value_bps": 3.9790576768282824
+        },
+        "execution_floor": {
+          "certified": true,
+          "evidence": "Cholesky-PD Hessian, relative KKT residual 1.2e-15 against a 1e-12 bar, 3 600 perturbations uphill, and an independent bisection solver agreeing to 3.1e-15 of X (tests/test_power_law_certificate.py).",
+          "kind": "certified",
+          "name": "execution_floor",
+          "role": "M4a's optimum on the schedule-varying objective. A rigorous lower bound on E[impact + risk] for ANY policy, adapted or not, by convexity and Jensen \u2014 the signal appears in neither term. It is M5's hard red flag and it is NOT the optimum: the objective it bounds is the whole objective less alpha and less the schedule-invariant constant.",
+          "value_bps": 3.45761594831128
+        }
+      },
       "schedules": {
         "ac": {
           "excess_risk_bps": 0.08170826743964245,
@@ -4226,6 +4516,7 @@
         }
       },
       "signal": {
+        "bins_ahead": 1,
         "explained_variance_fraction": 0.0001,
         "invented": true,
         "model": "one_step",
@@ -4238,6 +4529,7 @@
     {
       "adaptive": {
         "alpha_bps": -0.031330755656201345,
+        "bins_ahead": 1,
         "certified": false,
         "execution_bps": 7.767488572215246,
         "grid_points": 1601,
@@ -4271,6 +4563,24 @@
       "lambda": 0.0031622776601683794,
       "mean_schedule_max_bin": 0.8193693318182901,
       "premium_fraction": 0.4499519773441223,
+      "reference_kinds": {
+        "adaptive_optimum": {
+          "certified": false,
+          "evidence": "Grid and quadrature convergence reported with a Richardson residual; (k, x_k, s_k) sufficiency measured on an augmented state carrying s_{k-1}; the decomposition identity asserted at every node; a feasible upper bound from the DP's own greedy policy; and the value returning M4a's certified number at rho = 0.",
+          "kind": "converged",
+          "name": "adaptive_optimum",
+          "role": "The optimum over all policies that see the signal, and the bottom rung of the milestone's denominator. What an agent is graded against. NOT certified and not bracketed: M4b could bound its DP from below with perfect information and M5 cannot, because that relaxation is three orders too loose here.",
+          "value_bps": 8.29978698322571
+        },
+        "execution_floor": {
+          "certified": true,
+          "evidence": "Cholesky-PD Hessian, relative KKT residual 1.2e-15 against a 1e-12 bar, 3 600 perturbations uphill, and an independent bisection solver agreeing to 3.1e-15 of X (tests/test_power_law_certificate.py).",
+          "kind": "certified",
+          "name": "execution_floor",
+          "role": "M4a's optimum on the schedule-varying objective. A rigorous lower bound on E[impact + risk] for ANY policy, adapted or not, by convexity and Jensen \u2014 the signal appears in neither term. It is M5's hard red flag and it is NOT the optimum: the objective it bounds is the whole objective less alpha and less the schedule-invariant constant.",
+          "value_bps": 7.753391236756053
+        }
+      },
       "schedules": {
         "ac": {
           "excess_risk_bps": 0.021197407120545752,
@@ -4374,6 +4684,7 @@
         }
       },
       "signal": {
+        "bins_ahead": 1,
         "explained_variance_fraction": 0.0001,
         "invented": true,
         "model": "one_step",
@@ -4386,6 +4697,7 @@
     {
       "adaptive": {
         "alpha_bps": -0.010759854505992468,
+        "bins_ahead": 1,
         "certified": false,
         "execution_bps": 20.569632872338406,
         "grid_points": 1601,
@@ -4419,6 +4731,24 @@
       "lambda": 0.01,
       "mean_schedule_max_bin": 0.9263555546975,
       "premium_fraction": 0.4494743711761099,
+      "reference_kinds": {
+        "adaptive_optimum": {
+          "certified": false,
+          "evidence": "Grid and quadrature convergence reported with a Richardson residual; (k, x_k, s_k) sufficiency measured on an augmented state carrying s_{k-1}; the decomposition identity asserted at every node; a feasible upper bound from the DP's own greedy policy; and the value returning M4a's certified number at rho = 0.",
+          "kind": "converged",
+          "name": "adaptive_optimum",
+          "role": "The optimum over all policies that see the signal, and the bottom rung of the milestone's denominator. What an agent is graded against. NOT certified and not bracketed: M4b could bound its DP from below with perfect information and M5 cannot, because that relaxation is three orders too loose here.",
+          "value_bps": 21.122502184499076
+        },
+        "execution_floor": {
+          "certified": true,
+          "evidence": "Cholesky-PD Hessian, relative KKT residual 1.2e-15 against a 1e-12 bar, 3 600 perturbations uphill, and an independent bisection solver agreeing to 3.1e-15 of X (tests/test_power_law_certificate.py).",
+          "kind": "certified",
+          "name": "execution_floor",
+          "role": "M4a's optimum on the schedule-varying objective. A rigorous lower bound on E[impact + risk] for ANY policy, adapted or not, by convexity and Jensen \u2014 the signal appears in neither term. It is M5's hard red flag and it is NOT the optimum: the objective it bounds is the whole objective less alpha and less the schedule-invariant constant.",
+          "value_bps": 20.56479659350038
+        }
+      },
       "schedules": {
         "ac": {
           "excess_risk_bps": 0.0008397774720629059,
@@ -4522,6 +4852,7 @@
         }
       },
       "signal": {
+        "bins_ahead": 1,
         "explained_variance_fraction": 0.0001,
         "invented": true,
         "model": "one_step",
@@ -4534,6 +4865,7 @@
     {
       "adaptive": {
         "alpha_bps": -0.003393085215231661,
+        "bins_ahead": 1,
         "certified": false,
         "execution_bps": 60.605672470301585,
         "grid_points": 1601,
@@ -4567,6 +4899,24 @@
       "lambda": 0.03162277660168379,
       "mean_schedule_max_bin": 0.9734344470268291,
       "premium_fraction": 0.46032947957668674,
+      "reference_kinds": {
+        "adaptive_optimum": {
+          "certified": false,
+          "evidence": "Grid and quadrature convergence reported with a Richardson residual; (k, x_k, s_k) sufficiency measured on an augmented state carrying s_{k-1}; the decomposition identity asserted at every node; a feasible upper bound from the DP's own greedy policy; and the value returning M4a's certified number at rho = 0.",
+          "kind": "converged",
+          "name": "adaptive_optimum",
+          "role": "The optimum over all policies that see the signal, and the bottom rung of the milestone's denominator. What an agent is graded against. NOT certified and not bracketed: M4b could bound its DP from below with perfect information and M5 cannot, because that relaxation is three orders too loose here.",
+          "value_bps": 61.16590855175301
+        },
+        "execution_floor": {
+          "certified": true,
+          "evidence": "Cholesky-PD Hessian, relative KKT residual 1.2e-15 against a 1e-12 bar, 3 600 perturbations uphill, and an independent bisection solver agreeing to 3.1e-15 of X (tests/test_power_law_certificate.py).",
+          "kind": "certified",
+          "name": "execution_floor",
+          "role": "M4a's optimum on the schedule-varying objective. A rigorous lower bound on E[impact + risk] for ANY policy, adapted or not, by convexity and Jensen \u2014 the signal appears in neither term. It is M5's hard red flag and it is NOT the optimum: the objective it bounds is the whole objective less alpha and less the schedule-invariant constant.",
+          "value_bps": 60.6041105331503
+        }
+      },
       "schedules": {
         "ac": {
           "excess_risk_bps": 1.1076622476311958e-06,
@@ -4670,6 +5020,7 @@
         }
       },
       "signal": {
+        "bins_ahead": 1,
         "explained_variance_fraction": 0.0001,
         "invented": true,
         "model": "one_step",
@@ -4682,6 +5033,7 @@
     {
       "adaptive": {
         "alpha_bps": -0.0010394613151512287,
+        "bins_ahead": 1,
         "certified": false,
         "execution_bps": 187.00108429352858,
         "grid_points": 1601,
@@ -4715,6 +5067,24 @@
       "lambda": 0.1,
       "mean_schedule_max_bin": 0.9910131989414153,
       "premium_fraction": 0.49943005493937054,
+      "reference_kinds": {
+        "adaptive_optimum": {
+          "certified": false,
+          "evidence": "Grid and quadrature convergence reported with a Richardson residual; (k, x_k, s_k) sufficiency measured on an augmented state carrying s_{k-1}; the decomposition identity asserted at every node; a feasible upper bound from the DP's own greedy policy; and the value returning M4a's certified number at rho = 0.",
+          "kind": "converged",
+          "name": "adaptive_optimum",
+          "role": "The optimum over all policies that see the signal, and the bottom rung of the milestone's denominator. What an agent is graded against. NOT certified and not bracketed: M4b could bound its DP from below with perfect information and M5 cannot, because that relaxation is three orders too loose here.",
+          "value_bps": 187.56367399888006
+        },
+        "execution_floor": {
+          "certified": true,
+          "evidence": "Cholesky-PD Hessian, relative KKT residual 1.2e-15 against a 1e-12 bar, 3 600 perturbations uphill, and an independent bisection solver agreeing to 3.1e-15 of X (tests/test_power_law_certificate.py).",
+          "kind": "certified",
+          "name": "execution_floor",
+          "role": "M4a's optimum on the schedule-varying objective. A rigorous lower bound on E[impact + risk] for ANY policy, adapted or not, by convexity and Jensen \u2014 the signal appears in neither term. It is M5's hard red flag and it is NOT the optimum: the objective it bounds is the whole objective less alpha and less the schedule-invariant constant.",
+          "value_bps": 187.00056515530684
+        }
+      },
       "schedules": {
         "ac": {
           "excess_risk_bps": 3.410605131648481e-12,
@@ -4818,6 +5188,7 @@
         }
       },
       "signal": {
+        "bins_ahead": 1,
         "explained_variance_fraction": 0.0001,
         "invented": true,
         "model": "one_step",
@@ -4828,7 +5199,228 @@
       "variance_floor_bps2": 1848.0769230769229
     }
   ],
-  "task": "0",
+  "task": "0+1",
+  "task_1": {
+    "green": true,
+    "premium_stability": {
+      "by_lambda": [
+        {
+          "coarse": 0.46449741399736927,
+          "fine": 0.4644948555137226,
+          "lambda": 1e-09,
+          "max_bin_fraction": 0.07692548035278218,
+          "resolved": true,
+          "shift": 2.5584836466641114e-06
+        },
+        {
+          "coarse": 0.4644976380435149,
+          "fine": 0.4644945842466802,
+          "lambda": 3.1622776601683795e-09,
+          "max_bin_fraction": 0.07693067718255915,
+          "resolved": true,
+          "shift": 3.05379683468443e-06
+        },
+        {
+          "coarse": 0.46449834202386275,
+          "fine": 0.4644937516885297,
+          "lambda": 1e-08,
+          "max_bin_fraction": 0.07694711052797619,
+          "resolved": true,
+          "shift": 4.5903353330656316e-06
+        },
+        {
+          "coarse": 0.4645021576159609,
+          "fine": 0.46449289777414215,
+          "lambda": 3.162277660168379e-08,
+          "max_bin_fraction": 0.07699907259463347,
+          "resolved": true,
+          "shift": 9.259841818765047e-06
+        },
+        {
+          "coarse": 0.4645126030023479,
+          "fine": 0.46449881233572404,
+          "lambda": 1e-07,
+          "max_bin_fraction": 0.07716334368464435,
+          "resolved": true,
+          "shift": 1.3790666623880732e-05
+        },
+        {
+          "coarse": 0.46453575360252924,
+          "fine": 0.4645050554597457,
+          "lambda": 3.162277660168379e-07,
+          "max_bin_fraction": 0.07768233905290152,
+          "resolved": true,
+          "shift": 3.0698142783558424e-05
+        },
+        {
+          "coarse": 0.4645912583155792,
+          "fine": 0.46455278253257637,
+          "lambda": 1e-06,
+          "max_bin_fraction": 0.07931874655147156,
+          "resolved": true,
+          "shift": 3.8475783002811514e-05
+        },
+        {
+          "coarse": 0.46468977479075513,
+          "fine": 0.46464706159752195,
+          "lambda": 3.162277660168379e-06,
+          "max_bin_fraction": 0.0844442563866009,
+          "resolved": true,
+          "shift": 4.2713193233179236e-05
+        },
+        {
+          "coarse": 0.46482363020807466,
+          "fine": 0.4647744014933401,
+          "lambda": 1e-05,
+          "max_bin_fraction": 0.10013437250965683,
+          "resolved": true,
+          "shift": 4.9228714734561585e-05
+        },
+        {
+          "coarse": 0.4646606415354308,
+          "fine": 0.4645215628425928,
+          "lambda": 3.1622776601683795e-05,
+          "max_bin_fraction": 0.14455320222967247,
+          "resolved": true,
+          "shift": 0.00013907869283802388
+        },
+        {
+          "coarse": 0.46109815947873517,
+          "fine": 0.460964424391281,
+          "lambda": 0.0001,
+          "max_bin_fraction": 0.2473212527005891,
+          "resolved": true,
+          "shift": 0.00013373508745417872
+        },
+        {
+          "coarse": 0.45481910238494394,
+          "fine": 0.45460888452143283,
+          "lambda": 0.00031622776601683794,
+          "max_bin_fraction": 0.422505755515819,
+          "resolved": true,
+          "shift": 0.0002102178635111085
+        },
+        {
+          "coarse": 0.45175107274443016,
+          "fine": 0.45132606096128475,
+          "lambda": 0.001,
+          "max_bin_fraction": 0.637780629744361,
+          "resolved": true,
+          "shift": 0.00042501178314541255
+        },
+        {
+          "coarse": 0.451575935758933,
+          "fine": 0.4499519773441223,
+          "lambda": 0.0031622776601683794,
+          "max_bin_fraction": 0.820198124625769,
+          "resolved": true,
+          "shift": 0.0016239584148107222
+        },
+        {
+          "coarse": 0.47847770146962415,
+          "fine": 0.4494743711761099,
+          "lambda": 0.01,
+          "max_bin_fraction": 0.9265610606813439,
+          "resolved": false,
+          "shift": 0.029003330293514262
+        },
+        {
+          "coarse": 0.5394321453002797,
+          "fine": 0.46032947957668674,
+          "lambda": 0.03162277660168379,
+          "max_bin_fraction": 0.9734791288911967,
+          "resolved": false,
+          "shift": 0.07910266572359298
+        },
+        {
+          "coarse": 0.7410743473471308,
+          "fine": 0.49943005493937054,
+          "lambda": 0.1,
+          "max_bin_fraction": 0.991038548930637,
+          "resolved": false,
+          "shift": 0.2416442924077603
+        }
+      ],
+      "coarse_grid_points": 401,
+      "fine_grid_points": 1601,
+      "green": true,
+      "resolved_count": 14,
+      "resolved_range": [
+        0.4499519773441223,
+        0.4647744014933401
+      ],
+      "resolved_shift_bar": 0.005,
+      "resolved_span": 0.014822424149217805,
+      "resolved_span_bar": 0.02,
+      "unresolved_lambdas": [
+        0.01,
+        0.03162277660168379,
+        0.1
+      ],
+      "worst_lambda": 0.1,
+      "worst_lambda_escalation": {
+        "1601": 0.49943005493937054,
+        "3201": 0.4571295479967835,
+        "401": 0.7410743473471308,
+        "801": 0.5816739047999788
+      }
+    },
+    "reference_kinds": {
+      "adaptive_optimum": {
+        "certified": false,
+        "evidence": "Grid and quadrature convergence reported with a Richardson residual; (k, x_k, s_k) sufficiency measured on an augmented state carrying s_{k-1}; the decomposition identity asserted at every node; a feasible upper bound from the DP's own greedy policy; and the value returning M4a's certified number at rho = 0.",
+        "kind": "converged",
+        "name": "adaptive_optimum",
+        "role": "The optimum over all policies that see the signal, and the bottom rung of the milestone's denominator. What an agent is graded against. NOT certified and not bracketed: M4b could bound its DP from below with perfect information and M5 cannot, because that relaxation is three orders too loose here.",
+        "value_bps": 2.30245461214495
+      },
+      "execution_floor": {
+        "certified": true,
+        "evidence": "Cholesky-PD Hessian, relative KKT residual 1.2e-15 against a 1e-12 bar, 3 600 perturbations uphill, and an independent bisection solver agreeing to 3.1e-15 of X (tests/test_power_law_certificate.py).",
+        "kind": "certified",
+        "name": "execution_floor",
+        "role": "M4a's optimum on the schedule-varying objective. A rigorous lower bound on E[impact + risk] for ANY policy, adapted or not, by convexity and Jensen \u2014 the signal appears in neither term. It is M5's hard red flag and it is NOT the optimum: the objective it bounds is the whole objective less alpha and less the schedule-invariant constant.",
+        "value_bps": 1.819586206331475
+      }
+    },
+    "sufficiency": {
+      "bar_bps": 1e-14,
+      "by_grid": {
+        "1601": {
+          "bins_ahead": 1,
+          "column_spread_bps": 6.661338147750939e-16,
+          "difference_bps": 0.0,
+          "green": true,
+          "grid_points": 1601,
+          "objective_bps": 2.30245461214495,
+          "plain_bps": 2.30245461214495,
+          "quadrature_nodes": 15
+        },
+        "401": {
+          "bins_ahead": 1,
+          "column_spread_bps": 4.440892098500626e-16,
+          "difference_bps": 0.0,
+          "green": true,
+          "grid_points": 401,
+          "objective_bps": 2.30247687235135,
+          "plain_bps": 2.30247687235135,
+          "quadrature_nodes": 15
+        }
+      },
+      "green": true
+    },
+    "timing": {
+      "alpha_bps": 2.15485181781494e-18,
+      "bins_ahead": 0,
+      "bit_identical_to_uninformative": true,
+      "collapsed_advantage_bps": -1.7877847846570205e-06,
+      "collapsed_as_fraction_of_advantage": -2.2136799675610855e-05,
+      "green": true,
+      "objective_bps": 2.3832171607829262,
+      "rho": 0.01,
+      "uninformative_objective_bps": 2.3832171607829262
+    }
+  },
   "value_of_signal": [
     {
       "advantage_bps": 0.005708301155270767,
@@ -4836,6 +5428,7 @@
       "alpha_available_bps": 0.011267324778697657,
       "decomposition": {
         "alpha_bps": -0.011267324778697657,
+        "bins_ahead": 1,
         "certified": false,
         "execution_bps": 1.8251452299549018,
         "grid_points": 1601,
@@ -4863,6 +5456,7 @@
       "alpha_available_bps": 0.042153145501893134,
       "decomposition": {
         "alpha_bps": -0.042153145501893134,
+        "bins_ahead": 1,
         "certified": false,
         "execution_bps": 1.839731522565997,
         "grid_points": 1601,
@@ -4890,6 +5484,7 @@
       "alpha_available_bps": 0.14807861470630337,
       "decomposition": {
         "alpha_bps": -0.14807861470630337,
+        "bins_ahead": 1,
         "certified": false,
         "execution_bps": 1.8869040601845866,
         "grid_points": 1601,
@@ -4917,6 +5512,7 @@
       "alpha_available_bps": 0.4831152682373509,
       "decomposition": {
         "alpha_bps": -0.4831152682373509,
+        "bins_ahead": 1,
         "certified": false,
         "execution_bps": 2.0242239814061938,
         "grid_points": 1601,
@@ -4944,6 +5540,7 @@
       "alpha_available_bps": 1.9779082832968964,
       "decomposition": {
         "alpha_bps": -1.9779082832968964,
+        "bins_ahead": 1,
         "certified": false,
         "execution_bps": 2.5303039745772224,
         "grid_points": 1601,
@@ -4971,6 +5568,7 @@
       "alpha_available_bps": 11.054136230159328,
       "decomposition": {
         "alpha_bps": -11.054136230159328,
+        "bins_ahead": 1,
         "certified": false,
         "execution_bps": 3.983374642931749,
         "grid_points": 1601,
