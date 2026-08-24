@@ -300,3 +300,192 @@ def test_the_feeder_run_is_reported_separately_and_claims_less():
     assert document["ladder"]["built_by_client"] is False
     assert document["realised"]["filled"] > 0
     assert document["reconciliation"]["attributed"] == document["realised"]["filled"]
+
+
+# ---------------------------------------------------------------------------
+# The figure
+# ---------------------------------------------------------------------------
+
+
+def _figure_inputs():
+    """The five committed runs, or a skip naming the one that is not there."""
+    from tools.m6_prediction import ARTEFACTS, load_documents
+
+    missing = [name for name, path in ARTEFACTS.items() if not (REPO_ROOT / path).exists()]
+    if missing:
+        pytest.skip(f"the {', '.join(missing)} run(s) have not been produced in this tree")
+    return load_documents(REPO_ROOT)
+
+
+def test_the_prediction_figure_is_committed_and_redraws_byte_identically(tmp_path):
+    """M6's figure is a *view* of the five committed runs: no venue on its path.
+
+    The same standard the other seven committed figures are held to, and the
+    reason is the same: a committed PNG proves only that the figure rendered
+    once. Regenerating it here from the artefacts, exactly as ``make m6-figure``
+    does, and comparing bytes is what makes it reproducible from a clean clone
+    rather than a picture somebody happened to have.
+
+    It also pins the one thing this figure could quietly get wrong. Its numbers
+    come from five files stamped at two revisions; a redraw that no longer
+    matches means an artefact, a builder or the drawing has moved, and the diff
+    says which.
+    """
+    from temper.eval.figures import prediction_figure
+    from temper.eval.provenance import Provenance
+    from tools.m6_prediction import (
+        STAMP_RUN,
+        build_ladders,
+        build_tiers,
+        caption,
+    )
+
+    committed = REPO_ROOT / "results" / "m6_prediction.png"
+    assert committed.exists(), (
+        "results/m6_prediction.png is missing; run `make m6-figure`"
+    )
+    assert committed.stat().st_size > 10_000
+
+    documents = _figure_inputs()
+    tiers = build_tiers(documents)
+    written = prediction_figure(
+        tmp_path / "m6_prediction",
+        ladders=build_ladders(documents),
+        tiers=tiers,
+        provenance=Provenance(**documents[STAMP_RUN]["provenance"]),
+        caption=caption(documents, tiers),
+    )
+    assert len(written) == 1
+    assert written[0].read_bytes() == committed.read_bytes(), (
+        "results/m6_prediction.png does not redraw byte-identically from the "
+        "five committed runs"
+    )
+
+
+def test_each_tier_row_carries_the_number_its_own_artefact_carries():
+    """Tier 3 is drawn from ``unreported_bps``, and nothing else is.
+
+    The one way this figure could mislead is by letting a withheld number read as
+    a measured one, so the sourcing is asserted rather than reviewed: the two
+    reported tiers come off ``realised_slippage_bps`` and are not void, and the
+    void row comes off ``unreported_bps`` — the field that exists precisely so a
+    void run can say what it would have reported without reporting it.
+    """
+    from tools.m6_prediction import build_tiers
+
+    documents = _figure_inputs()
+    rows = {row["run"]: row for row in build_tiers(documents)["rows"]}
+    assert set(rows) == {"ladder", "thin", "wide", "feeder", "deployment"}
+
+    for name in (*LADDER_RUNS, "feeder"):
+        measurement = documents[name]["measurement"]
+        assert rows[name]["void"] is False
+        assert rows[name]["bps"] == measurement["realised_slippage_bps"]
+        assert measurement["unreported_bps"] is None
+
+    withheld = documents["deployment"]["measurement"]
+    assert rows["deployment"]["void"] is True
+    assert withheld["realised_slippage_bps"] is None
+    assert rows["deployment"]["bps"] == withheld["unreported_bps"]
+    assert "withheld" in rows["deployment"]["value"]
+    assert "VOID" in rows["deployment"]["note"]
+
+    # And the tiers are the three the figure claims, in the order it draws them.
+    assert [row["tier"] for row in build_tiers(documents)["rows"]] == [1, 1, 1, 2, 3]
+
+
+def test_the_per_bin_panel_ends_where_the_run_says_it_should():
+    """The last cumulative point *is* the reported number, at every ladder.
+
+    Which is the check a reader can make with a ruler, and the reason the panel
+    is cumulative rather than per bin: a per-bin VWAP says nothing about the
+    parent order, and a panel whose endpoint disagreed with the headline would be
+    two different measurements drawn as one.
+    """
+    from tools.m6_prediction import build_ladders
+
+    documents = _figure_inputs()
+    ladders = build_ladders(documents)
+    assert ladders["bins"] == list(range(1, 14))
+
+    for row in ladders["runs"]:
+        reported = documents[row["run"]]["measurement"]["realised_slippage_bps"]
+        assert row["realised_bps"][-1] == pytest.approx(reported, abs=1e-9)
+        assert row["predicted_bps"][-1] == pytest.approx(reported, abs=1e-9)
+        # Predicted and realised coincide at *every* bin, which is the panel's
+        # whole claim — asserted here so a run that diverged mid-order could not
+        # hide behind a matching total.
+        assert row["predicted_bps"] == pytest.approx(row["realised_bps"], abs=1e-12)
+
+
+def test_the_caption_and_the_annotation_never_omit_what_they_may_not():
+    """Three tiers, demo-not-evaluation, withheld-not-taken, and every share attributed.
+
+    Plus the two widths. matplotlib draws text straight past the figure edge
+    without a word of complaint, and the house note records a caption doing
+    exactly that on a committed artefact — so both bounds are checked where the
+    strings are built rather than noticed in a picture.
+    """
+    from tools.m6_prediction import (
+        ANNOTATION_WIDTH,
+        CAPTION_WIDTH,
+        build_ladders,
+        build_tiers,
+        caption,
+    )
+
+    documents = _figure_inputs()
+    text = caption(documents, build_tiers(documents))
+
+    assert "Tier 1" in text and "Tier 2" in text and "Tier 3" in text
+    assert "NOT an evaluation (ARCHITECTURE.md §7)" in text
+    assert "WITHHELD rather than taken" in text
+    assert "measurement.unreported_bps" in text
+    assert "attributed every share" in text
+    # The feeder's four-attempt spread is brief prose, not artefact data. It is
+    # allowed in the caption and nowhere near an axis, and the caption has to say
+    # which it is.
+    assert "not a committed artefact, so it is stated here and not drawn" in text
+
+    overlong = [line for line in text.splitlines() if len(line) > CAPTION_WIDTH]
+    assert not overlong, (
+        f"{len(overlong)} caption line(s) exceed {CAPTION_WIDTH} characters and "
+        f"will run off the canvas: {overlong[0][:80]!r}..."
+    )
+
+    annotation = build_ladders(documents)["highlight"]["text"]
+    assert "ACCEPTED IS NOT FILLED" in annotation
+    overlong = [line for line in annotation.splitlines() if len(line) > ANNOTATION_WIDTH]
+    assert not overlong, (
+        f"{len(overlong)} annotation line(s) exceed {ANNOTATION_WIDTH} characters"
+    )
+
+
+def test_the_figure_tool_runs_end_to_end_with_no_server(tmp_path):
+    """``tools/m6_prediction.py`` as the Makefile invokes it, against no venue.
+
+    ``main`` is different code from the builders: it resolves paths, reads five
+    artefacts off disk and reports where it wrote. That last part is where M4b's
+    figure tool failed the first time it ran — the figure was already written and
+    the process died on the ``relative_to`` in the line that says so. The house
+    note M5 inherits is about exactly this shape, so it is exercised here rather
+    than discovered at the end of something long.
+    """
+    import runpy
+    import sys
+
+    _figure_inputs()
+    stem = tmp_path / "m6_prediction"
+    argv = sys.argv
+    try:
+        sys.argv = ["m6_prediction.py", "--out", str(stem)]
+        with pytest.raises(SystemExit) as exit_info:
+            runpy.run_path(
+                str(REPO_ROOT / "tools" / "m6_prediction.py"), run_name="__main__"
+            )
+    finally:
+        sys.argv = argv
+
+    assert exit_info.value.code == 0
+    written = sorted(tmp_path.glob("m6_prediction.*"))
+    assert written and written[0].stat().st_size > 10_000

@@ -24,6 +24,7 @@ matplotlib.use("Agg")  # before pyplot: headless, deterministic, no display need
 
 import matplotlib.pyplot as plt  # noqa: E402  (backend must be set first)
 import matplotlib.ticker as ticker  # noqa: E402
+from matplotlib.lines import Line2D  # noqa: E402
 import numpy as np  # noqa: E402
 
 from temper.eval.provenance import Provenance  # noqa: E402
@@ -935,6 +936,344 @@ def adaptivity_figure(
         va="top",
     )
     figure.subplots_adjust(left=0.070, right=0.985, top=0.895, bottom=0.235, wspace=0.20)
+
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+    for suffix in formats:
+        out = target.with_name(f"{target.name}.{suffix.lstrip('.')}")
+        figure.savefig(
+            out,
+            dpi=160,
+            metadata={"Software": None, "Creator": None, "Date": None},
+        )
+        written.append(out)
+    plt.close(figure)
+    return written
+
+
+# ---------------------------------------------------------------------------
+# M6 — the live leg: a closed form against a venue, in three tiers of claim
+# ---------------------------------------------------------------------------
+
+#: One colour per M6 run, taken from the module palette rather than a new one.
+#: The three client-built ladders take the three *reference* hues because that is
+#: what they are here — schedules whose every fill was computable before the run
+#: started. The feeder run takes the agent's green: same policy, same client, a
+#: book it did not build. The deployment run takes TWAP's grey, which is the
+#: honest colour for the one row on this figure that is not a measurement.
+M6_COLOURS = {
+    "ladder": STYLE["optimal"]["color"],
+    "thin": STYLE["ac"]["color"],
+    "wide": STYLE["tangent"]["color"],
+    "feeder": STYLE["agent"]["color"],
+    "deployment": STYLE["twap"]["color"],
+}
+
+#: How a withheld measurement is drawn. Outlined and struck through rather than
+#: filled, and never in a run's own colour: the whole point of the third tier is
+#: that its number must not read as a data point beside the four that are.
+VOID_EDGE = "#6f6f6f"
+
+#: Vertical gap between two rows of the same tier, and between two tiers. The
+#: tiers are the argument, so they are separated by more than the runs inside
+#: them — the grouping has to survive being glanced at.
+TIER_ROW_STEP = 1.0
+TIER_GAP_STEP = 1.75
+
+
+def prediction_figure(
+    path: str | Path,
+    *,
+    ladders: dict,
+    tiers: dict,
+    provenance: Provenance,
+    caption: str,
+    formats: Sequence[str] = ("png",),
+) -> list[Path]:
+    """M6's figure: what the closed form said, what the venue did, and what that is worth.
+
+    Two panels, because the milestone's claim is not one number but a *ladder of
+    claims*, and the strength of each rung is the finding.
+
+    **Left — per bin, for the three runs that can be predicted.** Cumulative
+    arrival slippage after each of the 13 bins, predicted as a line and realised
+    as an open marker on top of it. A committed ladder plus a deterministic
+    policy plus deterministic matching makes every fill computable in closed form
+    *before* the run, and the markers sitting on the lines at every bin is what
+    that sentence looks like when it is true. Per bin rather than per run on
+    purpose: three run-level numbers agreeing could be three coincidences, and
+    the run-level number is also the one place a bin that went wrong can hide.
+
+    The thin ladder's first bin is ringed and annotated, because it is the one
+    point on the panel where the closed loop is exercised rather than merely
+    present — the policy asked for more than the whole book held, was filled
+    short, had its remainder cancelled, and carried the shortfall into a state
+    ``ExecutionEnv`` has never produced. It is also the panel's largest value; a
+    figure that let it pass as an ordinary point would be hiding the most
+    interesting thing in the milestone.
+
+    **Right — the three tiers on one bps axis.** Tier 1 predicts and measures.
+    Tier 2 measures and cannot predict, and the artefact says why rather than
+    apologising for it. Tier 3 *withholds*: 236 third-party fills on a public
+    floor make the run a successful demonstration and a void measurement, so its
+    number is drawn outlined and struck through, labelled with its void reason,
+    and is not a data point beside the others.
+
+    `ladders` and `tiers` are read off the five committed run artefacts by
+    ``tools/m6_prediction.py``: nothing here recomputes a fill, so the figure is a
+    *view* of results and redraws byte-identically from them.
+    """
+    figure, (left, right) = plt.subplots(
+        1, 2, figsize=(11.6, 7.6), gridspec_kw={"width_ratios": (1.52, 1.0)}
+    )
+
+    # ---- left panel: per bin, predicted against realised -------------------
+    bins = np.asarray(ladders["bins"], dtype=float)
+    for row in ladders["runs"]:
+        colour = M6_COLOURS[row["run"]]
+        left.plot(
+            bins,
+            np.asarray(row["predicted_bps"], dtype=float),
+            color=colour,
+            linewidth=1.8,
+            zorder=2,
+            label=row["label"],
+        )
+        left.plot(
+            bins,
+            np.asarray(row["realised_bps"], dtype=float),
+            linestyle="none",
+            marker="o",
+            markersize=7.0,
+            markerfacecolor="none",
+            markeredgecolor=colour,
+            markeredgewidth=1.4,
+            zorder=3,
+        )
+
+    # The bin where the loop closed. Ringed first so the annotation's leader has
+    # something to point at that is visibly not one of the ordinary markers.
+    highlight = ladders["highlight"]
+    marked = next(row for row in ladders["runs"] if row["run"] == highlight["run"])
+    x_mark = float(highlight["bin"])
+    y_mark = float(marked["realised_bps"][int(highlight["bin"]) - 1])
+    left.plot(
+        [x_mark],
+        [y_mark],
+        marker="o",
+        markersize=16.0,
+        markerfacecolor="none",
+        markeredgecolor=M6_COLOURS[highlight["run"]],
+        markeredgewidth=1.7,
+        zorder=5,
+    )
+    left.annotate(
+        highlight["text"],
+        xy=(x_mark, y_mark),
+        xytext=(0.022, 0.992),
+        textcoords="axes fraction",
+        fontsize=8.0,
+        color="#8a4a28",
+        ha="left",
+        va="top",
+        arrowprops={
+            "arrowstyle": "-|>",
+            "color": M6_COLOURS[highlight["run"]],
+            "linewidth": 1.1,
+            "shrinkA": 2.0,
+            "shrinkB": 9.0,
+        },
+    )
+
+    shapes = left.legend(
+        loc="lower right",
+        bbox_to_anchor=(0.995, 0.105),
+        fontsize=8.5,
+        frameon=False,
+        title="ladder shape — the client built all three",
+        title_fontsize=8.5,
+    )
+    left.add_artist(shapes)
+    # A second legend for what the two *marks* mean, in neutral grey. Folding it
+    # into the first would give six entries for three runs and bury the reading
+    # the panel exists to support: line and marker coincide everywhere.
+    left.legend(
+        handles=[
+            Line2D(
+                [],
+                [],
+                color="#555555",
+                linewidth=1.8,
+                label="predicted — closed form, before the run",
+            ),
+            Line2D(
+                [],
+                [],
+                color="#555555",
+                linestyle="none",
+                marker="o",
+                markersize=7.0,
+                markerfacecolor="none",
+                markeredgewidth=1.4,
+                label="realised — the live venue's fills",
+            ),
+        ],
+        loc="upper right",
+        bbox_to_anchor=(0.995, 0.855),
+        fontsize=8.5,
+        frameon=False,
+    )
+
+    left.set_xlabel("bin (13, the count the policy was trained on)")
+    left.set_ylabel("cumulative arrival slippage, bps (positive = worse than arrival)")
+    left.set_title(
+        "Per bin: what the closed form said, and what the venue did",
+        fontsize=11,
+        pad=8,
+    )
+    left.set_xticks(bins)
+    left.xaxis.set_major_formatter(ticker.FormatStrFormatter("%d"))
+    left.set_xlim(0.4, 13.6)
+    # Headroom above the tallest point, reserved rather than left to the
+    # autoscaler: the annotation is placed in axes fractions and would
+    # otherwise sit on top of the wide ladder's first bin.
+    drawn = np.concatenate(
+        [np.asarray(row["realised_bps"], dtype=float) for row in ladders["runs"]]
+    )
+    low, high = float(np.nanmin(drawn)), float(np.nanmax(drawn))
+    left.set_ylim(low - 0.08 * (high - low), high + 0.42 * (high - low))
+    left.grid(color="#e6e6e6", linewidth=0.7)
+    left.set_axisbelow(True)
+
+    # ---- right panel: the three tiers on one bps axis ----------------------
+    rows = tiers["rows"]
+    positions: list[float] = []
+    cursor = 0.0
+    for index, row in enumerate(rows):
+        if index:
+            same = row["tier"] == rows[index - 1]["tier"]
+            cursor += TIER_ROW_STEP if same else TIER_GAP_STEP
+        positions.append(cursor)
+
+    values = [float(row["bps"]) for row in rows]
+    span = max(values) - min(values)
+    x_low = min(values) - 0.42 * span
+    x_high = max(values) + 0.14 * span
+
+    for tier in sorted({row["tier"] for row in rows}):
+        members = [y for y, row in zip(positions, rows) if row["tier"] == tier]
+        void = all(row["void"] for row in rows if row["tier"] == tier)
+        right.axhspan(
+            min(members) - 0.5,
+            max(members) + 0.5,
+            facecolor="#f2f2f2" if not void else "#f7f7f7",
+            edgecolor="#d2d2d2" if void else "none",
+            hatch="///" if void else None,
+            linewidth=0.0,
+            alpha=0.75,
+            zorder=0,
+        )
+        right.text(
+            x_low + 0.02 * (x_high - x_low),
+            min(members) - 0.40,
+            tiers["captions"][tier],
+            fontsize=8.0,
+            color="#444444",
+            ha="left",
+            va="top",
+            zorder=1,
+        )
+
+    for y, row in zip(positions, rows):
+        colour = M6_COLOURS[row["run"]]
+        rightwards = (row["bps"] - x_low) / (x_high - x_low) < 0.5
+        offset = 12 if rightwards else -12
+        align = "left" if rightwards else "right"
+        if row["void"]:
+            # Outlined and struck through, in grey. A withheld number drawn like
+            # a measured one is the single way this figure could mislead.
+            right.plot(
+                [row["bps"]],
+                [y],
+                marker="o",
+                markersize=12.0,
+                markerfacecolor="none",
+                markeredgecolor=VOID_EDGE,
+                markeredgewidth=1.7,
+                zorder=4,
+            )
+            right.plot(
+                [row["bps"]],
+                [y],
+                marker="x",
+                markersize=8.0,
+                color=VOID_EDGE,
+                markeredgewidth=1.7,
+                zorder=5,
+            )
+        else:
+            right.plot(
+                [row["bps"]],
+                [y],
+                marker="o",
+                markersize=9.5,
+                markerfacecolor=colour,
+                markeredgecolor="white",
+                markeredgewidth=0.9,
+                zorder=4,
+            )
+        right.annotate(
+            row["value"],
+            xy=(row["bps"], y),
+            xytext=(offset, 1),
+            textcoords="offset points",
+            fontsize=8.6,
+            color="#444444" if row["void"] else "#222222",
+            ha=align,
+            va="center",
+        )
+        right.annotate(
+            row["note"],
+            xy=(row["bps"], y),
+            xytext=(offset, -13),
+            textcoords="offset points",
+            fontsize=7.6,
+            color="#666666",
+            ha=align,
+            va="center",
+        )
+
+    right.set_yticks(positions)
+    right.set_yticklabels([row["label"] for row in rows], fontsize=9.0)
+    right.set_ylim(max(positions) + 0.85, min(positions) - 0.85)
+    right.set_xlim(x_low, x_high)
+    right.set_xlabel("arrival slippage, bps")
+    right.set_title("Three tiers of claim, one axis", fontsize=11, pad=8)
+    right.grid(axis="x", color="#e6e6e6", linewidth=0.7)
+    right.set_axisbelow(True)
+
+    figure.suptitle(
+        "M6 — a trained policy on a live book: predicted, measured, withheld",
+        fontsize=12.5,
+        y=0.985,
+    )
+    # Caption hard-wrapped by the caller and drawn in its own reserved band, for
+    # the reason the house note gives: matplotlib will not tell you that text ran
+    # off the canvas, so the width is bounded where the string is built and the
+    # space is reserved here rather than hoped for.
+    figure.text(0.008, 0.010, caption, fontsize=7.6, color="#333333", va="bottom")
+    figure.text(
+        0.992,
+        0.958,
+        provenance.short,
+        fontsize=7.5,
+        color="#666666",
+        family="monospace",
+        ha="right",
+        va="top",
+    )
+    figure.subplots_adjust(left=0.068, right=0.988, top=0.900, bottom=0.310, wspace=0.28)
 
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)

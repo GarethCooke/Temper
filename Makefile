@@ -15,7 +15,7 @@ M3_FRONTIER ?= configs/m3_frontier.yaml
 M4A_CONFIG  ?= configs/m4a_power_law.yaml
 M4B_CONFIG  ?= configs/m4b_liquidity.yaml
 
-.PHONY: help test test-verbose differential smoke sweep reference validate frontier frontier-figure frontier-check m4a-reference m4a-guarantees m4a-regression m4a m4a-figure checkpoint m4b-reference m4b-oracle m4b-differential m4b-guarantees m4b-regression m4b m4b-figure anvil-check m6-predict m6 m6-thin m6-wide m6-feeder goldens clean
+.PHONY: help test test-verbose differential smoke sweep reference validate frontier frontier-figure frontier-check m4a-reference m4a-guarantees m4a-regression m4a m4a-figure checkpoint m4b-reference m4b-oracle m4b-differential m4b-guarantees m4b-regression m4b m4b-figure m6-figure anvil-check m6-predict m6 m6-thin m6-wide m6-feeder goldens clean
 
 help:
 	@echo "make test          run the pytest suite (the gate); excludes the marked tiers"
@@ -38,6 +38,7 @@ help:
 	@echo "make m4b-regression M4b task 2: one M3 seed AND one M4a seed bitwise - ~40 min"
 	@echo "make m4b           M4b task 5: ten seeds in the stochastic-liquidity world - ~3 h"
 	@echo "make m4b-figure    redraw results/m4b_adaptivity.* from the committed result"
+	@echo "make m6-figure     redraw results/m6_prediction.* from the five committed M6 runs"
 	@echo "make checkpoint    M6 prerequisite: export M4a's median seed as a policy .npz - ~15 min"
 	@echo "make anvil-check   M6 task 0: Anvil's documented behaviour, against a live server"
 	@echo "make m6-predict    M6 task 4: the closed-form prediction, no server needed"
@@ -199,6 +200,14 @@ m4b:
 # table, so it redraws without retraining.
 m4b-figure:
 	$(PYTHON) tools/m4b_adaptivity.py --config $(M4B_CONFIG)
+
+# M6's figure. Both panels are views of the five committed run artefacts —
+# the per-bin series off each run's own bins, the tier rows off each run's
+# measurement block — so this redraws from a clean clone and touches NO venue
+# and NO network: no anvil_server, no socket, nothing to restart between
+# invocations. There is no --config because the artefacts are the input.
+m6-figure:
+	$(PYTHON) tools/m6_prediction.py
 
 # M4a task 6 — the degradation figure. Oracle curves are free; the agent's ten
 # seeds are read off the committed result, so this redraws without retraining.
