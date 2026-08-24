@@ -382,6 +382,23 @@ Anvil wire.
   point. It lands with the milestone's other §9 amendments; task 1 confirms it is not a
   discretisation artefact before it is promoted anywhere.
 
+- **Task 1 ran that confirmation and the range above is wrong at the top — the entry
+  survives, narrower (2026-08-24, task 1).** Re-read at a grid four times coarser,
+  fourteen of the seventeen lambdas agree to better than 0.05 percentage points and span
+  **45.0-46.5 %**. The top three do not agree, by up to 24 points — and escalating the
+  worst shows the coarse grid was not adding noise to a converged number: at 10^-1 the
+  premium reads **74.1 % / 58.2 % / 49.9 % / 45.7 %** as the inventory grid goes
+  401 → 801 → 1601 → 3201, so **the 49.9 % recorded above was the grid rather than the
+  problem** and the 1601-point reading was a way-point, not an answer. The cause is
+  structural rather than numerical: there the optimum puts 99.1 % of the order in the
+  first bin, the whole reaction to the signal lives in the last percent of inventory,
+  and the gross alpha it is a fraction of has fallen to 0.00104 bps. Those three lambdas
+  are also outside the region the milestone operates in — M2's rule rejects every one on
+  condition (ii), with largest bins of 93-99 % against a 50 % ceiling, because there the
+  control problem is a single trade. **So the entry is stated over the region where it
+  is resolvable, where it is tighter than the reading it replaces**, and the checking
+  cost twenty seconds against a §9 entry that would have had to be withdrawn.
+
 - **The gate that matters most is the execution premium**, not the advantage. Everything else
   in this brief follows from 45 % of the gross alpha being paid back, and if that number
   comes back at 5 % or 90 % the milestone is a different milestone and this brief is wrong

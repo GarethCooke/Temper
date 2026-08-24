@@ -1,4 +1,4 @@
-"""M5 task 0 — the alpha reference table, and the four gates it decides.
+"""M5 tasks 0 and 1 — the alpha reference table, its four gates, and its word.
 
 Oracle only. **No training code for this milestone is written, imported or run
 until every gate below is recorded green in the repo.** No agent is constructed
@@ -52,6 +52,29 @@ Four gates, and all four must be green or the milestone re-shapes:
 
 Exit status is 0 only if all four are green, both assertions hold, and the
 config's committed lambda is the one the rule selects.
+
+Task 1 — the reference, and what word it earns
+-----------------------------------------------
+One artefact, because there is one reference and it has two halves of different
+kinds. Four things, and the last two are checks M4b did not need:
+
+* **Convergence.** Grid and quadrature sweeps with a Richardson residual, and the
+  execution premium reported at each grid — 45.5 % is only a finding if it is not
+  a discretisation artefact, and that is cheap to establish now and expensive to
+  withdraw later.
+* **Sufficiency.** The same solve on a state carrying ``s_{k-1}``. The bar is float
+  noise rather than a tolerance: a leak shows up as a systematic improvement, not
+  as scatter, so a loose bar would hide exactly the failure the check exists for.
+* **Timing.** Point the signal at a shock that has **already landed** and require
+  the advantage to collapse. The milestone turns entirely on ``s_k`` being about
+  ``xi_{k+1}`` and not ``xi_k``; an off-by-one there is the easiest defect to write
+  and, if it lands in the helpful direction, it is invisible in every number the
+  milestone reports — every gate would simply be greener. This is M4a's
+  antithetic-mirror catch in its M5 form, and it runs before anything trains.
+* **Two kinds of confidence, carried rather than narrated.** M4a's certified
+  execution floor and the converged dynamic program travel with their own kind,
+  role and evidence fields (:class:`~temper.eval.reference.ReferenceKind`). A
+  reader who takes the floor for the optimum gets the milestone backwards.
 """
 
 from __future__ import annotations
@@ -93,6 +116,7 @@ from temper.oracle import (  # noqa: E402
     OneStepSignal,
     alpha_coefficient,
     alpha_optimum,
+    augmented_alpha_optimum,
     clairvoyant_price_values,
     cost_moments,
     execution_floor_bps,
@@ -116,6 +140,39 @@ MAX_PREMIUM_FRACTION = 0.75
 #: mis-attributed *term* would be six orders larger, so anything this side of a
 #: nanobasis point is float noise and anything past it is a defect.
 IDENTITY_TOLERANCE_BPS = 1.0e-9
+
+#: Task 1's sufficiency bar, and it is **float noise rather than a tolerance**.
+#: Carrying ``s_{k-1}`` cannot improve the value, because that signal predicted a
+#: shock that has already landed on inventory the previous decision fixed — its
+#: information is spent, not merely stale. A leak would show as a *systematic*
+#: improvement, so a bar set where a tolerance would sit (M4b used 1e-9 on the
+#: spread) would hide exactly the failure being looked for. Measured: the value
+#: agrees to 0.0e+00 and the column spread is 4.4e-16 bps at 401 points and
+#: 6.7e-16 at 1601 — the same order M4b measured for liquidity.
+SUFFICIENCY_TOLERANCE_BPS = 1.0e-14
+
+#: The grid task 1's cross-lambda premium stability is re-read at. Four times
+#: coarser than the reference's, which is the point: if 45.5 % were a
+#: discretisation artefact it would move here. It does, at three lambdas, and that
+#: is the finding — see :func:`render_premium_stability`.
+STABILITY_GRID_POINTS = 401
+
+#: Grids the *worst* lambda's premium is escalated through, as the witness for
+#: why the cross-lambda claim is stated over a region rather than over the grid.
+ESCALATION_GRID_POINTS = (401, 801, DEFAULT_SIGNAL_GRID_POINTS, 3201)
+
+#: A lambda counts as **resolved** when the coarse and fine grids agree on its
+#: premium fraction to within this, in percentage points of the gross alpha. Half
+#: a point is two orders inside the 45 % it is qualifying, and an order inside the
+#: 2-point span the claim is about — tight enough that a lambda which passes is
+#: genuinely settled, loose enough not to reject one for float noise.
+PREMIUM_RESOLVED_SHIFT = 0.005
+
+#: The span the resolved region's premium fractions must fit inside for the
+#: cross-lambda claim to stand at all. Pre-stated here rather than read off the
+#: measurement: without it "the premium is roughly constant" is whatever the
+#: numbers turn out to be.
+PREMIUM_RESOLVED_SPAN = 0.02
 
 #: The invented parameter, at the six values the value-of-signal curve reports.
 #: The middle one is trained; the outer ones exist because a single invented
@@ -323,27 +380,35 @@ def render_lambda_identity(experiment, static_table, rule) -> tuple[bool, dict]:
     }
 
 
-def render_convergence(experiment, signal) -> dict:
+def render_convergence(experiment, signal, floor: float) -> dict:
     """The DP's own numbers: grid, quadrature, and the ``rho -> 0`` differential.
 
     The last of the three is gate 1 and the most valuable check in the milestone,
     because it ties every piece of new machinery to a number that *was* certified.
     The first two are what make its tolerance readable: a residual of 2e-6 bps
     means nothing until the grid it was measured on is shown to be converged.
+
+    Task 1 adds the **execution premium at each grid**. 45.5 % of the gross alpha
+    is on its way to being a §9 entry, and an entry that turns out to be a
+    discretisation artefact has to be withdrawn — which costs far more than
+    reading the number off four solves that were being done anyway.
     """
     market = experiment.case.market
     order_size = experiment.case.order_size
     lam = experiment.lambda_risk
 
-    print("## The dynamic program, converged\n")
+    print("## Task 1 — the reference, and what word it earns\n")
+    print("### Grid and quadrature\n")
     grid = {}
+    premium = {}
     for points in (201, 401, 801, DEFAULT_SIGNAL_GRID_POINTS):
         started = time.perf_counter()
-        grid[points] = alpha_optimum(
-            market, order_size, lam, signal, points=points
-        ).objective_bps
+        optimum = alpha_optimum(market, order_size, lam, signal, points=points)
+        grid[points] = optimum.objective_bps
+        premium[points] = (optimum.execution_bps - floor) / -optimum.alpha_bps
         print(
-            f"- {points:5d} inventory points: **{grid[points]:.6f} bps** "
+            f"- {points:5d} inventory points: **{grid[points]:.6f} bps**, "
+            f"execution premium **{premium[points]:.3%}** of the gross alpha "
             f"({time.perf_counter() - started:.1f} s)"
         )
     extrapolant, residual = richardson_residual(
@@ -389,8 +454,22 @@ def render_convergence(experiment, signal) -> dict:
         "0.01` this noise is worth `A rho E[s] h ~ 1e-17` bps to the DP, which is "
         "two orders below the identity residual and eleven below the grid.\n"
     )
+    span = max(premium.values()) - min(premium.values())
+    print(
+        f"- **The execution premium moves {span:.3%} across a factor of eight in "
+        f"the grid** — {premium[201]:.3%} at 201 points against "
+        f"{premium[DEFAULT_SIGNAL_GRID_POINTS]:.3%} at "
+        f"{DEFAULT_SIGNAL_GRID_POINTS}, monotone and settling. At *this* lambda it "
+        f"is a property of the problem rather than of the discretisation, which is "
+        f"the first half of what a 45 %-of-gross-alpha finding has to establish "
+        f"before it is promoted anywhere. The second half — whether the same is "
+        f"true across the grid — is below, and it is where the answer stops being "
+        f"a formality.\n"
+    )
     return {
         "grid": {str(k): v for k, v in grid.items()},
+        "premium_fraction_by_grid": {str(k): v for k, v in premium.items()},
+        "premium_fraction_grid_span": span,
         "richardson_extrapolant_bps": extrapolant,
         "richardson_residual_bps": residual,
         "quadrature": {str(k): v for k, v in quadrature.items()},
@@ -575,6 +654,316 @@ def render_clairvoyant_gate(
         "margin_bps": margin,
         "margin_as_fraction_of_advantage": margin / advantage,
         "convexity_holds": convex_holds,
+    }
+
+
+def render_sufficiency(experiment, signal) -> tuple[bool, dict]:
+    """Task 1 — ``(k, x_k, s_k)`` is a sufficient statistic, measured.
+
+    The reference is the optimum over **all** adapted policies only if carrying
+    more of the past cannot help. Under an i.i.d. one-step-ahead signal it cannot,
+    and the reason is sharper than M4b's: ``s_{k-1}`` predicted ``xi_k``, that
+    shock has already landed, and the inventory it was charged on was fixed by the
+    previous decision. The information is **spent**, not merely stale.
+
+    The bar is float noise. A leak — a signal with memory, a seam that lets a past
+    draw reach a future one — produces a *systematic* improvement rather than
+    scatter, so a bar set where a tolerance would sit would hide it.
+    """
+    market = experiment.case.market
+    order_size = experiment.case.order_size
+    lam = experiment.lambda_risk
+
+    print("### Sufficiency — carrying the spent signal buys nothing\n")
+    rows = {}
+    green = True
+    for points in (STABILITY_GRID_POINTS, DEFAULT_SIGNAL_GRID_POINTS):
+        started = time.perf_counter()
+        plain = alpha_optimum(
+            market, order_size, lam, signal, points=points
+        ).objective_bps
+        augmented = augmented_alpha_optimum(
+            market, order_size, lam, signal, points=points
+        )
+        difference = augmented.objective_bps - plain
+        ok = (
+            abs(difference) <= SUFFICIENCY_TOLERANCE_BPS
+            and augmented.column_spread <= SUFFICIENCY_TOLERANCE_BPS
+        )
+        green = green and ok
+        rows[points] = augmented.as_dict() | {
+            "plain_bps": plain,
+            "difference_bps": difference,
+            "green": ok,
+        }
+        print(
+            f"- {points:5d} points: plain **{plain:.9f}**, augmented "
+            f"**{augmented.objective_bps:.9f}**, difference "
+            f"**{difference:+.1e} bps**, column spread "
+            f"**{augmented.column_spread:.1e} bps** — "
+            f"{'**GREEN**' if ok else '**RED**'} "
+            f"({time.perf_counter() - started:.1f} s)"
+        )
+    print(
+        f"- Bar **{SUFFICIENCY_TOLERANCE_BPS:g} bps**, and it is float noise rather "
+        f"than a tolerance: an augmented state that *improved* the value would mean "
+        f"the seam leaks, and a leak is systematic. M4b measured the same order "
+        f"(4.4e-16) for liquidity."
+    )
+    print(
+        "- The column spread is the sharper half. It says the continuation is the "
+        "same array for **every** previous signal, not merely that two scalars "
+        "agreed at one inventory — and it has content only because "
+        "`transition_quadrature` is a genuine `(nodes, nodes)` object that *could* "
+        "have carried a dependence.\n"
+    )
+    return green, rows
+
+
+def render_timing(experiment, signal, floor: float, advantage: float) -> tuple[bool, dict]:
+    """Task 1 — point the signal at a shock that has already landed.
+
+    The check M4b did not need and this milestone cannot do without. Everything
+    M5 claims rests on ``s_k`` being about ``xi_{k+1}`` and not ``xi_k``. An
+    off-by-one in the seam's timing is the easiest defect to write here, and it is
+    invisible in every number the milestone reports if it lands in the helpful
+    direction: the advantage would simply be bigger and every gate would still be
+    green.
+
+    So the milestone's own machinery is pointed one bin the wrong way and required
+    to find **nothing**. It must, and for a reason that is arithmetic rather than
+    empirical: at lag 0 the alpha term prices the inventory carried *into* the bin,
+    which the previous decision already fixed, so it is constant in the action and
+    mean zero over the signal. If it comes back non-zero, the term is reaching a
+    decision it should not be able to reach.
+    """
+    market = experiment.case.market
+    order_size = experiment.case.order_size
+    lam = experiment.lambda_risk
+    reference = cost_moments(
+        power_law_optimum(market, order_size, lam), market
+    ).objective(lam)
+
+    landed = OneStepSignal(signal.correlation(), bins_ahead=0)
+    uninformative = OneStepSignal(0.0)
+    already = alpha_optimum(market, order_size, lam, landed)
+    blind = alpha_optimum(market, order_size, lam, uninformative)
+    collapsed = reference - already.objective_bps
+    # The collapse has to be to the *rho = 0* value, not merely to something
+    # small: at rho = 0 the DP still carries the grid's own discretisation, and
+    # calling that residual "an advantage of 1.8e-06 bps" would be reading noise.
+    # Float noise, not a tolerance — the same bar the sufficiency check uses, and
+    # for the same reason. At 1601 points the two solves land bit-identical; at
+    # coarser grids they differ by an ulp, because the lag-0 path threads a state
+    # term through additions the lag-1 path does not. An ulp is the answer "worth
+    # nothing"; anything a reader could see would not be.
+    green = (
+        abs(already.objective_bps - blind.objective_bps) <= SUFFICIENCY_TOLERANCE_BPS
+        and abs(already.alpha_bps) < 1.0e-12
+        and abs(collapsed) < 1.0e-4 * advantage + 2.0e-06
+    )
+
+    print("### Timing — a signal about a shock that has already landed is worth zero\n")
+    print(
+        f"- Same rho ({signal.correlation()}), same machinery, one bin the wrong "
+        f"way: `s_k` made to predict `xi_k` instead of `xi_{{k+1}}`. The dynamic "
+        f"program returns **{already.objective_bps:.9f} bps** against the "
+        f"uninformative `rho = 0` solve's **{blind.objective_bps:.9f}** — "
+        f"{'**bit-identical**' if already.objective_bps == blind.objective_bps else f'**{already.objective_bps - blind.objective_bps:+.1e} bps** apart, one ulp'}."
+    )
+    print(
+        f"- Its alpha term is **{already.alpha_bps:+.2e} bps**, and the advantage "
+        f"it would license is **{collapsed:+.2e} bps** — against the model's "
+        f"{advantage:.6f}. That is the grid's own discretisation with the sign it "
+        f"has at `rho = 0`, not a small advantage: **{abs(collapsed) / advantage:.5%}** "
+        f"of the real one."
+    )
+    print(
+        f"- {'**GREEN**' if green else '**RED**'}. The whole milestone is one index "
+        f"apart from measuring nothing, and this is the arithmetic that says which "
+        f"side of it the seam is on — run before anything trains, which is the only "
+        f"time it is cheap.\n"
+    )
+    return green, {
+        "green": green,
+        "rho": signal.correlation(),
+        "bins_ahead": 0,
+        "objective_bps": already.objective_bps,
+        "uninformative_objective_bps": blind.objective_bps,
+        "bit_identical_to_uninformative": (
+            already.objective_bps == blind.objective_bps
+        ),
+        "alpha_bps": already.alpha_bps,
+        "collapsed_advantage_bps": collapsed,
+        "collapsed_as_fraction_of_advantage": collapsed / advantage,
+    }
+
+
+def render_reference_kinds(row) -> dict:
+    """Task 1 — two references, one artefact, and each carries its own word."""
+    kinds = row.reference_kinds
+    print("### Two references, and which word each earned\n")
+    print("| reference | value, bps | kind | certified | what it is |")
+    print("| --- | ---: | :---: | :---: | --- |")
+    for name, kind in kinds.items():
+        role = kind.role.split(".")[0] + "."
+        print(
+            f"| `{name}` | {kind.value_bps:.6f} | **{kind.kind}** | "
+            f"{'yes' if kind.certified else 'no'} | {role} |"
+        )
+    print(
+        f"\n- `execution_floor` — {kinds['execution_floor'].evidence}"
+    )
+    print(f"- `adaptive_optimum` — {kinds['adaptive_optimum'].evidence}")
+    print(
+        "- **They are not interchangeable and the artefact carries the difference "
+        "rather than narrating it.** A reader who takes the floor for the optimum "
+        "makes the agent's job look seven times larger than it is; one who takes "
+        "the optimum for a certified object claims a Cholesky factorisation for a "
+        "number that has a Richardson residual. `ReferenceKind` admits exactly two "
+        "words and refuses a `certified` flag that contradicts the one it was "
+        "given.\n"
+    )
+    return {name: kind.as_dict() for name, kind in kinds.items()}
+
+
+def render_premium_stability(experiment, signal, table, lambdas) -> dict:
+    """Task 1 — the cross-lambda premium range, re-read at a coarser grid.
+
+    The brief's session notes flag 44.9-49.9 % across seventeen lambdas as a
+    candidate §9 entry: it is what turns decomposed grading from an accommodation
+    for one operating point into a structural claim. An entry that turns out to be
+    a discretisation artefact has to be withdrawn, so the range is measured again
+    on a grid four times coarser before anything is promoted.
+
+    **And the check fires.** Fourteen of the seventeen lambdas agree between the
+    grids to four decimal places; the top three do not, by up to 24 percentage
+    points. Escalating the worst one shows why and shows which reading was wrong:
+    the coarse grid is not adding noise to a converged number, the *fine* grid had
+    not converged either. At ``lambda = 10^-1`` the optimum liquidates 99 % of the
+    order in the first bin, the gross alpha falls to 0.001 bps, and the premium
+    becomes a difference of quantities the inventory grid cannot resolve.
+
+    So the claim is stated over the region where it is measured rather than over
+    the region where it was convenient, and the top of the earlier range goes with
+    it: **the 49.9 % was the grid, not the problem**, and the true span over the
+    resolved region is *narrower* than the number the session note recorded. That
+    is the entry getting stronger for being checked, which is the outcome this
+    check was cheap insurance against not getting.
+    """
+    market = experiment.case.market
+    order_size = experiment.case.order_size
+    ordered = sorted(lambdas)
+    fine = [row.premium_fraction for row in table]
+
+    started = time.perf_counter()
+    coarse = []
+    for lam in ordered:
+        optimum = alpha_optimum(
+            market, order_size, lam, signal, points=STABILITY_GRID_POINTS
+        )
+        floor = execution_floor_bps(market, order_size, lam)
+        coarse.append((optimum.execution_bps - floor) / -optimum.alpha_bps)
+
+    shifts = [abs(c - f) for c, f in zip(coarse, fine, strict=True)]
+    resolved = [s <= PREMIUM_RESOLVED_SHIFT for s in shifts]
+    settled = [f for f, ok in zip(fine, resolved, strict=True) if ok]
+    span = max(settled) - min(settled)
+    green = span <= PREMIUM_RESOLVED_SPAN
+
+    print("### The cross-lambda premium range, and where it is resolvable\n")
+    print(
+        f"| λ | premium @ {DEFAULT_SIGNAL_GRID_POINTS} | premium @ "
+        f"{STABILITY_GRID_POINTS} | shift | max bin, M4a | resolved |"
+    )
+    print("| --- | ---: | ---: | ---: | ---: | :---: |")
+    for lam, row, f, c, shift, ok in zip(
+        ordered, table, fine, coarse, shifts, resolved, strict=True
+    ):
+        print(
+            f"| {lam:.3e} | {f:.3%} | {c:.3%} | {shift:+.3%} | "
+            f"{row.optimal.max_bin_fraction:.1%} | {'✓' if ok else '**✗**'} |"
+        )
+
+    print(
+        f"\n- **{sum(resolved)} of {len(fine)} lambdas are resolved** — the two "
+        f"grids agree to better than {PREMIUM_RESOLVED_SHIFT:.1%} of the gross "
+        f"alpha — and across those the premium spans **{min(settled):.1%} to "
+        f"{max(settled):.1%}**, a range of {span:.2%} against a pre-stated "
+        f"{PREMIUM_RESOLVED_SPAN:.0%}. {'**GREEN**' if green else '**RED**'}."
+    )
+
+    worst_index = max(range(len(shifts)), key=lambda i: shifts[i])
+    worst_lambda = ordered[worst_index]
+    escalation = {}
+    for points in ESCALATION_GRID_POINTS:
+        optimum = alpha_optimum(
+            market, order_size, worst_lambda, signal, points=points
+        )
+        floor = execution_floor_bps(market, order_size, worst_lambda)
+        escalation[points] = (optimum.execution_bps - floor) / -optimum.alpha_bps
+    print(
+        f"- **The three that are not resolved are not noisy — they are "
+        f"unconverged, at both grids.** Escalating the worst, λ = "
+        f"{worst_lambda:.3e}: "
+        + ", ".join(f"{points} → {value:.1%}" for points, value in escalation.items())
+        + f". The {DEFAULT_SIGNAL_GRID_POINTS}-point reading of "
+        f"{fine[worst_index]:.1%} is itself a way-point, not an answer, so **the "
+        f"top of the range recorded in the brief's session notes was the grid "
+        f"rather than the problem** and this is where it is corrected."
+    )
+    print(
+        f"- Why there and nowhere else: at λ = {worst_lambda:.3e} the optimum puts "
+        f"**{table[worst_index].optimal.max_bin_fraction:.1%}** of the order in the "
+        f"first bin, so the whole reaction to the signal lives in the last percent "
+        f"of inventory, and the gross alpha it is a fraction of has fallen to "
+        f"{table[worst_index].alpha_available:.5f} bps. That is a difference of "
+        f"small numbers on a grid whose spacing is "
+        f"{order_size / (DEFAULT_SIGNAL_GRID_POINTS - 1):.0f} shares."
+    )
+    print(
+        f"- **Those lambdas are outside the region the milestone operates in.** "
+        f"M2's selection rule rejects every one of them on condition (ii) — the "
+        f"optimum's largest bin is "
+        f"{min(table[i].optimal.max_bin_fraction for i, ok in enumerate(resolved) if not ok):.0%}"
+        f"–{max(table[i].optimal.max_bin_fraction for i, ok in enumerate(resolved) if not ok):.0%} "
+        f"of the order against a 50 % ceiling — because there the control problem "
+        f"is a single trade and there is nothing to schedule. The claim is "
+        f"therefore stated over the resolved region, where it is **tighter** than "
+        f"the reading it replaces: the decomposition is needed at every lambda the "
+        f"testbed is discriminative at, which is what makes it structural rather "
+        f"than an accommodation for the one point the rule selected "
+        f"({time.perf_counter() - started:.0f} s).\n"
+    )
+    return {
+        "green": green,
+        "fine_grid_points": DEFAULT_SIGNAL_GRID_POINTS,
+        "coarse_grid_points": STABILITY_GRID_POINTS,
+        "resolved_shift_bar": PREMIUM_RESOLVED_SHIFT,
+        "resolved_span_bar": PREMIUM_RESOLVED_SPAN,
+        "resolved_count": sum(resolved),
+        "resolved_range": [min(settled), max(settled)],
+        "resolved_span": span,
+        "unresolved_lambdas": [
+            lam for lam, ok in zip(ordered, resolved, strict=True) if not ok
+        ],
+        "worst_lambda": worst_lambda,
+        "worst_lambda_escalation": {
+            str(k): v for k, v in escalation.items()
+        },
+        "by_lambda": [
+            {
+                "lambda": lam,
+                "fine": f,
+                "coarse": c,
+                "shift": shift,
+                "resolved": ok,
+                "max_bin_fraction": row.optimal.max_bin_fraction,
+            }
+            for lam, row, f, c, shift, ok in zip(
+                ordered, table, fine, coarse, shifts, resolved, strict=True
+            )
+        ],
     }
 
 
@@ -896,11 +1285,16 @@ def main() -> int:
         experiment, selected, floor, advantage, args.clairvoyant_paths
     )
 
-    # --- convergence and the curve ------------------------------------------
-    convergence = render_convergence(experiment, signal)
+    # --- task 1: the reference, and what word it earns -----------------------
+    convergence = render_convergence(experiment, signal, floor)
+    sufficiency_green, sufficiency = render_sufficiency(experiment, signal)
+    timing_green, timing = render_timing(experiment, signal, floor, advantage)
+    kinds = render_reference_kinds(selected)
+    stability = render_premium_stability(experiment, signal, table, grid)
+    stability_green = stability["green"]
     curve = render_value_of_signal(experiment, floor)
 
-    green = (
+    gates_green = (
         rho_zero_green
         and worth_it
         and premium_green
@@ -908,7 +1302,12 @@ def main() -> int:
         and lambda_green
         and identity_green
     )
-    print(f"## Verdict — {'all four gates GREEN' if green else 'NOT all gates green'}\n")
+    green = (
+        gates_green and sufficiency_green and timing_green and stability_green
+    )
+    print(
+        f"## Verdict — {'tasks 0 and 1 GREEN' if green else 'NOT everything is green'}\n"
+    )
     print(
         f"- Gate 1 (`rho -> 0` vs certified): "
         f"{'GREEN' if rho_zero_green else 'RED'}\n"
@@ -921,18 +1320,26 @@ def main() -> int:
         f"{'HELD' if lambda_green else 'FAILED'}\n"
         f"- Assertion: the decomposition's identity closes: "
         f"{'HELD' if identity_green else 'FAILED'}\n"
+        f"- Task 1: `(k, x_k, s_k)` sufficient: "
+        f"{'GREEN' if sufficiency_green else 'RED'}\n"
+        f"- Task 1: an already-landed signal is worth zero: "
+        f"{'GREEN' if timing_green else 'RED'}\n"
+        f"- Task 1: the premium is flat across every resolvable lambda: "
+        f"{'GREEN' if stability_green else 'RED'}\n"
     )
     if not green:
         print(
             "The brief's instruction when a gate is red is to report it and "
             "re-shape the milestone here, with the reason — not to relax the bar, "
             "not to raise rho, and not to adjust the brief to fit what was "
-            "measured."
+            "measured. A red task-1 check is different in kind: sufficiency and "
+            "timing are properties of the seam, not thresholds, and a red one "
+            "means the reference is wrong rather than the milestone."
         )
 
     document = {
         "milestone": "M5",
-        "task": "0",
+        "task": "0+1",
         "config": experiment.as_dict(),
         "provenance": stamp(Path(args.config), REPO_ROOT).as_dict(),
         "signal": signal.as_dict(),
@@ -972,7 +1379,19 @@ def main() -> int:
                 "node_residual_bps": optimum.node_identity_residual_bps,
             },
         },
+        "task_1": {
+            "green": sufficiency_green and timing_green,
+            "sufficiency": {
+                "green": sufficiency_green,
+                "bar_bps": SUFFICIENCY_TOLERANCE_BPS,
+                "by_grid": {str(k): v for k, v in sufficiency.items()},
+            },
+            "timing": timing,
+            "reference_kinds": kinds,
+            "premium_stability": stability,
+        },
         "all_green": green,
+        "gates_green": gates_green,
         "convergence": convergence,
         "feasible_refinement": refinement
         | {"gap_fraction": refinement["gap_bps"] / advantage},

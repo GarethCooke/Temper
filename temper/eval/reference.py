@@ -1058,6 +1058,56 @@ def signal_static_table(
 
 
 @dataclass(frozen=True)
+class ReferenceKind:
+    """What kind of confidence a reference number carries, carried **with** it.
+
+    M5 is the first milestone whose artefact holds two references of different
+    kinds at once — M4a's **certified** execution floor and the **converged**
+    dynamic program — and prose is not strong enough to keep them apart. A reader
+    who takes the floor for the optimum, or the optimum for a certified object,
+    gets the milestone backwards in the two ways that matter: the first makes the
+    agent look like it has 0.56 bps to find where it has 0.08, and the second
+    claims a certificate for a number that has a Richardson residual instead.
+
+    So each number travels with its kind, its role, and the evidence behind the
+    word. ``certified`` is a boolean because it is a boolean: M4a earned it with a
+    Cholesky factorisation and a KKT residual, and a stochastic dynamic program
+    has no such object no matter how well it has converged.
+    """
+
+    name: str
+    value_bps: float
+    #: ``"certified"`` or ``"converged"``. One of exactly two words, deliberately.
+    kind: str
+    certified: bool
+    #: What this number *is* in the milestone — the sentence that stops a reader
+    #: using it as the other one.
+    role: str
+    #: What earns the word. Named checks, not adjectives.
+    evidence: str
+
+    def __post_init__(self) -> None:
+        if self.kind not in ("certified", "converged"):
+            raise ValueError(
+                f"a reference kind is 'certified' or 'converged', got {self.kind!r}"
+            )
+        if self.certified != (self.kind == "certified"):
+            raise ValueError(
+                f"kind {self.kind!r} contradicts certified={self.certified}"
+            )
+
+    def as_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "value_bps": self.value_bps,
+            "kind": self.kind,
+            "certified": self.certified,
+            "role": self.role,
+            "evidence": self.evidence,
+        }
+
+
+@dataclass(frozen=True)
 class AlphaReferenceRow:
     """One lambda in the alpha-aware world: four schedules, a policy, and a floor.
 
@@ -1191,6 +1241,57 @@ class AlphaReferenceRow:
         """
         return self.execution_premium / self.alpha_available
 
+    @property
+    def reference_kinds(self) -> dict[str, ReferenceKind]:
+        """The row's two references, each carrying the word it earned.
+
+        Task 1's third requirement, and the reason it is a structure rather than a
+        paragraph: both numbers appear in the same report, in the same units, one
+        bounding the other's execution half, and only one of them has a
+        certificate.
+        """
+        floor = ReferenceKind(
+            name="execution_floor",
+            value_bps=self.execution_floor,
+            kind="certified",
+            certified=True,
+            role=(
+                "M4a's optimum on the schedule-varying objective. A rigorous lower "
+                "bound on E[impact + risk] for ANY policy, adapted or not, by "
+                "convexity and Jensen — the signal appears in neither term. It is "
+                "M5's hard red flag and it is NOT the optimum: the objective it "
+                "bounds is the whole objective less alpha and less the "
+                "schedule-invariant constant."
+            ),
+            evidence=(
+                "Cholesky-PD Hessian, relative KKT residual 1.2e-15 against a 1e-12 "
+                "bar, 3 600 perturbations uphill, and an independent bisection "
+                "solver agreeing to 3.1e-15 of X "
+                "(tests/test_power_law_certificate.py)."
+            ),
+        )
+        optimum = ReferenceKind(
+            name="adaptive_optimum",
+            value_bps=self.adaptive_bps,
+            kind="converged",
+            certified=False,
+            role=(
+                "The optimum over all policies that see the signal, and the bottom "
+                "rung of the milestone's denominator. What an agent is graded "
+                "against. NOT certified and not bracketed: M4b could bound its DP "
+                "from below with perfect information and M5 cannot, because that "
+                "relaxation is three orders too loose here."
+            ),
+            evidence=(
+                "Grid and quadrature convergence reported with a Richardson "
+                "residual; (k, x_k, s_k) sufficiency measured on an augmented state "
+                "carrying s_{k-1}; the decomposition identity asserted at every "
+                "node; a feasible upper bound from the DP's own greedy policy; and "
+                "the value returning M4a's certified number at rho = 0."
+            ),
+        )
+        return {floor.name: floor, optimum.name: optimum}
+
     def as_dict(self) -> dict:
         document = {
             "lambda": self.lambda_risk,
@@ -1217,6 +1318,10 @@ class AlphaReferenceRow:
                     None if self.feasible is None else self.feasible.as_dict()
                 ),
                 "mean_schedule_max_bin": self.mean_schedule_max_bin,
+                "reference_kinds": {
+                    name: kind.as_dict()
+                    for name, kind in self.reference_kinds.items()
+                },
             }
         return document
 

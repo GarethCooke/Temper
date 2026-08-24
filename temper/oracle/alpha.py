@@ -233,10 +233,14 @@ def signal_path_objective_bps(
     penalty = lambda_risk * inventory_penalty_scale(market) * np.sum(
         holdings**2, axis=-1
     )
-    # h_0 is 1 for every schedule and xi_0 is predicted by nothing, so the alpha
-    # sum starts at the second bin and reads the signal that preceded it.
+    # h_0 is 1 for every schedule and xi_0 is predicted by nothing, so at the
+    # model's lag the alpha sum starts at the second bin and reads the signal that
+    # preceded it. At lag 0 — task 1's already-landed instrument — every bin's
+    # holding pairs with its own signal, and none of those holdings is a decision
+    # the signal could have influenced, which is the whole point.
+    lag = signal.lag
     alpha = -alpha_coefficient(market) * signal.correlation() * np.sum(
-        holdings[..., 1:] * s[..., :-1], axis=-1
+        holdings[..., lag:] * s[..., : market.n_bins - lag], axis=-1
     )
     return temporary + penalty + alpha + schedule_invariant_bps(market, order_size)
 
@@ -265,7 +269,7 @@ def expected_alpha_bps(
     return float(
         -alpha_coefficient(market)
         * signal.correlation()
-        * np.sum(holdings[1:] * signal.mean())
+        * np.sum(holdings[signal.lag :] * signal.mean())
     )
 
 
@@ -373,6 +377,10 @@ class AlphaOptimum:
     rho: float
     market: Market = field(repr=False)
     order_size: float = field(repr=False)
+    #: Bins ahead the signal pointed. 1 is the model; 0 is task 1's already-landed
+    #: instrument, where the alpha term is a *state* cost no action can move and
+    #: the whole advantage must therefore collapse to zero.
+    bins_ahead: int = 1
     #: ``continuations[k]`` is ``E_s[V_k(y, s)]`` on :attr:`grid` — the value of
     #: *arriving* at bin ``k`` holding ``y``, before that bin's signal is
     #: revealed. ``continuations[0](X)`` is the answer.
@@ -409,8 +417,13 @@ class AlphaOptimum:
             )
         beta = self.market.temp_exponent
         coefficient = power_law_charge(self.market, self.order_size).scale
+        # At lag 0 the alpha term prices inventory the *previous* decision fixed,
+        # so it is constant in this bin's action and the policy correctly ignores
+        # the signal entirely. That is what makes the advantage collapse.
         alpha_scale = (
             alpha_coefficient(self.market) * self.rho / self.order_size
+            if self.bins_ahead == 1
+            else 0.0
         )
 
         inventory = np.full(s.shape[0], self.order_size)
@@ -447,6 +460,7 @@ class AlphaOptimum:
             "quadrature_nodes": self.quadrature_nodes,
             "signal": self.signal_name,
             "rho": self.rho,
+            "bins_ahead": self.bins_ahead,
             "certified": False,
             "reference_kind": "converged, with a certified floor under its execution half",
         }
@@ -505,7 +519,21 @@ def alpha_optimum(
     beta = market.temp_exponent
     coefficient = power_law_charge(market, order_size).scale
     penalty = lambda_risk * inventory_penalty_scale(market)
-    alpha_scale = alpha_coefficient(market) * signal.correlation() / order_size
+    lag = signal.lag
+    # Two places the alpha term can be priced, and which one it is *is* the
+    # milestone. At lag 1 it lands on the inventory carried **out** of the bin, so
+    # it is a function of the action and the policy can move it. At lag 0 it lands
+    # on the inventory carried **in**, which the previous decision already fixed:
+    # a state cost, constant in the action, mean zero over the signal, and worth
+    # exactly nothing to anybody.
+    action_scale = (
+        alpha_coefficient(market) * signal.correlation() / order_size
+        if lag == 1
+        else 0.0
+    )
+    state_scale = (
+        0.0 if lag == 1 else alpha_coefficient(market) * signal.correlation()
+    )
     grid = np.linspace(0.0, order_size, points)
     signal_nodes, quadrature = signal.quadrature(nodes)
     n_nodes = signal_nodes.size
@@ -513,11 +541,12 @@ def alpha_optimum(
     holdings = (grid / order_size)[:, None]
 
     # The last bin: the terminal constraint leaves no choice, so the stage value
-    # is the charge on the whole remaining position, and no alpha is paid or
-    # earned on it because there is no inventory left to carry.
+    # is the charge on the whole remaining position. At the model's lag no alpha
+    # is paid or earned on it because there is no inventory left to carry; at lag
+    # 0 the bin still pays its own state cost, which is the same nothing.
     impact = np.repeat(coefficient * holdings ** (1.0 + beta), n_nodes, axis=1)
     risk = np.repeat(penalty * holdings**2, n_nodes, axis=1)
-    alpha = np.zeros((points, n_nodes))
+    alpha = -state_scale * holdings * signal_nodes[None, :] * np.ones((points, n_nodes))
     value = impact + risk + alpha
     node_residual = 0.0
 
@@ -531,7 +560,9 @@ def alpha_optimum(
 
     flat_inventory = np.repeat(grid, n_nodes)
     flat_holdings = flat_inventory / order_size
-    linear = np.tile(-alpha_scale * signal_nodes, points)
+    flat_nodes = np.tile(signal_nodes, points)
+    linear = -action_scale * flat_nodes
+    state_alpha = -state_scale * flat_holdings * flat_nodes
     for bin_index in range(market.n_bins - 2, -1, -1):
         trade, best = _stage_minimum(
             flat_inventory,
@@ -552,9 +583,13 @@ def alpha_optimum(
             + np.interp(remaining, grid, risk_continuation)
         ).reshape(points, n_nodes)
         alpha = (
-            linear * remaining + np.interp(remaining, grid, alpha_continuation)
+            state_alpha
+            + linear * remaining
+            + np.interp(remaining, grid, alpha_continuation)
         ).reshape(points, n_nodes)
-        value = (penalty * flat_holdings**2 + best).reshape(points, n_nodes)
+        value = (penalty * flat_holdings**2 + state_alpha + best).reshape(
+            points, n_nodes
+        )
 
         # The identity, at every node of every stage. The three companions were
         # accumulated through three separate interpolations of arrays that sum to
@@ -592,10 +627,146 @@ def alpha_optimum(
         quadrature_nodes=n_nodes,
         signal_name=signal.name,
         rho=signal.correlation(),
+        bins_ahead=lag,
         market=market,
         order_size=order_size,
         continuations=tuple(continuations),
         grid=grid,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Sufficiency — the same solve on a state that carries the spent signal
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class AugmentedAlphaOptimum:
+    """The same dynamic program on a state that also carries ``s_{k-1}``.
+
+    M5's reference rests on ``(k, x_k, s_k)`` being a sufficient statistic: if it
+    is, the dynamic program over that state is the optimum over **all** adapted
+    policies rather than merely over the ones with that observation, and "the
+    agent could have done better with a richer observation" is answerable instead
+    of arguable. Under an i.i.d. one-step-ahead signal it is sufficient, for a
+    reason worth spelling out because it is *not* the liquidity one: ``s_{k-1}``
+    predicted ``xi_k``, that shock has already landed, and the inventory it was
+    charged on was fixed by the previous decision. The information is not merely
+    stale — it has been **spent**.
+
+    That is checked, not asserted. This solve carries ``s_{k-1}`` as a genuine
+    state coordinate — the continuation is a value **per (inventory, previous
+    node)** and the expectation is taken against
+    :meth:`~temper.oracle.signal.AlphaSignal.transition_quadrature`'s conditional
+    weights — so a signal whose transition depended on the previous draw would
+    produce columns that differ and a strictly better value.
+
+    A value that *improves* is therefore not a discovery about markets: it means
+    the seam leaks. :attr:`column_spread` is the direct measurement of the same
+    thing and is the sharper of the two — it says the continuations are equal for
+    every previous signal, not merely that two scalars agreed at one point.
+
+    **The bar on both is float noise, not a tolerance.** A leak shows up as a
+    systematic improvement rather than as scatter, so a loose bar would hide
+    exactly the failure the check exists for.
+    """
+
+    objective_bps: float
+    #: Largest spread across the previous-signal columns of any continuation, in
+    #: bps. Zero to float precision exactly when the signal is memoryless *and*
+    #: points at a shock that has not yet landed.
+    column_spread: float
+    grid_points: int
+    quadrature_nodes: int
+    bins_ahead: int
+
+    def as_dict(self) -> dict:
+        return {
+            "objective_bps": self.objective_bps,
+            "column_spread_bps": self.column_spread,
+            "grid_points": self.grid_points,
+            "quadrature_nodes": self.quadrature_nodes,
+            "bins_ahead": self.bins_ahead,
+        }
+
+
+def augmented_alpha_optimum(
+    market: Market,
+    order_size: float,
+    lambda_risk: float,
+    signal: AlphaSignal,
+    *,
+    points: int = DEFAULT_SIGNAL_GRID_POINTS,
+    nodes: int = DEFAULT_SIGNAL_QUADRATURE_NODES,
+) -> AugmentedAlphaOptimum:
+    """:func:`alpha_optimum` with ``s_{k-1}`` in the state — task 1's check."""
+    if market.n_bins < 2:
+        raise ValueError(f"the dynamic program needs n_bins >= 2, got {market.n_bins}")
+    if points < 3:
+        raise ValueError(f"the inventory grid needs at least three points, got {points}")
+
+    beta = market.temp_exponent
+    coefficient = power_law_charge(market, order_size).scale
+    penalty = lambda_risk * inventory_penalty_scale(market)
+    lag = signal.lag
+    action_scale = (
+        alpha_coefficient(market) * signal.correlation() / order_size
+        if lag == 1
+        else 0.0
+    )
+    state_scale = (
+        0.0 if lag == 1 else alpha_coefficient(market) * signal.correlation()
+    )
+    grid = np.linspace(0.0, order_size, points)
+    signal_nodes, transition = signal.transition_quadrature(nodes)
+    n_nodes = signal_nodes.size
+
+    holdings = (grid / order_size)[:, None]
+
+    # V_{N-1}(x, s_j): the terminal constraint leaves no choice.
+    values = (
+        penalty * holdings**2
+        + coefficient * holdings ** (1.0 + beta)
+        - state_scale * holdings * signal_nodes[None, :]
+    ) * np.ones((points, n_nodes))
+    # W_{N-1}(y, previous p) = sum_j Q[p, j] V(y, s_j) — one column per previous
+    # node.
+    continuation = values @ transition.T
+    spread = float(np.ptp(continuation, axis=1).max())
+
+    flat_inventory = np.repeat(grid, n_nodes)
+    flat_holdings = flat_inventory / order_size
+    flat_nodes = np.tile(signal_nodes, points)
+    linear = -action_scale * flat_nodes
+    state_alpha = -state_scale * flat_holdings * flat_nodes
+    for _ in range(market.n_bins - 2, -1, -1):
+        # State (x_i, current node j) looks up the continuation column indexed by
+        # *its own* node, because at the next bin this draw is the previous one.
+        best = np.empty(points * n_nodes)
+        for node in range(n_nodes):
+            select = slice(node, None, n_nodes)
+            _, best[select] = _stage_minimum(
+                flat_inventory[select],
+                coefficient,
+                linear[select],
+                grid,
+                continuation[:, node],
+                beta,
+                order_size,
+            )
+        values = (penalty * flat_holdings**2 + state_alpha + best).reshape(
+            points, n_nodes
+        )
+        continuation = values @ transition.T
+        spread = max(spread, float(np.ptp(continuation, axis=1).max()))
+
+    return AugmentedAlphaOptimum(
+        objective_bps=float(np.interp(order_size, grid, continuation[:, 0]))
+        + schedule_invariant_bps(market, order_size),
+        column_spread=spread,
+        grid_points=points,
+        quadrature_nodes=n_nodes,
+        bins_ahead=lag,
     )
 
 

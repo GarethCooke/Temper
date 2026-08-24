@@ -50,6 +50,8 @@ import pytest
 from temper.eval.experiment import SIGNAL_READING, load_experiment
 from temper.eval.reference import (
     LambdaRule,
+    ReferenceKind,
+    alpha_reference_row,
     reference_table,
     select_lambda,
     signal_static_row,
@@ -61,6 +63,7 @@ from temper.oracle import (
     OneStepSignal,
     alpha_coefficient,
     alpha_optimum,
+    augmented_alpha_optimum,
     clairvoyant_price_values,
     cost_moments,
     execution_floor_bps,
@@ -547,13 +550,212 @@ def test_price_clairvoyance_is_far_too_loose_to_be_a_red_flag(case):
 
 
 # ---------------------------------------------------------------------------
+# Task 1 — sufficiency, timing, and the two words
+# ---------------------------------------------------------------------------
+
+
+def test_the_augmented_state_does_not_improve_the_value(case, signal):
+    """Task 1: ``(k, x_k, s_k)`` is sufficient, measured rather than asserted.
+
+    Carrying ``s_{k-1}`` cannot help, and the reason is sharper than M4b's: that
+    signal predicted ``xi_k``, the shock has already landed, and the inventory it
+    was charged on was fixed by the previous decision. Its information is
+    **spent**.
+
+    The bar is float noise rather than a tolerance. A leak — a signal with memory,
+    or a seam that lets a past draw reach a future decision — produces a
+    *systematic* improvement, not scatter, so a bar set where a tolerance would
+    sit would hide exactly the failure this exists for.
+    """
+    market, order_size, lambda_risk = case
+    plain = alpha_optimum(
+        market, order_size, lambda_risk, signal, points=FAST_POINTS
+    ).objective_bps
+    augmented = augmented_alpha_optimum(
+        market, order_size, lambda_risk, signal, points=FAST_POINTS
+    )
+    assert augmented.objective_bps == plain, (
+        f"the augmented state moved the value by "
+        f"{augmented.objective_bps - plain:+.3e} bps; under an i.i.d. one-step "
+        f"signal it cannot move it at all"
+    )
+    assert augmented.column_spread <= 1e-14, (
+        f"the continuation depends on the previous signal (spread "
+        f"{augmented.column_spread:.3e} bps); the seam leaks"
+    )
+    assert augmented.bins_ahead == 1
+
+    # The check would have content if it could fail: the transition matrix is a
+    # genuine (nodes, nodes) object, not a broadcast of one row by construction.
+    values, transition = signal.transition_quadrature(7)
+    assert transition.shape == (values.size, values.size)
+    assert np.allclose(transition.sum(axis=1), 1.0)
+
+
+def test_a_signal_about_a_shock_that_has_already_landed_is_worth_nothing(case, signal):
+    """Task 1's timing check — the off-by-one that would be invisible in the result.
+
+    Everything M5 claims rests on ``s_k`` being about ``xi_{k+1}`` and not
+    ``xi_k``. If the seam's timing were one bin out *in the helpful direction*
+    every gate would still be green and the advantage would simply be larger, so
+    no number the milestone reports would say anything was wrong. M4a caught its
+    antithetic mirror charging the wrong world the same way: by running the
+    machinery in a configuration whose answer is known in advance.
+
+    Pointed one bin the wrong way, the dynamic program must return the
+    *uninformative* value — not merely something small. At ``rho = 0`` the DP
+    still carries its own grid discretisation, and calling that residual "a small
+    advantage" would be reading noise.
+    """
+    market, order_size, lambda_risk = case
+    landed = OneStepSignal(signal.correlation(), bins_ahead=0)
+    blind = OneStepSignal(0.0)
+    assert landed.informative is False, (
+        "a signal about a shock that has already landed is not informative, "
+        "however large rho is"
+    )
+
+    already = alpha_optimum(
+        market, order_size, lambda_risk, landed, points=FAST_POINTS
+    )
+    uninformative = alpha_optimum(
+        market, order_size, lambda_risk, blind, points=FAST_POINTS
+    )
+    # Float noise, not a tolerance. At the committed 1601-point grid these land
+    # bit-identical; at this coarser one they differ by an ulp, because the lag-0
+    # path threads a state term through additions the lag-1 path does not.
+    assert abs(already.objective_bps - uninformative.objective_bps) <= 1e-14, (
+        f"an already-landed signal is worth "
+        f"{uninformative.objective_bps - already.objective_bps:+.3e} bps; it must "
+        f"be worth nothing a reader could see"
+    )
+    assert abs(already.alpha_bps) < 1e-12
+    assert already.bins_ahead == 0
+
+    # The sharper half: the *policy* ignores it. Every path gets the same schedule
+    # — exactly the same, because the alpha term's coefficient on the action is a
+    # float zero — where the model's signal makes the schedule move with the draw.
+    # This is what says the collapse is structural and not a cancellation.
+    real = alpha_optimum(market, order_size, lambda_risk, signal, points=FAST_POINTS)
+    signals = landed.draw(pool_rng(20260824, M5_REFERENCE_POOL, 16), (64, market.n_bins))
+    ignored = already.greedy_weights(signals)
+    tilted = real.greedy_weights(signals)
+    assert float(np.ptp(ignored, axis=0).max()) == 0.0, (
+        "the schedule moves with a signal no decision in it could have acted on"
+    )
+    assert ignored == pytest.approx(
+        uninformative.greedy_weights(signals), abs=1e-9
+    )
+    assert float(np.ptp(tilted, axis=0).max()) > 1e-4, (
+        "the model's signal does not move the schedule either, so this test would "
+        "pass on a seam that ignored the signal altogether"
+    )
+
+    # And the model is worth orders more than the residual it has to be told apart
+    # from, so the check has power rather than merely a passing assertion.
+    advantage = uninformative.objective_bps - real.objective_bps
+    assert advantage > 1e5 * abs(already.objective_bps - uninformative.objective_bps)
+
+
+def test_the_conditional_cost_reads_the_signal_the_lag_names(case):
+    """The same index, one layer down: ``E[cost | s]`` moves with the lag.
+
+    The dynamic program and the grader have to agree about which shock a signal
+    predicts, and they reach it by different routes — a stage cost and a vectorised
+    sum. This pins the second one against the first's convention directly.
+    """
+    market, order_size, lambda_risk = case
+    weights = trades(twap_trajectory(market, order_size), market) / order_size
+    holdings = 1.0 - np.cumsum(weights) + weights
+    signals = pool_rng(20260824, M5_REFERENCE_POOL, 17).standard_normal(market.n_bins)
+    amplitude = alpha_coefficient(market)
+
+    for lag, expected in (
+        (1, -amplitude * 0.01 * float(np.sum(holdings[1:] * signals[:-1]))),
+        (0, -amplitude * 0.01 * float(np.sum(holdings * signals))),
+    ):
+        signal = OneStepSignal(0.01, bins_ahead=lag)
+        priced = float(
+            signal_path_objective_bps(
+                weights, signals, market, order_size, lambda_risk, signal
+            )[0]
+        )
+        blind = float(
+            signal_path_objective_bps(
+                weights,
+                signals,
+                market,
+                order_size,
+                lambda_risk,
+                OneStepSignal(0.0),
+            )[0]
+        )
+        assert priced - blind == pytest.approx(expected, rel=1e-12)
+
+
+def test_the_two_references_carry_their_own_kind(case, signal):
+    """Task 1: certified and converged travel with the numbers, not in prose.
+
+    A reader who takes the execution floor for the optimum makes the agent's job
+    look seven times larger than it is; one who takes the optimum for a certified
+    object claims a Cholesky factorisation for a number with a Richardson residual.
+    Both misreadings are one careless sentence away, so the artefact carries the
+    difference structurally.
+    """
+    market, order_size, lambda_risk = case
+    row = alpha_reference_row(
+        market,
+        order_size,
+        lambda_risk,
+        signal,
+        root_seed=20260824,
+        paths=256,
+        grid_points=FAST_POINTS,
+    )
+    kinds = row.reference_kinds
+    assert set(kinds) == {"execution_floor", "adaptive_optimum"}
+
+    floor, optimum = kinds["execution_floor"], kinds["adaptive_optimum"]
+    assert floor.certified is True and floor.kind == "certified"
+    assert optimum.certified is False and optimum.kind == "converged"
+    assert floor.value_bps == row.execution_floor
+    assert optimum.value_bps == row.adaptive_bps
+    assert floor.value_bps < optimum.value_bps, (
+        "the floor bounds only E[impact + risk]; it is below the whole objective "
+        "by the schedule-invariant constant and by the alpha the policy monetises"
+    )
+    for kind in kinds.values():
+        assert kind.evidence and kind.role
+
+    # The word is checked, not merely stored.
+    with pytest.raises(ValueError, match="contradicts"):
+        ReferenceKind(
+            name="wishful",
+            value_bps=1.0,
+            kind="converged",
+            certified=True,
+            role="-",
+            evidence="-",
+        )
+    with pytest.raises(ValueError, match="'certified' or 'converged'"):
+        ReferenceKind(
+            name="wishful",
+            value_bps=1.0,
+            kind="proven",
+            certified=True,
+            role="-",
+            evidence="-",
+        )
+
+
+# ---------------------------------------------------------------------------
 # The committed artefact
 # ---------------------------------------------------------------------------
 
 
 def test_the_committed_reference_records_four_green_gates(committed, experiment):
     """Definition of done, item 1 — checked in the suite, not only in a log."""
-    assert committed["milestone"] == "M5" and committed["task"] == "0"
+    assert committed["milestone"] == "M5" and committed["task"] == "0+1"
     assert committed["all_green"] is True
 
     gates = committed["gates"]
@@ -600,6 +802,75 @@ def test_the_committed_reference_records_four_green_gates(committed, experiment)
     assert committed["config"]["lambda_risk"] == experiment.lambda_risk
     assert committed["config"]["signal"] == experiment.signal.as_dict()
     assert committed["provenance"]["git_dirty"] is False
+
+
+def test_the_committed_reference_records_task_ones_four_answers(committed):
+    """Task 1, checked in the suite rather than only in a log.
+
+    Convergence with a Richardson residual, sufficiency to float noise, an
+    already-landed signal worth nothing, both references carrying their own word,
+    and the premium's cross-lambda range stated over the region where it resolves.
+    """
+    task_one = committed["task_1"]
+    assert task_one["green"] is True
+
+    sufficiency = task_one["sufficiency"]
+    assert sufficiency["green"] is True
+    assert sufficiency["bar_bps"] <= 1e-14, (
+        "the sufficiency bar has to stay float noise: a leak is systematic, so a "
+        "bar set where a tolerance would sit would hide it"
+    )
+    for grid in sufficiency["by_grid"].values():
+        assert abs(grid["difference_bps"]) <= sufficiency["bar_bps"]
+        assert grid["column_spread_bps"] <= sufficiency["bar_bps"]
+        assert grid["bins_ahead"] == 1
+
+    timing = task_one["timing"]
+    assert timing["green"] is True
+    assert timing["bins_ahead"] == 0
+    assert timing["rho"] == committed["signal"]["rho"]
+    assert abs(timing["alpha_bps"]) < 1e-12
+    assert abs(timing["collapsed_as_fraction_of_advantage"]) < 1e-3, (
+        "a signal pointed at a shock that has already landed must be worth "
+        "nothing; anything visible here is an off-by-one in the seam's timing"
+    )
+
+    kinds = task_one["reference_kinds"]
+    assert set(kinds) == {"execution_floor", "adaptive_optimum"}
+    assert kinds["execution_floor"]["certified"] is True
+    assert kinds["execution_floor"]["kind"] == "certified"
+    assert kinds["adaptive_optimum"]["certified"] is False
+    assert kinds["adaptive_optimum"]["kind"] == "converged"
+    assert kinds["execution_floor"]["value_bps"] < kinds["adaptive_optimum"]["value_bps"]
+    for kind in kinds.values():
+        assert kind["role"] and kind["evidence"]
+
+    stability = task_one["premium_stability"]
+    assert stability["green"] is True
+    low, high = stability["resolved_range"]
+    assert high - low <= stability["resolved_span_bar"]
+    assert stability["resolved_count"] >= 14
+    # The three that do not resolve are the degenerate end of the grid, and the
+    # measurement says so rather than the prose: escalating the worst shows the
+    # fine grid had not converged there either.
+    escalation = stability["worst_lambda_escalation"]
+    assert len(escalation) >= 4
+    coarsest = escalation[min(escalation, key=int)]
+    finest = escalation[max(escalation, key=int)]
+    assert coarsest - finest > 0.20, (
+        "the worst lambda is supposed to be visibly unconverged; if it is not, "
+        "the range can be stated over the whole grid and the brief's session note "
+        "should say so"
+    )
+    assert low <= finest <= high or finest < high, (
+        "the unresolved lambdas converge *into* the resolved range, which is what "
+        "makes the restriction a resolution limit rather than a different regime"
+    )
+
+    # The premium at the selected lambda is grid-stable in its own right.
+    by_grid = committed["convergence"]["premium_fraction_by_grid"]
+    assert committed["convergence"]["premium_fraction_grid_span"] < 0.002
+    assert max(by_grid.values()) - min(by_grid.values()) < 0.002
 
 
 def test_the_committed_fixed_rungs_regenerate_from_the_config(committed, experiment):

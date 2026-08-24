@@ -39,8 +39,8 @@ help:
 	@echo "make m4b-regression M4b task 2: one M3 seed AND one M4a seed bitwise - ~40 min"
 	@echo "make m4b           M4b task 5: ten seeds in the stochastic-liquidity world - ~3 h"
 	@echo "make m4b-figure    redraw results/m4b_adaptivity.* from the committed result"
-	@echo "make m5-reference  M5 task 0: the alpha table and its four gates - ~6 min"
-	@echo "make m5-oracle     M5 task 0: the alpha oracle checks, incl. rho -> 0"
+	@echo "make m5-reference  M5 tasks 0+1: the alpha table, its gates and its word - ~7 min"
+	@echo "make m5-oracle     M5 tasks 0+1: the alpha oracle checks, incl. rho -> 0"
 	@echo "make m6-figure     redraw results/m6_prediction.* from the five committed M6 runs"
 	@echo "make checkpoint    M6 prerequisite: export M4a's median seed as a policy .npz - ~15 min"
 	@echo "make anvil-check   M6 task 0: Anvil's documented behaviour, against a live server"
@@ -204,7 +204,7 @@ m4b:
 m4b-figure:
 	$(PYTHON) tools/m4b_adaptivity.py --config $(M4B_CONFIG)
 
-# M5 task 0 - oracle only, no agent, no training, ~6 minutes. The dynamic program
+# M5 tasks 0 and 1 - oracle only, no agent, no training, ~7 minutes. The dynamic
 # over (inventory, signal), the reference table across the vendor grid, and the
 # impact / risk / alpha / objective decomposition with the identity asserted at
 # every node rather than assumed. Also asserts what M4b had to decide: lambda's
@@ -212,15 +212,23 @@ m4b-figure:
 # choice to record. Exit status is whether all four gates are green. Writes
 # results/m5_reference.json.
 #
+# Task 1 rides the same artefact because there is one reference and it has two
+# halves of different kinds: grid and quadrature convergence with a Richardson
+# residual, the (k, x_k, s_k) sufficiency check on an augmented state, the timing
+# check that a signal about an already-landed shock is worth zero, and both
+# references carrying their own certified/converged word.
+#
 # The milestone's own rule is that no training code is written, imported or run
 # until those four gates are green in the repo, so this is the first thing M5 runs
 # and `make m5-oracle` is the second.
 m5-reference:
 	$(PYTHON) tools/m5_reference_table.py --config $(M5_CONFIG)
 
-# M5 task 0's checks - the signal's joint law, the conditional cost against
-# sampled price draws, the decomposition by two routes, the convexity floor, and
-# the rho -> 0 differential against M4a's *certified* value. Seconds.
+# M5's oracle checks - the signal's joint law, the conditional cost against
+# sampled price draws, the decomposition by two routes, the convexity floor, the
+# rho -> 0 differential against M4a's *certified* value, and task 1's two: the
+# augmented-state sufficiency solve and the already-landed timing instrument.
+# Seconds.
 m5-oracle:
 	$(PYTHON) -m pytest tests/test_m5_alpha_oracle.py -v
 

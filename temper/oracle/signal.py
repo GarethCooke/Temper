@@ -127,6 +127,32 @@ class AlphaSignal:
         raise NotImplementedError
 
     @property
+    def lag(self) -> int:
+        """How many bins ahead the signal points. **One** is the model.
+
+        Zero is the degenerate case in which ``s_k`` predicts ``xi_k`` — a shock
+        that has **already landed** by the time bin ``k``'s decision is made,
+        because the shock lands before the bin executes (``ARCHITECTURE.md`` §9,
+        *The shock lands before the bin executes*). The inventory that shock is
+        charged on was fixed by the previous decision, so the information is
+        worth exactly nothing and the whole advantage must collapse to zero.
+
+        That is not a modelling option, it is a **test instrument**. M5 turns
+        entirely on the signal being about ``xi_{k+1}`` rather than ``xi_k``, an
+        off-by-one in the seam's timing is the easiest defect to write, and if it
+        lands in the helpful direction it is invisible in every number the
+        milestone reports — the advantage would simply be larger and every gate
+        would still be green. So task 1 points the milestone's own machinery at
+        the already-landed shock and requires the advantage to vanish, which is
+        M4a's antithetic-mirror catch in its M5 form.
+
+        Nothing above one: a two-step-ahead signal would put ``s_{k+1}`` in the
+        dynamic program's state and change the reference, which the brief's *Out
+        of scope* names.
+        """
+        return 1
+
+    @property
     def explained_variance_fraction(self) -> float:
         """``rho**2`` — the fraction of next-bin return variance the signal explains.
 
@@ -142,6 +168,26 @@ class AlphaSignal:
     def quadrature(self, nodes: int) -> tuple[np.ndarray, np.ndarray]:
         """``(s values, weights)`` integrating ``E[f(s)]`` — the DP's expectation."""
         raise NotImplementedError
+
+    def transition_quadrature(self, nodes: int) -> tuple[np.ndarray, np.ndarray]:
+        """``(s values, Q)`` with ``Q[p, j]`` the weight on node ``j`` given node ``p``.
+
+        The *conditional* form of :meth:`quadrature`, and it exists for the reason
+        :meth:`~temper.oracle.liquidity.LiquidityLaw.transition_quadrature` does:
+        M5's reference is the optimum over **all** adapted policies only because
+        ``(k, x_k, s_k)`` is a sufficient statistic, and that has to be checkable
+        rather than asserted. :func:`~temper.oracle.alpha.augmented_alpha_optimum`
+        re-solves the dynamic program on a state that also carries ``s_{k-1}`` and
+        requires the same value — a check with content only if the machinery it
+        runs on *could* have represented a dependence.
+
+        For every signal here the answer is one row repeated, because ``s`` is
+        i.i.d. and a past signal predicts nothing that has not already landed. An
+        AR(1) signal (backlog) would override this and nothing downstream would
+        change, which is the point.
+        """
+        values, weights = self.quadrature(nodes)
+        return values, np.tile(weights, (values.size, 1))
 
     def draw(self, rng: Generator, size) -> np.ndarray:
         """Sample signal paths alone. The grader's route: cost is closed form given `s`."""
@@ -195,6 +241,12 @@ class NoSignal(AlphaSignal):
     def correlation(self) -> float:
         return 0.0
 
+    @property
+    def lag(self) -> int:
+        """One, so a caller that branches on the lag never has to branch on the
+        model as well. Nothing reads it: there is no signal to point anywhere."""
+        return 1
+
     def quadrature(self, nodes: int) -> tuple[np.ndarray, np.ndarray]:
         # One node carries the point mass at zero exactly; `nodes` is accepted and
         # ignored so a caller can sweep the quadrature without branching.
@@ -228,15 +280,36 @@ class OneStepSignal(AlphaSignal):
     """
 
     rho: float
+    #: Bins ahead. **1** is the model and the only value a committed config may
+    #: carry; **0** is the already-landed degenerate case task 1 uses to prove the
+    #: milestone's claim depends on the timing. See :attr:`AlphaSignal.lag`.
+    bins_ahead: int = 1
     name: str = ONE_STEP_SIGNAL
 
     def __post_init__(self) -> None:
         if not math.isfinite(self.rho) or not -1.0 <= self.rho <= 1.0:
             raise ValueError(f"rho must be finite and in [-1, 1], got {self.rho}")
+        if self.bins_ahead not in (0, 1):
+            raise ValueError(
+                f"bins_ahead must be 0 or 1, got {self.bins_ahead}: 1 is the model, "
+                "0 is the already-landed case task 1 measures, and anything larger "
+                "would put a second signal in the dynamic program's state"
+            )
 
     @property
     def informative(self) -> bool:
-        return self.rho != 0.0
+        """Whether the signal carries information about a shock **not yet landed**.
+
+        ``bins_ahead = 0`` is *not* informative however large ``rho`` is: the
+        shock it predicts was charged on inventory the previous decision already
+        fixed. Reading it as informative is exactly the confusion this milestone's
+        timing check exists to make impossible.
+        """
+        return self.rho != 0.0 and self.bins_ahead == 1
+
+    @property
+    def lag(self) -> int:
+        return self.bins_ahead
 
     def mean(self) -> float:
         return 0.0
@@ -291,10 +364,13 @@ class OneStepSignal(AlphaSignal):
         signals = rng.standard_normal(shape)
         independent = rng.standard_normal(shape)
         shocks = np.empty_like(independent)
-        shocks[..., 0] = independent[..., 0]
-        shocks[..., 1:] = (
-            self.rho * signals[..., :-1]
-            + math.sqrt(1.0 - self.rho**2) * independent[..., 1:]
+        residual = math.sqrt(1.0 - self.rho**2)
+        lag = self.bins_ahead
+        if lag:
+            shocks[..., :lag] = independent[..., :lag]
+        shocks[..., lag:] = (
+            self.rho * signals[..., : signals.shape[-1] - lag]
+            + residual * independent[..., lag:]
         )
         return signals, shocks
 
@@ -302,6 +378,7 @@ class OneStepSignal(AlphaSignal):
         return {
             "model": self.name,
             "rho": self.rho,
+            "bins_ahead": self.bins_ahead,
             "explained_variance_fraction": self.explained_variance_fraction,
             "invented": True,
         }
@@ -317,7 +394,9 @@ def signal_for(model: str, **kwargs) -> AlphaSignal:
             )
         return NoSignal()
     if model == ONE_STEP_SIGNAL:
-        return OneStepSignal(rho=float(kwargs["rho"]))
+        return OneStepSignal(
+            rho=float(kwargs["rho"]), bins_ahead=int(kwargs.get("bins_ahead", 1))
+        )
     raise ValueError(
         f"unknown signal model {model!r}; known models are {', '.join(SIGNAL_MODELS)}"
     )
