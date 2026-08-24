@@ -9,8 +9,10 @@ written), *The power law's break is in a shock-free term, so the noise identity 
 antithetic pairing survive it exactly* (which names M4b as the place exactness ends, and is
 half right), *A metric grades the world that charges it*, and *The tolerance's denominator is
 the available advantage, not the TWAP gap, wherever the closed form is the thing being
-beaten*. Also the house note *The artefact writer is tested on fabricated data, not on the
-run* — M4b writes a new artefact shape and will re-earn that lesson otherwise.
+beaten*. Also the house note *No code path may be reachable only at the end of a long run* — M4b writes a new artefact shape and will re-earn
+that lesson otherwise. (It was titled *The artefact writer is tested on
+fabricated data, not on the run* when this brief was written; M4b is why it is
+not any more.)
 
 ## Objective
 
@@ -437,9 +439,24 @@ turned out to be a warning about a risk that did not materialise.
 | `J_DP` | 2.43449 | 2.43449 | — |
 | adaptive advantage | 0.06212 | 0.06212 (2.55%) | ≥ 1 % ✓ |
 | level shift | 3.8 % of advantage | 3.8% | ≤ 10 % ✓ |
-| clairvoyant bracket | 8.5 % | 9.8% | ≤ 15 % ✓ |
+| clairvoyant bracket | 8.5 % | 9.7% | ≤ 15 % ✓ |
 | σ_L → 0 vs M4a's certified value | 2.383218 | 2.383217 (+1.8e-06) | — |
-| λ selected | 10^−3.5 | 10^−3.5, every reading | must agree ✓ |
+| λ selected | 10^−3.5 | 10^−3.5, agreeing with the linear and power-law tables and therefore with M3 and M4a | must agree ✓ |
+
+Two words in that table are load-bearing and easy to blur. The λ gate is about
+the three **tables** — linear, power-law, and the liquidity world's static one —
+selecting the same point, which is what makes M4b's result comparable to M3's
+and M4a's. It is *not* a claim that every way of **reading** the rule agrees,
+because they do not: that is the subject of the next paragraph, and the two
+senses of the word must not be allowed to borrow each other's authority.
+
+The clairvoyant bracket is a **sampled** quantity, so the figure above is the
+one the *gate* was decided on — `results/m4b_reference.json`, 9.7487% of the
+advantage. The trained sweep re-estimates the same bracket on its own liquidity
+stream and gets 9.7883% (`results/m4b_liquidity.json`); the two differ by
+2.46e-05 bps and straddle a rounding boundary at one decimal place. Every
+*deterministic* quantity in the table — `J_DP`, the advantage, the level shift —
+is identical between the two artefacts to the last bit.
 
 **Gate 1 needed a decision, and the two candidate readings disagree.** The brief
 asked task 0 to *decide and record* how the selection rule applies in a world that
@@ -575,8 +592,9 @@ of the objective and the agent captured 99% of it.*
 
 ## The house note, four times
 
-`docs/house-notes.md`'s *The artefact writer is tested on fabricated data, not on
-the run* was cited by this brief as a thing to obey. It was obeyed for
+`docs/house-notes.md`'s note — *No code path may be reachable only at the end of a long run*, and it was titled *The artefact writer
+is tested on fabricated data, not on the run* at the time — was cited by this
+brief as a thing to obey. It was obeyed for
 `build_document` — the new artefact keys were covered on fabricated data before
 the training run, exactly as asked — and the same defect class then arrived
 **four more times** in code the brief had not named:

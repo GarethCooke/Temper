@@ -16,10 +16,15 @@ the thing that produces its input. This module severs that: it grades a nudged
 copy of each world's own optimum through the *real* grader, pairs it with a real
 :class:`~temper.agents.ppo.TrainResult` (whose ``as_dict`` never touches the
 network, so no training is needed to build one), and runs the real
-``build_document`` over the pair in both encodings — asserting the shape a
-committed result must have. The portable form of the rule is
-``docs/house-notes.md``, *The artefact writer is tested on fabricated data, not on
-the run*.
+``build_document`` over the pair in every encoding — asserting the shape a
+committed result must have. From M4b it does the same for every *reporting* path
+as well: the verdict block, the per-seed line in both grade shapes, the figure
+tool's ``main`` end to end, and the two failure modes that have to stay visible.
+The portable form of the rule is ``docs/house-notes.md``, *No code path may be
+reachable only at the end of a long run* — which is this note's second title,
+and M4b is why: naming ``build_document`` made ``build_document`` safe and did
+nothing for the twenty lines under it, one of which then died with ten graded
+seeds in hand.
 
 What it deliberately does **not** do is check the numbers are right — that is
 ``tests/test_m2_rediscovery.py``, ``tests/test_m3_validation.py`` and

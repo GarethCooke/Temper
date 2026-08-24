@@ -6,7 +6,7 @@ distributions, Crucible's benchmark captures, Temper's RL results. `ARCHITECTURE
 where a *structural* decision about Temper is recorded; this file is for the smaller,
 portable rules, stated once so a brief can cite them by title rather than restate them.
 
-Cite entries by title.
+Cite entries by title. A title that changes is a title every citation of it has to change with — *No code path may be reachable only at the end of a long run* was *The artefact writer is tested on fabricated data, not on the run* until M4b showed that naming the writer had protected the writer and nothing else.
 
 ---
 
@@ -70,13 +70,24 @@ judge rather than the statistic's to hide.
 
 ---
 
-## The artefact writer is tested on fabricated data, not on the run
+## No code path may be reachable only at the end of a long run
 
-**Rule.** The code that turns a long run's results into its committed artefact — the JSON
-assembly, the verdict, the caption, the figure — is exercised on *fabricated* inputs, in a
-test that takes milliseconds, separately from the thing that produces those inputs. If the
-only way to reach the writer is to run the job first, then the writer is untested at the
-moment it matters, and every bug in it costs one full run to find and one more to fix.
+**Rule.** Every path that runs *after* an expensive producer — the JSON assembly, the
+verdict, the caption, the figure, the line that prints a grade, the line that says where a
+file was written — must be exercisable on **fabricated data, without running the producer**,
+in a test that takes milliseconds. The rule is about the property, not about any one
+function: name the function and the next defect appears in the function beside it.
+
+**Why this inverts an instinct, and why the inversion is the point.** The natural ranking
+puts model and training code first and reporting code last: the training loop is where the
+hard thinking is, the reporter is "just printing". The ranking is backwards, and the reason
+is *when each one fails*. A defect in training code fails in minutes — the first update, the
+first batch, the first assertion — and costs a re-launch. A defect in reporting code fails
+**after the run**, when every number has been computed and nothing has been written, and it
+costs the run. Test-criticality is not proportional to how clever a line is; it is
+proportional to how much work is already sunk when the line first executes. By that measure
+the last line of a driver is the most test-critical line in the repo, and the loss function
+is among the least.
 
 **Measured (Temper M4a, 2026-08-19).** The verdict block was edited to read its pass/fail
 bar off a world-dependent field. The edit dropped one line — the one computing `red_flags`
@@ -87,23 +98,47 @@ file. Nothing was written. Ten correct answers discarded by a missing assignment
 only reason it cost two hours rather than two evenings is that the pipeline is deterministic
 and the re-run reproduced every seed exactly.
 
+**Measured again (Temper M4b, 2026-08-23), four times, which is why the rule is now stated
+as a property.** M4b's brief cited this note and obeyed it *exactly where it was named*:
+`build_document`'s new artefact keys were covered on fabricated data before the training run,
+and that coverage held. The same defect class then arrived four more times in reporting code
+the note did not name.
+
+| # | where | when it fired | what it cost |
+| - | --- | --- | --- |
+| 1 | `_on_seed` read `Grade` fields off a `LiquidityGrade` | after seed 0 trained | 20 min, caught by watching the launch |
+| 2 | `--dry-run` printed the *deterministic* world's advantage as the bar | before the run | nothing — but it understated a pre-stated bar by 1.7x in the flattering direction |
+| 3 | `tools/…_adaptivity.py`'s `main` died reporting where it wrote the figure | after rendering | the figure existed; the process did not survive saying so |
+| 4 | the closing summary read a key the new world's summary lacks | after **all ten seeds** were graded | nothing, and only because `write_outputs` runs before the printing |
+
+Number 4 is the one to remember. It is the M4a defect exactly, one milestone later, in the
+same driver, forty metres down the same function — and it survived a session that had
+explicitly set out to obey this note. Naming `build_document` had made `build_document` safe
+and had done nothing for the twenty lines under it.
+
 **How it is applied here.** `tests/test_sweep_document.py` grades a nudged copy of each
 world's own optimum through the real grader, pairs it with a real `TrainResult` — whose
 `as_dict` never touches the network, so one can be constructed without training — and runs
-the real `build_document` over the pair in both cost encodings. Nine tests, under a second,
-asserting that every key a reader, a test and a figure depend on is present. The same pass
-verifies the whole write path end to end, which is what caught a figure caption running off
-the canvas before it reached a committed artefact.
+the real `build_document` over the pair in every cost encoding. It then does the same for
+every *reporting* path: `print_verdict` and the per-seed line in both grade shapes, the
+figure tool's `main` end to end, the caption's width against the canvas, and the two
+failure modes that must stay visible (a red flag, and a missing input that should skip the
+figure rather than half-draw it). Twenty-nine tests, seconds, no training anywhere. Each of
+the four defects above is now one of them.
+
+**A test that would have caught all five.** Take the artefact your producer writes, hand it
+to every function that runs after the producer, and require them to complete. If a function
+cannot be called that way, that is the finding — extract it until it can.
 
 **Why it generalises.** Any project with an expensive producer and a cheap reporter has this
 shape: a benchmark harness writing a results file, a capture tool rendering a report, a
-deploy script emitting a summary. The reporter is usually the part edited most often and
-tested least, because reaching it honestly means paying for the producer. Fabricating its
-input is not a compromise — the reporter's contract is over data, not over how the data was
-obtained — and it converts "found after the run" into "found before it". A useful smell:
-if a function's only test is marked slow, ask whether the function is actually slow or
-merely *downstream* of something that is.
-
+deploy script emitting a summary, a migration printing what it changed. The reporter is
+usually the part edited most often and tested least, because reaching it honestly means
+paying for the producer. Fabricating its input is not a compromise — the reporter's contract
+is over *data*, not over how the data was obtained — and it converts "found after the run"
+into "found before it". Two useful smells: if a function's only test is marked slow, ask
+whether the function is actually slow or merely *downstream* of something that is; and if a
+milestone cites this note, check what it did for the paths the citation did **not** name.
 ---
 
 ## A clock that cannot see the interval reports zero, not an error

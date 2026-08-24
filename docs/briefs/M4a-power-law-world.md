@@ -682,4 +682,6 @@ All three the brief predicted, and no others:
    wherever the closed form is the thing being beaten.*
 
 And one house note, which is portable practice rather than a decision about
-Temper: *The artefact writer is tested on fabricated data, not on the run.*
+Temper: *No code path may be reachable only at the end of a long run* — restated under that title by M4b, which found that naming
+the writer had protected the writer and nothing else; it was *The artefact
+writer is tested on fabricated data, not on the run* when M4a wrote it.

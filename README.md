@@ -164,7 +164,7 @@ is deliberately narrower than it might sound.
   a dynamic program, so it is **converged and bracketed, not certified** — M4a earned that word
   with a Cholesky factorisation and a 1.2e-15 KKT residual, and this is not the same word. What
   it has instead is two-sided and it makes the red-flag test *rigorous*: a perfect-information
-  relaxation below it and the DP's own greedy policy above, bracketing it to 9.8% of the
+  relaxation below it and the DP's own greedy policy above, bracketing it to 9.7% of the
   advantage, and no adapted policy can beat perfect information **on any path**. And the grade
   is an average rather than a closed form — `E[cost | L]`, which is exact given the liquidity
   path because the policy never sees a price, averaged over 20,000 held-out paths with common
