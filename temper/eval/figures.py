@@ -975,6 +975,13 @@ M6_COLOURS = {
 #: that its number must not read as a data point beside the four that are.
 VOID_EDGE = "#6f6f6f"
 
+#: The half-width of the residual strip's y axis when every residual is
+#: exactly zero. Float64's last bit on a value near 39 bps is about 9e-15,
+#: so this window is roughly eleven of them: wide enough that a single-ulp
+#: disagreement would be visible rather than clipped, narrow enough that
+#: the number on the axis says what precision is being claimed.
+ZERO_RESIDUAL_WINDOW_BPS = 1e-13
+
 #: Vertical gap between two rows of the same tier, and between two tiers. The
 #: tiers are the argument, so they are separated by more than the runs inside
 #: them — the grouping has to survive being glanced at.
@@ -1013,6 +1020,19 @@ def prediction_figure(
     figure that let it pass as an ordinary point would be hiding the most
     interesting thing in the milestone.
 
+    **Under it — the residual strip, which is what turns the claim into
+    evidence.** On a 10-to-39 bps axis a marker sitting on a line looks the same
+    whether the two agree to the last bit or to one percent: the panel above is
+    scaled to the size of the *data*, and the claim is about a quantity three
+    orders of magnitude smaller. So the strip differences the very arrays the
+    panel plots — not a second route to them, or it would stop being a check on
+    the panel — and shows all 39 per-bin comparisons on an axis scaled to the
+    precision actually achieved. Where every residual is exactly zero the axis
+    has no scale to take from the data, so a fixed narrow window is used and the
+    strip says so: *identical to the last bit* is a stronger statement than any
+    nonzero bound, and it should be made rather than hidden inside an autoscaled
+    empty axis.
+
     **Right — the three tiers on one bps axis.** Tier 1 predicts and measures.
     Tier 2 measures and cannot predict, and the artefact says why rather than
     apologising for it. Tier 3 *withholds*: 236 third-party fills on a public
@@ -1024,17 +1044,28 @@ def prediction_figure(
     ``tools/m6_prediction.py``: nothing here recomputes a fill, so the figure is a
     *view* of results and redraws byte-identically from them.
     """
-    figure, (left, right) = plt.subplots(
-        1, 2, figsize=(11.6, 7.6), gridspec_kw={"width_ratios": (1.52, 1.0)}
+    figure = plt.figure(figsize=(11.6, 7.6))
+    # The left column is two rows sharing an x-axis; the right panel spans both,
+    # so the tier layout is untouched by the strip's arrival.
+    grid = figure.add_gridspec(
+        2, 2, width_ratios=(1.52, 1.0), height_ratios=(5.0, 1.0)
     )
+    left = figure.add_subplot(grid[0, 0])
+    strip = figure.add_subplot(grid[1, 0], sharex=left)
+    right = figure.add_subplot(grid[:, 1])
 
     # ---- left panel: per bin, predicted against realised -------------------
     bins = np.asarray(ladders["bins"], dtype=float)
+    # Kept as they are drawn, so the strip below differences the arrays this
+    # panel actually plotted rather than recomputing them from the source.
+    drawn_series: list[tuple[str, np.ndarray]] = []
     for row in ladders["runs"]:
         colour = M6_COLOURS[row["run"]]
+        predicted = np.asarray(row["predicted_bps"], dtype=float)
+        realised = np.asarray(row["realised_bps"], dtype=float)
         left.plot(
             bins,
-            np.asarray(row["predicted_bps"], dtype=float),
+            predicted,
             color=colour,
             linewidth=1.8,
             zorder=2,
@@ -1042,7 +1073,7 @@ def prediction_figure(
         )
         left.plot(
             bins,
-            np.asarray(row["realised_bps"], dtype=float),
+            realised,
             linestyle="none",
             marker="o",
             markersize=7.0,
@@ -1051,6 +1082,7 @@ def prediction_figure(
             markeredgewidth=1.4,
             zorder=3,
         )
+        drawn_series.append((colour, realised - predicted))
 
     # The bin where the loop closed. Ringed first so the annotation's leader has
     # something to point at that is visibly not one of the ordinary markers.
@@ -1125,26 +1157,90 @@ def prediction_figure(
         frameon=False,
     )
 
-    left.set_xlabel("bin (13, the count the policy was trained on)")
-    left.set_ylabel("cumulative arrival slippage, bps (positive = worse than arrival)")
+    left.set_ylabel(
+        "cumulative arrival slippage, bps\n(positive = worse than arrival)"
+    )
     left.set_title(
         "Per bin: what the closed form said, and what the venue did",
         fontsize=11,
         pad=8,
     )
-    left.set_xticks(bins)
-    left.xaxis.set_major_formatter(ticker.FormatStrFormatter("%d"))
+    left.tick_params(labelbottom=False)
     left.set_xlim(0.4, 13.6)
     # Headroom above the tallest point, reserved rather than left to the
     # autoscaler: the annotation is placed in axes fractions and would
-    # otherwise sit on top of the wide ladder's first bin.
+    # otherwise sit on top of the wide ladder's first bin. Trimmed from 0.42
+    # when the strip arrived — the top of the panel was the only empty space
+    # the strip could come out of without a taller canvas.
     drawn = np.concatenate(
         [np.asarray(row["realised_bps"], dtype=float) for row in ladders["runs"]]
     )
     low, high = float(np.nanmin(drawn)), float(np.nanmax(drawn))
-    left.set_ylim(low - 0.08 * (high - low), high + 0.42 * (high - low))
+    left.set_ylim(low - 0.08 * (high - low), high + 0.30 * (high - low))
     left.grid(color="#e6e6e6", linewidth=0.7)
     left.set_axisbelow(True)
+
+    # ---- the residual strip ------------------------------------------------
+    residuals = np.concatenate([series for _, series in drawn_series])
+    comparisons = int(residuals.size)
+    worst = float(np.nanmax(np.abs(residuals))) if comparisons else 0.0
+    if worst == 0.0:
+        # No scale to take from the data. A fixed window, stated on the axis and
+        # in the strip, rather than an autoscaled axis that would silently invent
+        # one and make bit-identity look like a measurement with error bars.
+        window = ZERO_RESIDUAL_WINDOW_BPS
+        verdict = (
+            f"all {comparisons} comparisons EXACTLY 0.0 — identical to the last bit "
+            f"of a float64; window fixed, not fitted"
+        )
+        verdict_colour = "#1c5e3a"
+    else:
+        window = 1.6 * worst
+        verdict = (
+            f"worst |realised − predicted| over {comparisons} comparisons: "
+            f"{worst:.2e} bps"
+        )
+        verdict_colour = "#8a4a28"
+
+    strip.axhline(0.0, color="#9a9a9a", linewidth=1.0, zorder=1)
+    for colour, series in drawn_series:
+        strip.plot(
+            bins,
+            series,
+            linestyle="none",
+            marker="o",
+            markersize=5.5,
+            markerfacecolor="none",
+            markeredgecolor=colour,
+            markeredgewidth=1.2,
+            zorder=3,
+        )
+    strip.text(
+        0.5,
+        0.80,
+        verdict,
+        transform=strip.transAxes,
+        fontsize=7.5,
+        color=verdict_colour,
+        ha="center",
+        va="top",
+        zorder=4,
+    )
+
+    strip.set_ylim(-window, window)
+    strip.set_yticks([-window, 0.0, window])
+    # Spelled out rather than left to an offset-notation exponent parked in the
+    # corner. The magnitude *is* the point of this strip, so it is on every tick
+    # a reader's eye lands on.
+    strip.set_yticklabels(
+        [f"-{window:.0e}", "0", f"+{window:.0e}"], fontsize=7.5
+    )
+    strip.set_ylabel("residual, bps", fontsize=8.0)
+    strip.set_xlabel("bin (13, the count the policy was trained on)")
+    strip.set_xticks(bins)
+    strip.xaxis.set_major_formatter(ticker.FormatStrFormatter("%d"))
+    strip.grid(color="#e6e6e6", linewidth=0.7)
+    strip.set_axisbelow(True)
 
     # ---- right panel: the three tiers on one bps axis ----------------------
     rows = tiers["rows"]
@@ -1273,7 +1369,9 @@ def prediction_figure(
         ha="right",
         va="top",
     )
-    figure.subplots_adjust(left=0.068, right=0.988, top=0.900, bottom=0.310, wspace=0.28)
+    figure.subplots_adjust(
+        left=0.068, right=0.988, top=0.900, bottom=0.355, wspace=0.28, hspace=0.10
+    )
 
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)

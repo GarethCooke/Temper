@@ -347,13 +347,14 @@ def test_the_prediction_figure_is_committed_and_redraws_byte_identically(tmp_pat
     assert committed.stat().st_size > 10_000
 
     documents = _figure_inputs()
+    ladders = build_ladders(documents)
     tiers = build_tiers(documents)
     written = prediction_figure(
         tmp_path / "m6_prediction",
-        ladders=build_ladders(documents),
+        ladders=ladders,
         tiers=tiers,
         provenance=Provenance(**documents[STAMP_RUN]["provenance"]),
-        caption=caption(documents, tiers),
+        caption=caption(documents, ladders, tiers),
     )
     assert len(written) == 1
     assert written[0].read_bytes() == committed.read_bytes(), (
@@ -435,17 +436,21 @@ def test_the_caption_and_the_annotation_never_omit_what_they_may_not():
     )
 
     documents = _figure_inputs()
-    text = caption(documents, build_tiers(documents))
+    text = caption(documents, build_ladders(documents), build_tiers(documents))
+    # Line breaks collapsed: these assertions are about the words, and the
+    # caption is hard-wrapped, so a phrase straddling a wrap would be a red
+    # test about nothing.
+    words = " ".join(text.split())
 
-    assert "Tier 1" in text and "Tier 2" in text and "Tier 3" in text
-    assert "NOT an evaluation (ARCHITECTURE.md §7)" in text
-    assert "WITHHELD rather than taken" in text
-    assert "measurement.unreported_bps" in text
-    assert "attributed every share" in text
+    assert "Tier 1" in words and "Tier 2" in words and "Tier 3" in words
+    assert "NOT an evaluation (ARCHITECTURE.md §7)" in words
+    assert "WITHHELD rather than taken" in words
+    assert "measurement.unreported_bps" in words
+    assert "attributed every share" in words
     # The feeder's four-attempt spread is brief prose, not artefact data. It is
     # allowed in the caption and nowhere near an axis, and the caption has to say
     # which it is.
-    assert "not a committed artefact, so it is stated here and not drawn" in text
+    assert "not a committed artefact, so it is stated here and not drawn" in words
 
     overlong = [line for line in text.splitlines() if len(line) > CAPTION_WIDTH]
     assert not overlong, (
@@ -489,3 +494,48 @@ def test_the_figure_tool_runs_end_to_end_with_no_server(tmp_path):
     assert exit_info.value.code == 0
     written = sorted(tmp_path.glob("m6_prediction.*"))
     assert written and written[0].stat().st_size > 10_000
+
+
+#: Pre-stated bound on the worst per-bin residual between the closed form and the
+#: venue, over all 39 comparisons. Stated at 1e-12 bps — two orders above float64's
+#: last bit on values of this size — and NOT at the observed value, which is exactly
+#: zero: a bound tightened to fit what was measured is not a bound. The figure
+#: reports the observed number and switches its own axis from the fixed window to an
+#: autoscaled one the moment it stops being zero, so a divergence far too small to
+#: fail here would still be visible on the strip.
+MAX_RESIDUAL_BPS = 1e-12
+
+
+def test_the_residual_the_caption_reports_is_measured_and_inside_its_bound():
+    """The caption's number is computed, bounded, and the one the strip draws.
+
+    An unchecked number in a caption is a claim nobody has read — the same defect
+    class as a driver's last line, which is what the house note is about. So the
+    worst residual is asserted against a bound stated before it was looked at, and
+    the caption is required to carry exactly the value that was checked.
+
+    The observed value is stronger than the bound: all 39 comparisons are exactly
+    0.0, because the predicted and realised bins carry identical integer fills and
+    the cumulative series are therefore identical floats operation for operation.
+    That is the claim the strip's fixed window exists to state.
+    """
+    from tools.m6_prediction import (
+        build_ladders,
+        build_tiers,
+        caption,
+        max_abs_residual,
+    )
+
+    documents = _figure_inputs()
+    ladders = build_ladders(documents)
+    worst, comparisons = max_abs_residual(ladders)
+
+    assert comparisons == len(LADDER_RUNS) * 13
+    assert worst <= MAX_RESIDUAL_BPS, (
+        f"the worst per-bin residual is {worst:.3e} bps, outside the pre-stated "
+        f"{MAX_RESIDUAL_BPS:.0e} bps — the venue and the closed form have diverged"
+    )
+
+    reported = "exactly 0.0" if worst == 0.0 else f"{worst:.3e}"
+    words = " ".join(caption(documents, ladders, build_tiers(documents)).split())
+    assert f"across all {comparisons} per-bin comparisons: {reported} bps" in words

@@ -70,6 +70,24 @@ STAMP_RUN = "ladder"
 #: ``docs/briefs/M6-anvil-live-leg.md``.
 FEEDER_ATTEMPTS_BPS = (12.3820, 12.3752, 12.3752, 12.3587)
 
+def max_abs_residual(ladders: dict) -> tuple[float, int]:
+    """``(worst |realised - predicted|, how many comparisons)`` over the strip.
+
+    Differenced from the same two series the figure draws, so the number the
+    caption carries is the number the strip shows. The tests assert it against
+    a pre-stated bound rather than trusting it: an unchecked number in a
+    caption is a claim nobody has read, which is the defect class the house
+    note names about a driver's last line.
+    """
+    worst = 0.0
+    comparisons = 0
+    for row in ladders["runs"]:
+        for realised, predicted in zip(row["realised_bps"], row["predicted_bps"]):
+            worst = max(worst, abs(realised - predicted))
+            comparisons += 1
+    return worst, comparisons
+
+
 #: Characters per line of the one annotation on the per-bin panel, which
 #: shares the caption's problem and needs its own bound: it is drawn inside
 #: the left panel rather than across the canvas, so it gets less room.
@@ -209,9 +227,11 @@ def build_tiers(documents: dict[str, dict]) -> dict:
     return {"rows": rows, "captions": TIER_CAPTIONS}
 
 
-def caption(documents: dict[str, dict], tiers: dict) -> str:
-    """The four things this figure may never be shown without, hard-wrapped."""
+def caption(documents: dict[str, dict], ladders: dict, tiers: dict) -> str:
+    """The five things this figure may never be shown without, hard-wrapped."""
     by_run = {row["run"]: row for row in tiers["rows"]}
+    worst, comparisons = max_abs_residual(ladders)
+    worst_text = "exactly 0.0" if worst == 0.0 else f"{worst:.3e}"
     deployment = documents["deployment"]
     feeder = documents["feeder"]
     reason = deployment["measurement"]["reasons"][0]
@@ -224,7 +244,11 @@ def caption(documents: dict[str, dict], tiers: dict) -> str:
         f"makes every fill computable BEFORE the run. Predicted and realised agree "
         f"level for level and bin for bin, at {by_run['ladder']['bps']:.2f} / "
         f"{by_run['thin']['bps']:.2f} / {by_run['wide']['bps']:.2f} bps, with zero "
-        f"third-party fills.",
+        f"third-party fills. Worst |realised - predicted| across all "
+        f"{comparisons} per-bin comparisons: {worst_text} bps, drawn in the "
+        f"residual strip under the panel on an axis narrow enough to show it — "
+        f"the panel above spans 10 to 39 bps, where any of this would be "
+        f"invisible.",
         f"Tier 2 — feeder. Anvil's feeder builds the book and keeps trading it, so "
         f"book state is wall-clock dependent and there is no closed-form prediction "
         f"to check it against — there cannot be. Realised "
@@ -302,7 +326,7 @@ def main() -> int:
             git_dirty=stamp["git_dirty"],
             python=stamp["python"],
         ),
-        caption=caption(documents, tiers),
+        caption=caption(documents, ladders, tiers),
     )
     for path in written:
         # `relative_to` raises for anything outside the tree, and a driver that
