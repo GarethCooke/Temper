@@ -20,8 +20,11 @@ object.
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
 import json
+import sys
 from dataclasses import replace
 
 import numpy as np
@@ -72,7 +75,7 @@ def experiment():
 @pytest.fixture(scope="module")
 def passed(experiment):
     """The document the pre-run pass produced — the same call the driver makes."""
-    return _driver().alpha_reporting_pass(experiment, paths=PASS_PATHS)
+    return _driver().alpha_reporting_pass(experiment, paths=PASS_PATHS).document
 
 
 def test_the_whole_reporting_path_runs_on_fabricated_data(passed, experiment):
@@ -540,3 +543,67 @@ def test_a_verdict_with_no_bars_is_refused():
     """Losing the tolerances must not read as meeting them."""
     with pytest.raises(AssertionError, match="no bars is not a verdict"):
         seal_verdict({"red_flags": [], "timed_out": []})
+
+@pytest.fixture(scope="module")
+def rehearsal():
+    """One end-to-end invocation of the driver, argv and exit code included.
+
+    Module-scoped because it costs seconds rather than milliseconds, and because
+    the two claims below are about the same single run: what it printed, and what
+    it left on disk.
+    """
+    committed = REPO_ROOT / "results" / "m5_alpha.json"
+    before = committed.read_bytes() if committed.exists() else None
+
+    driver = _driver()
+    argv = sys.argv
+    sys.argv = ["train.py", "--config", str(CONFIG), "--rehearse"]
+    buffer = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buffer):
+            status = driver.main()
+    finally:
+        sys.argv = argv
+
+    after = committed.read_bytes() if committed.exists() else None
+    return {
+        "status": status,
+        "out": buffer.getvalue(),
+        "artefact_before": before,
+        "artefact_after": after,
+    }
+
+
+def test_the_driver_runs_end_to_end_from_its_own_command_line(rehearsal):
+    """The clause the house note just gained, applied to the entry point.
+
+    `alpha_reporting_pass` is a function that calls functions, and `main` is not
+    one of them. Two of M5's three post-run defects were down there — `main`'s
+    `--expect` check reading a name that had been unbound for two milestones, and
+    the baselines line reading the empty dict of the wrong world — so neither was
+    reachable by any amount of coverage underneath, and both fired only after ten
+    seeds had trained.
+
+    This invokes the driver the way a user does. It trains nothing.
+    """
+    assert rehearsal["status"] == 0
+    out = rehearsal["out"]
+    # Both exit branches, not only the one a passing fabrication would reach.
+    assert "--expect any exited 0 (want 0)" in out
+    assert "exited 1 (want 1)" in out
+    # And the two lines that were wrong. The baselines line is the one that read
+    # `sweep.baselines` and so printed nothing at all.
+    assert "baselines graded through the same rollout (bps): twap" in out
+    assert "THE THREE NUMBERS" in out
+    assert "verdict:" in out
+
+
+def test_the_rehearsal_writes_nothing_a_reader_would_quote(rehearsal):
+    """A dry run that can touch a committed artefact is not a dry run.
+
+    `results/m5_alpha.json` is the file every other document quotes. The rehearsal
+    runs the same `write_outputs` the real driver does, so the only thing between a
+    rehearsal and the committed result is one `write=False` argument — which makes
+    it worth an assertion rather than a reading of the code.
+    """
+    assert rehearsal["artefact_after"] == rehearsal["artefact_before"]

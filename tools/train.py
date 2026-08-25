@@ -33,6 +33,7 @@ import os
 import sys
 from dataclasses import replace
 from pathlib import Path
+from typing import NamedTuple
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = REPO_ROOT / "configs" / "m2_ppo.yaml"
@@ -1116,7 +1117,14 @@ def assert_training_and_grading_agree(experiment: Experiment) -> tuple:
     return training.observation_space, graded.observation_space
 
 
-def alpha_reporting_pass(experiment: Experiment, *, paths: int = 256) -> dict:
+class ReportingPass(NamedTuple):
+    """What the pre-run pass produced: the document, and the sweep behind it."""
+
+    document: dict
+    sweep: object
+
+
+def alpha_reporting_pass(experiment: Experiment, *, paths: int = 256) -> ReportingPass:
     """Exercise **every** path that runs after the sweep, on fabricated data.
 
     ``docs/house-notes.md``, *No code path may be reachable only at the end of a
@@ -1140,8 +1148,11 @@ def alpha_reporting_pass(experiment: Experiment, *, paths: int = 256) -> dict:
     7. every line that reports where a file was written
        (:func:`write_outputs`, into a scratch directory).
 
-    Returns the fabricated document, so a test can assert on the same object the
-    run exercised rather than on a second one built to look like it.
+    Returns the fabricated document *and the sweep it was built from*, so a test
+    can assert on the same objects the run exercised rather than on a second set
+    built to look like them — and so ``--rehearse`` can hand the same fabricated
+    sweep to :func:`report_and_exit`, which is the part of this driver that lives
+    below every function the pass can call.
     """
     from temper.eval.sweep import (
         SweepResult,
@@ -1235,7 +1246,7 @@ def alpha_reporting_pass(experiment: Experiment, *, paths: int = 256) -> dict:
     scratch = REPO_ROOT / "results" / "scratch"
     scratch.mkdir(parents=True, exist_ok=True)
     write_outputs(replace(experiment, results_metrics=scratch / "m5_pass.json"), document)
-    return document
+    return ReportingPass(document=document, sweep=sweep)
 
 
 def _fabricated_training(experiment: Experiment):
@@ -1270,6 +1281,112 @@ def _fabricated_training(experiment: Experiment):
     ]
 
 
+def rehearse(experiment: Experiment) -> int:
+    """The whole reporting path AND the entry point's tail, on fabricated data.
+
+    :func:`alpha_reporting_pass` covers every function that runs after the sweep.
+    It cannot cover `main`, because `main` is not one of the functions it calls,
+    and that is where two of M5's three post-run defects lived: a bare `verdict`
+    name unbound for two milestones, and a baselines line reading the empty dict
+    of the wrong world. Both fired only once ten seeds had trained.
+
+    BOTH exit branches run, which is the part that needs saying. `--expect any` is
+    the lenient one; the strict one only executes when the verdict *disagrees* with
+    what was expected, and a rehearsal whose fabricated policy happens to agree
+    would never reach it. So the second call deliberately states the expectation
+    the fabricated verdict did not reach, and the rehearsal fails unless the
+    lenient call returns 0 and the strict one returns 1.
+
+    Writes nothing: the pass writes its document into `results/scratch/`, and the
+    tail is called with ``write=False``, so a rehearsal can never touch a committed
+    artefact. What it returns is a statement about this driver, not about a policy
+    — the fabricated tilt misses most of the bars, and that is fine, because the
+    thing under test is whether the reporting can say so.
+    """
+    if not experiment.signal.informative:
+        print(
+            "--rehearse covers the alpha reporting path, and this config has no "
+            "informative signal. Nothing to rehearse."
+        )
+        return 0
+
+    print("-- rehearsal 1/3: the reporting pass (fabricated data, no training) --")
+    passed = alpha_reporting_pass(experiment)
+
+    print("\n-- rehearsal 2/3: main's own tail, --expect any --")
+    lenient = report_and_exit(experiment, passed.sweep, write=False, expect="any")
+
+    reached = "pass" if passed.document["verdict"]["passed"] else "miss"
+    contrary = "miss" if reached == "pass" else "pass"
+    print(f"\n-- rehearsal 3/3: the mismatch branch, --expect {contrary} --")
+    strict = report_and_exit(experiment, passed.sweep, write=False, expect=contrary)
+
+    ok = lenient == 0 and strict == 1
+    print(
+        f"\n-- rehearsal {'complete' if ok else 'FAILED'}: --expect any exited "
+        f"{lenient} (want 0), --expect {contrary} exited {strict} (want 1) --"
+    )
+    return 0 if ok else 1
+
+
+def report_and_exit(
+    experiment: Experiment, sweep, *, write: bool, expect: str
+) -> int:
+    """Everything `main` does after the sweep returns, and the status it exits on.
+
+    A function rather than the bottom of `main` for one reason: the house note's
+    rule is written over paths that run after an expensive producer, and until M5
+    this driver had a stretch of them that no test could reach because they were
+    not in a function. Both of the defects that survived M5's pre-run pass were in
+    here — a bare `verdict` name that had been unbound for two milestones, and a
+    baselines line reading the empty dict of the wrong world — and both fired
+    only once ten seeds had trained.
+
+    `--rehearse` calls this with a fabricated sweep, so the tail runs end to end in
+    seconds, exit code included.
+    """
+    document = build_document(sweep)
+
+    if sweep.liquidity_baselines:
+        baselines = ", ".join(
+            f"{name} {g.objective:.5f}"
+            for name, g in sweep.liquidity_baselines.items()
+        )
+        print(f"  baselines graded through the same rollout (bps): {baselines}")
+    elif sweep.alpha_baselines:
+        baselines = ", ".join(
+            f"{name} {g.objective:.5f}" for name, g in sweep.alpha_baselines.items()
+        )
+        print(f"  baselines graded through the same rollout (bps): {baselines}")
+    else:
+        baselines = ", ".join(
+            f"{name} {g.gap_fraction:+.4f}" for name, g in sweep.baselines.items()
+        )
+        print(f"  baselines graded through the same rollout: {baselines}")
+
+    if write:
+        write_outputs(experiment, document)
+
+    print_verdict(experiment, document)
+
+    verdict = document["verdict"]
+    reached = "pass" if verdict["passed"] else "miss"
+    print(f"sweep {verdict['sweep_seconds']:.0f}s · verdict: {reached.upper()}")
+    if verdict["failed_bars"]:
+        print(f"  bars not met: {', '.join(verdict['failed_bars'])}")
+    if expect == "any":
+        return 1 if verdict["red_flags"] else 0
+    if reached != expect:
+        print(
+            f"...but --expect {expect} was stated. A run that does not reach "
+            "the verdict it was expected to reach is a finding either way: if a "
+            "recorded miss starts passing, the amendment that rests on it needs "
+            "revisiting (docs/briefs/M2-ppo-rediscovery.md, amendment 1)."
+        )
+        return 1
+    return 0
+
+
 def main() -> int:
     _stdout_utf8()
     parser = argparse.ArgumentParser(description=__doc__)
@@ -1280,6 +1397,15 @@ def main() -> int:
         help="verify the config and the lambda rule, then stop",
     )
     parser.add_argument("--quiet", action="store_true", help="no per-update trace")
+    parser.add_argument(
+        "--rehearse",
+        action="store_true",
+        help=(
+            "run the pre-run reporting pass AND this driver's own post-sweep "
+            "tail on fabricated data, then exit with the status a real run "
+            "would have exited with; trains nothing, writes nothing"
+        ),
+    )
     parser.add_argument(
         "--no-write", action="store_true", help="grade and print, but write nothing"
     )
@@ -1380,6 +1506,9 @@ def main() -> int:
             )
         return 0
 
+    if args.rehearse:
+        return rehearse(experiment)
+
     _header(experiment)
     if experiment.signal.informative:
         # BEFORE the first seed, not after the last. Every path that runs after
@@ -1401,44 +1530,9 @@ def main() -> int:
             "recorded revision does not contain the code that produced it "
             "(invariant 1). Commit before an acceptance run."
         )
-    document = build_document(sweep)
-
-    if sweep.liquidity_baselines:
-        baselines = ", ".join(
-            f"{name} {g.objective:.5f}"
-            for name, g in sweep.liquidity_baselines.items()
-        )
-        print(f"  baselines graded through the same rollout (bps): {baselines}")
-    elif sweep.alpha_baselines:
-        baselines = ", ".join(
-            f"{name} {g.objective:.5f}" for name, g in sweep.alpha_baselines.items()
-        )
-        print(f"  baselines graded through the same rollout (bps): {baselines}")
-    else:
-        baselines = ", ".join(
-            f"{name} {g.gap_fraction:+.4f}" for name, g in sweep.baselines.items()
-        )
-        print(f"  baselines graded through the same rollout: {baselines}")
-
-    if not args.no_write:
-        write_outputs(experiment, document)
-
-    print_verdict(experiment, document)
-
-    verdict = document["verdict"]
-    reached = "pass" if verdict["passed"] else "miss"
-    print(f"sweep {verdict['sweep_seconds']:.0f}s · verdict: {reached.upper()}")
-    if args.expect == "any":
-        return 1 if verdict["red_flags"] else 0
-    if reached != args.expect:
-        print(
-            f"...but --expect {args.expect} was stated. A run that does not reach "
-            "the verdict it was expected to reach is a finding either way: if a "
-            "recorded miss starts passing, the amendment that rests on it needs "
-            "revisiting (docs/briefs/M2-ppo-rediscovery.md, amendment 1)."
-        )
-        return 1
-    return 0
+    return report_and_exit(
+        experiment, sweep, write=not args.no_write, expect=args.expect
+    )
 
 
 if __name__ == "__main__":
