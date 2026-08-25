@@ -93,6 +93,7 @@ from temper.env import impact_for
 from temper.oracle import (
     LINEAR_ENCODING,
     POWER_LAW_ENCODING,
+    alpha_coefficient,
     Market,
     NoSignal,
     OneStepSignal,
@@ -354,9 +355,10 @@ def test_the_mirror_is_built_in_the_same_signal_world_as_the_primary():
     """M4a's lesson, applied to the third seam before an estimator can be bitten.
 
     A mirror that defaulted would be a signal-free env averaged against a
-    signal-bearing primary. **Amended by task 3:** the mirror is handed the
-    primary's signal *negated* rather than shared, so what "same world" means here
-    is same law, same pool, same index, opposite draw.
+    signal-bearing primary. **Amended twice:** task 3 handed the mirror the
+    primary's signal *negated*; task 4 measured what that does to the estimator
+    and put it back to shared. So "same world" here means the same stream object,
+    the same pool, the same index — and the mirror negates only the price.
     """
     stream = signal_stream(OneStepSignal(0.2), SIGNAL_TRAIN_POOL)
     env = ExecutionEnv(
@@ -369,23 +371,16 @@ def test_the_mirror_is_built_in_the_same_signal_world_as_the_primary():
         stream_index=4,
     )
     mirror = mirror_of(env)
-    assert isinstance(mirror.signal.signal, NegatedSignal)
-    assert mirror.signal.signal.base is stream.signal
-    assert mirror.signal.pool == stream.pool and mirror.signal.index == stream.index
+    assert mirror.signal is stream
     assert mirror.signal_address == env.signal_address
     assert mirror.observation_space.shape == env.observation_space.shape
-    # The correlation is NOT negated — negating it would put the mirror in a
-    # different world at the same address rather than reflecting this one.
-    assert mirror.signal.signal.correlation() == stream.signal.correlation()
-    assert mirror.signal.signal.lag == stream.signal.lag
+    assert mirror.negated is False, "the price proxy is installed at reset, not here"
+    mirror.reset(seed=4)
+    assert mirror.negated
 
 
 def test_a_signal_free_mirror_is_the_object_it_always_was():
-    """The wrap is applied only where there is something to negate.
-
-    M0 through M4b get the identical :class:`SignalStream`, so this constructor is
-    provably unchanged for them rather than merely equivalent.
-    """
+    """The stream is handed over untouched in every world, signal or not."""
     env = ExecutionEnv(
         _case_market(),
         100_000.0,
@@ -397,121 +392,20 @@ def test_a_signal_free_mirror_is_the_object_it_always_was():
     assert mirror_of(env).signal is env.signal is NO_SIGNAL_STREAM
 
 
-def test_negating_the_signal_is_what_keeps_the_shock_negation_exact():
-    """Why the mirror negates the signal, measured rather than argued.
+def test_action_identity_survives_the_signal_seam():
+    """The brief predicted this would end here. It does not, and task 4 says why.
 
-    With ``xi = rho s + sqrt(1 - rho^2) e`` and only the price generator negated,
-    a mirror *sharing* the signal realises ``rho s - sqrt(1 - rho^2) e``, which is
-    not ``-xi``. Negating both gives ``-xi`` to the bit. So the choice is forced by
-    the pairing's one exact property, not by preference — and this shows both
-    sides of it rather than only the one that works.
-    """
-    market = _case_market()
-    schedule = -np.diff(twap_trajectory(market, 100_000.0))
-    stream = signal_stream(OneStepSignal(0.4), SIGNAL_TRAIN_POOL)
-
-    def primary():
-        return ExecutionEnv(
-            market,
-            100_000.0,
-            1e-4,
-            signal=stream,
-            root_seed=11,
-            pool=M5_DIFFERENTIAL_POOL,
-            stream_index=5,
-        )
-
-    # The arrangement that works: the pair, as built.
-    pair = AntitheticPair(primary())
-    pair.reset(seed=5)
-    for shares in schedule:
-        pair.step(float(shares))
-    assert np.array_equal(pair.mirror.signals, -pair.primary.signals)
-
-    # The arrangement that does not: a mirror on the *shared* signal. Built by
-    # hand, because `mirror_of` no longer produces one.
-    shared = MirrorEnv(
-        market,
-        100_000.0,
-        1e-4,
-        temporary_impact=primary().temporary_impact,
-        signal=stream,
-        root_seed=11,
-        pool=M5_DIFFERENTIAL_POOL,
-        stream_index=5,
-    )
-    reference, shared_env = primary(), shared
-    reference.reset(seed=5)
-    shared_env.reset(seed=5)
-    for shares in schedule:
-        _, _, _, _, info = reference.step(float(shares))
-        _, _, _, _, m_info = shared_env.step(float(shares))
-    assert m_info[SHOCK_KEY] != -info[SHOCK_KEY], (
-        "a mirror sharing the signal happened to negate the shock anyway, so this "
-        "test cannot distinguish the two arrangements"
-    )
-
-
-def test_action_identity_has_ended_and_the_replacement_is_exact():
-    """The retirement, and what stands in its place.
-
-    Retired: "the two halves see the same observation". Standing in its place:
-    every coordinate but the signal is bitwise equal, and the signal is the exact
-    negation. Both halves of that are checked here, and the retirement is shown to
-    be *material* rather than nominal — a policy shown the mirror's observation
-    would choose a different action, which is the whole content of the claim that
-    ended.
-    """
-    market = _case_market()
-    schedule = -np.diff(twap_trajectory(market, 100_000.0))
-    pair = AntitheticPair(
-        ExecutionEnv(
-            market,
-            100_000.0,
-            1e-4,
-            signal=signal_stream(OneStepSignal(0.4), SIGNAL_TRAIN_POOL),
-            root_seed=11,
-            pool=M5_DIFFERENTIAL_POOL,
-            stream_index=6,
-        )
-    )
-    assert pair.mirrors_signal
-
-    def tilt(observation):
-        """A policy that reads the signal — the simplest one that can."""
-        return float(observation[2])
-
-    observation, _ = pair.reset(seed=6)
-    differing = 0
-    for shares in schedule:
-        mirrored = pair.mirror._observation()
-        assert np.array_equal(observation[:2], mirrored[:2]), (
-            "the halves disagree about time or inventory, which no amendment "
-            "permits"
-        )
-        assert mirrored[2] == -observation[2]
-        if tilt(observation) != tilt(mirrored):
-            differing += 1
-        observation, _, _, _, _ = pair.step(float(shares))
-
-    assert differing >= market.n_bins - 1, (
-        f"a signal-reading policy chose the same action on both halves at "
-        f"{market.n_bins - differing} of {market.n_bins} decision points; the "
-        "retirement of action identity would be nominal rather than real"
-    )
-
-
-def test_action_identity_is_kept_verbatim_where_it_still_holds():
-    """Three milestones keep the check they were built under.
-
-    The retirement is scoped to worlds with an informative signal. A signal-free
-    world — and a world whose signal is pointed at an already-committed shock, so
-    the observation never grows — must still satisfy the old bitwise assertion,
-    and the pair must be asserting it rather than skipping to the weaker rule.
+    The pair shares the signal, so both halves see the same observation and take
+    the same action — M1a's assertion verbatim, through a three-coordinate
+    observation, in the world that was supposed to end it. What changes is the
+    *shock* identity, which generalises from "the mirror's is the negation" to
+    "the two average to the conditional mean"; ``rho = 0`` makes those the same
+    statement, which is why no earlier world inherits a looser check.
     """
     market = _case_market()
     schedule = -np.diff(twap_trajectory(market, 100_000.0))
     for label, stream in (
+        ("signal", signal_stream(OneStepSignal(0.4), SIGNAL_TRAIN_POOL)),
         ("absent", None),
         (
             "already-committed",
@@ -529,20 +423,70 @@ def test_action_identity_is_kept_verbatim_where_it_still_holds():
                 stream_index=7,
             )
         )
-        assert not pair.mirrors_signal, label
         observation, _ = pair.reset(seed=7)
         for shares in schedule:
             assert np.array_equal(observation, pair.mirror._observation()), label
             observation, _, _, _, _ = pair.step(float(shares))
+        assert np.array_equal(pair.mirror.signals, pair.primary.signals), label
+
+
+def test_the_shock_identity_generalises_rather_than_being_replaced():
+    """``(xi + xi') / 2 = rho s`` at every step, and ``xi' = -xi`` when rho is zero.
+
+    The pair asserts this itself, so reaching the end of an episode is most of the
+    check; what is added here is the *measurement* — how exact it is — and the
+    ``rho = 0`` limit, where the generalised form has to collapse onto the
+    assertion three milestones were built under rather than merely approximate it.
+    """
+    market = _case_market()
+    schedule = -np.diff(twap_trajectory(market, 100_000.0))
+    amplitude = alpha_coefficient(market)
+
+    for rho in (0.4, 0.01):
+        env = ExecutionEnv(
+            market,
+            100_000.0,
+            1e-4,
+            signal=signal_stream(OneStepSignal(rho), SIGNAL_TRAIN_POOL),
+            root_seed=11,
+            pool=M5_DIFFERENTIAL_POOL,
+            stream_index=12,
+        )
+        pair = AntitheticPair(env)
+        pair.reset(seed=12)
+        signals, worst = env.signals, 0.0
+        for index, shares in enumerate(schedule):
+            _, _, _, _, info = pair.step(float(shares))
+            mirrored = pair.mirror._walk
+            expected = amplitude * rho * float(np.sum(signals[: max(index, 0)]))
+            worst = max(worst, abs(0.5 * (info[SHOCK_KEY] + mirrored) - expected))
+        assert worst < 1e-9, f"rho={rho}: worst {worst:.3e} bps"
+
+    # rho = 0: the generalised form must be the exact negation, not close to it.
+    env = ExecutionEnv(
+        market,
+        100_000.0,
+        1e-4,
+        root_seed=11,
+        pool=M5_DIFFERENTIAL_POOL,
+        stream_index=12,
+    )
+    pair = AntitheticPair(env)
+    pair.reset(seed=12)
+    for shares in schedule:
+        _, _, _, _, info = pair.step(float(shares))
+        assert pair.mirror._walk == -info[SHOCK_KEY]
 
 
 def test_the_pair_refuses_a_mirror_on_a_fresh_signal_path():
-    """The replacement has teeth: "different" is not enough, it must be the negation.
+    """A mirror drawing its own signal is refused before a step is taken.
 
-    A mirror drawing its own signal would disagree with the primary on exactly the
-    coordinate the amendment permits them to disagree on — and would be averaging
-    two unrelated worlds. This is the M4a mirror bug wearing M5's clothes, and the
-    exact-negation form of the check is what refuses it.
+    It would be averaging two unrelated worlds — the M4a mirror bug wearing M5's
+    clothes — and because the pair now *shares* the signal, the halves disagree
+    about the observation and M1a's own assertion catches it. That check doing new
+    work for free is the same thing M4b found when a mirror on a different
+    liquidity path was refused by the observation rule rather than by the
+    dedicated one.
     """
     market = _case_market()
     pair = AntitheticPair(
@@ -558,7 +502,7 @@ def test_the_pair_refuses_a_mirror_on_a_fresh_signal_path():
     )
     pair.mirror.signal = pair.mirror.signal.pinned_to(4242)
     pair.mirror._signal_rng = None
-    with pytest.raises(PairDiverged, match="not the exact negation"):
+    with pytest.raises(PairDiverged, match="different observations"):
         pair.reset(seed=8)
 
 

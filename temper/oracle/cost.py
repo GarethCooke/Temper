@@ -27,7 +27,8 @@ from dataclasses import dataclass
 import numpy as np
 
 from .impact import linearised_eta, temporary_impact_bps
-from .model import BPS, Market
+from .model import BPS, Market, alpha_coefficient
+from .signal import AlphaSignal
 
 
 @dataclass(frozen=True)
@@ -38,11 +39,21 @@ class CostMoments:
     permanent: float
     spread: float
     variance: float
+    #: M5's conditional alpha term, in bps: ``-A rho sum_k h_k s_{k-lag}``. Zero
+    #: unless this was computed *conditional on a realised signal path*, which is
+    #: what the default keeps true for every number M0 through M4b reported —
+    #: adding a component with a zero default is what makes "bit-identical without
+    #: a signal" a property of the arithmetic rather than of a code path.
+    #:
+    #: Negative when the policy monetises the signal, and it is the **gross**
+    #: effect: the milestone's headline is this plus the execution premium paid to
+    #: collect it, which is why a grade reports the parts.
+    alpha: float = 0.0
 
     @property
     def expected(self) -> float:
-        """Total expected cost in bps: the three components summed."""
-        return self.temporary + self.permanent + self.spread
+        """Total expected cost in bps: impact, permanent, spread, and alpha."""
+        return self.temporary + self.permanent + self.spread + self.alpha
 
     def objective(self, lambda_risk: float) -> float:
         """The frozen mean–variance objective ``E + lambda * V``.
@@ -116,7 +127,65 @@ def shortfall_variance_bps2(trajectory, market: Market) -> float:
     return float((market.sigma_bin * BPS) ** 2 * np.sum((x[:-1] / order_size) ** 2))
 
 
-def cost_moments(trajectory, market: Market, *, liquidity=None) -> CostMoments:
+def conditional_alpha_bps(trajectory, market: Market, signals, signal: AlphaSignal) -> float:
+    """``-A rho sum_k h_k s_{k-lag}`` — the alpha term of ``E[cost | s]``, in bps.
+
+    The one new term M5 adds to a cost, and the *only* place the index that pairs
+    inventory with signal is written down for the grading route. Two things about
+    it are easy to get wrong and both are fixed here rather than at a call site.
+
+    **Which inventory.** ``h_k = x_k / X`` is the inventory held *before* bin ``k``
+    executes, because that is what the shock landing before bin ``k`` is charged
+    on (``ARCHITECTURE.md`` §9, *The shock lands before the bin executes*). It is
+    the same ``h`` the inventory penalty sums, not the post-trade holding.
+
+    **Which signal.** ``s_{k-lag}``, the signal shown at the decision point
+    ``lag`` bins earlier — the one that *predicts* ``xi_k``. At the model's lag of
+    one, ``h_1`` pairs with ``s_0``, ``h_2`` with ``s_1``, and ``h_0`` pairs with
+    nothing, because ``xi_0`` is predicted by nothing and every schedule holds the
+    whole order through it. The sum therefore has ``n_bins - lag`` terms, not
+    ``n_bins``.
+
+    A shifted index survives every aggregate check in this repo — the level is
+    right, the variance is right, the sign is usually right — and dies only on a
+    case small enough to do on paper, which is why
+    ``tests/test_m5_conditional_grading.py`` asserts it on three bins by hand
+    before anything larger is believed.
+
+    The sign is the env's: realised shortfall carries ``-w_k * price_bps`` with
+    ``price_bps`` containing ``+walk``, so a *positive* shock is a price that rose,
+    which is money to a seller. A policy that expects the price to rise should hold
+    inventory through the next bin, and the term is negative when it does.
+    """
+    x = np.asarray(trajectory, dtype=float)
+    if x.ndim != 1 or x.size != market.n_bins + 1:
+        raise ValueError(
+            f"trajectory must have {market.n_bins + 1} points for an "
+            f"{market.n_bins}-bin grid, got shape {x.shape}"
+        )
+    path = np.asarray(signals, dtype=float)
+    if path.shape != (market.n_bins,):
+        raise ValueError(
+            f"signals must be one draw per bin ({market.n_bins},), got shape "
+            f"{path.shape}"
+        )
+    lag = signal.lag
+    holdings = x[:-1] / x[0]
+    return float(
+        -alpha_coefficient(market)
+        * signal.correlation()
+        * np.sum(holdings[lag:] * path[: market.n_bins - lag])
+    )
+
+
+def cost_moments(
+    trajectory,
+    market: Market,
+    *,
+    liquidity=None,
+    signal: AlphaSignal | None = None,
+    signals=None,
+) -> CostMoments:
     """Cost moments under the power-law temporary impact model.
 
     This is the vendored model: what FrontierView charges, and what the goldens
@@ -132,10 +201,21 @@ def cost_moments(trajectory, market: Market, *, liquidity=None) -> CostMoments:
     per-step assertion that licenses it is
     :func:`~temper.eval.grading.deterministic_schedule`.
 
-    ``liquidity=None`` is the deterministic world and is **bit-identical** to what
-    this function computed before the argument existed, which
-    ``tests/test_m4b_conditional_grading.py`` pins: no M4a or earlier number is
-    permitted to move because a later milestone widened a signature.
+    `signal` and `signals` are M5's pair: the law and the realised path it drew.
+    Together they add :func:`conditional_alpha_bps` to the expected cost, which
+    makes this ``E[cost | s]`` *exactly* for the same reason the liquidity argument
+    makes it ``E[cost | L]`` — the price enters realised cost only through M1a's
+    affine term, so conditioning on what the policy saw removes all of the price
+    randomness analytically. Both or neither: a law with no path cannot be
+    evaluated and a path with no law has no ``rho``.
+
+    ``liquidity=None`` is the deterministic world and ``signal=None`` is the
+    signal-free one, and each is **bit-identical** to what this function computed
+    before its argument existed — ``tests/test_m4b_conditional_grading.py`` and
+    ``tests/test_m5_conditional_grading.py`` pin them. No M4a or earlier number is
+    permitted to move because a later milestone widened a signature, and with
+    ``alpha`` defaulting to a float zero that is a property of the arithmetic
+    rather than of a branch.
 
     The encoding is unchanged. Liquidity randomises the *market*, not the cost
     functional — the charge is still ``eta sigma p**beta`` — so §9's *A metric
@@ -153,12 +233,22 @@ def cost_moments(trajectory, market: Market, *, liquidity=None) -> CostMoments:
         if np.any(multiplier <= 0.0):
             raise ValueError("liquidity multipliers must be strictly positive")
         participation = participation / multiplier
+    if (signal is None) != (signals is None):
+        raise ValueError(
+            "signal and signals go together: a law with no realised path cannot be "
+            "evaluated, and a path with no law has no rho"
+        )
     temporary = float(np.sum(temporary_impact_bps(participation, market) * weights))
     return CostMoments(
         temporary=temporary,
         permanent=permanent_cost_bps(trajectory, market),
         spread=float(market.params.half_spread * weights.sum()),
         variance=shortfall_variance_bps2(trajectory, market),
+        alpha=(
+            0.0
+            if signal is None
+            else conditional_alpha_bps(trajectory, market, signals, signal)
+        ),
     )
 
 

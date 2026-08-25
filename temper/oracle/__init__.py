@@ -62,6 +62,7 @@ from .alpha import (
 )
 from .cost import (
     CostMoments,
+    conditional_alpha_bps,
     cost_moments,
     expected_cost_moments,
     linear_cost_moments,
@@ -199,6 +200,7 @@ __all__ = [
     "charge_for",
     "clairvoyant_price_values",
     "clairvoyant_trajectories",
+    "conditional_alpha_bps",
     "cost_moments",
     "default_n_bins",
     "execution_floor_bps",

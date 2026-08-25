@@ -464,6 +464,9 @@ POOL_ALLOWANCE: dict[str, frozenset[str]] = {
     # diagnostic pool and steps them tens of thousands of times. It reports no
     # number and grades nothing, so it holds neither reserved pool.
     "test_m5_observation_guard.py": frozenset({"m5/differential"}),
+    # M5 task 4 samples price draws at a pinned signal path and measures the
+    # pairing. Its own diagnostic pool; it reports no number and grades nothing.
+    "test_m5_conditional_grading.py": frozenset({"m5/differential"}),
 }
 
 #: The modules that regenerate a committed result and so legitimately hold both

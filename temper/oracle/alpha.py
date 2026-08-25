@@ -92,7 +92,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from .model import BPS, Market
+from .model import Market, alpha_coefficient
 from .powerlaw import (
     inventory_penalty_scale,
     power_law_charge,
@@ -138,21 +138,6 @@ _GOLDEN = (math.sqrt(5.0) - 1.0) / 2.0
 # ---------------------------------------------------------------------------
 # The two coefficients, and the certified floor
 # ---------------------------------------------------------------------------
-
-
-def alpha_coefficient(market: Market) -> float:
-    """``A = sigma_bin * BPS`` — one unit of shock, in bps of notional.
-
-    The same number ``ExecutionEnv`` scales its walk by and the square root of
-    :func:`~temper.oracle.powerlaw.inventory_penalty_scale`. Named here because
-    M5 is the first milestone in which it appears in ``E[cost]`` rather than only
-    in ``V``, and a coefficient re-derived at three call sites is the pattern that
-    put a derived-quantities object on FrontierView's own backlog.
-
-    At the reference case it is 42.99 bps — **18x the whole objective**, which is
-    the single fact that fixes this milestone's shape.
-    """
-    return float(market.sigma_bin * BPS)
 
 
 def execution_floor_bps(

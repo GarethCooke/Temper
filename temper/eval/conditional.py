@@ -68,10 +68,10 @@ from dataclasses import dataclass
 import numpy as np
 from gymnasium import Wrapper
 
-from temper.env import ExecutionEnv, LiquidityStream, TemporaryImpact
-from temper.eval.reference import LiquidityReferenceRow
+from temper.env import ExecutionEnv, LiquidityStream, SignalStream, TemporaryImpact
+from temper.eval.reference import AlphaReferenceRow, LiquidityReferenceRow
 from temper.eval.rollout import run_episode
-from temper.oracle import Market, cost_moments, trades
+from temper.oracle import AlphaSignal, Market, cost_moments, trades
 from temper.seeding import pool_rng
 
 #: Paired liquidity paths per graded policy. The brief pre-states M = 20 000 and
@@ -412,3 +412,288 @@ def trajectory_quantiles(
         ]
         for q in quantiles
     }
+
+
+# ---------------------------------------------------------------------------
+# M5 — the same pattern, conditioned on the signal path
+# ---------------------------------------------------------------------------
+
+#: Paired **signal** paths per graded policy. Larger than M4b's 20 000 because
+#: task 0 measured both: the 95 % half-width falls from 1.0405 % of the advantage
+#: to 0.3219 % for about twenty seconds of extra rollout, which puts the median
+#: tolerance bar 31x above the measurement floor against M4b's 7.4x. Recorded as
+#: amendment 1 of ``docs/briefs/M5-alpha-aware-execution.md``, where the soft red
+#: flag is stated in these units.
+DEFAULT_SIGNAL_PATHS = 200_000
+
+
+def signal_rollouts(
+    policy,
+    market: Market,
+    order_size: float,
+    lambda_risk: float,
+    *,
+    temporary_impact: TemporaryImpact,
+    signal: SignalStream,
+    root_seed: int,
+    pool: str,
+    stream_index: int = 0,
+    paths: int = DEFAULT_SIGNAL_PATHS,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Roll `policy` out on `paths` signal paths; return schedules and paths.
+
+    :func:`conditional_rollouts` one seam along, and identical in shape: one env,
+    reset once per path, so the signal blocks come off a single stream in a fixed
+    order and a second policy built at the same address sees exactly the same
+    paths. **That is what makes the random numbers common**, and it is what lets
+    the agent, the baselines and the reference's own feasible bound be compared
+    path by path rather than level against level.
+
+    Every episode goes through the *real* env and the shared
+    :func:`~temper.eval.rollout.run_episode` loop. There is one ``step`` loop in
+    this repo and rolling forward in numpy here would be a second one.
+
+    Returns ``(trajectories (paths, n_bins + 1), signals (paths, n_bins))``.
+    """
+    if paths < 2:
+        raise ValueError(f"a paired interval needs at least two paths, got {paths}")
+    env = ExecutionEnv(
+        market,
+        order_size,
+        lambda_risk,
+        temporary_impact=temporary_impact,
+        signal=signal,
+        root_seed=root_seed,
+        pool=pool,
+        stream_index=stream_index,
+    )
+    trajectories = np.empty((paths, market.n_bins + 1))
+    signals = np.empty((paths, market.n_bins))
+    for index in range(paths):
+        trajectories[index] = run_episode(env, policy).trajectory
+        signals[index] = env.signals
+    return trajectories, signals
+
+
+@dataclass(frozen=True)
+class ConditionalCosts:
+    """``E[cost | s]`` per path, already split the way the milestone reports it.
+
+    The parts are first-class rather than derived by the caller because M5's whole
+    methodological finding is that one fraction cannot grade this: the optimum
+    monetises ~0.148 bps of signal and pays ~0.067 back, so a policy that captures
+    0.15 and pays 0.07 and one that captures 0.25 and pays 0.17 score identically
+    at the headline and differ entirely in what they did.
+
+    All four are in bps, one entry per path, and they close:
+    ``objective == impact + risk + alpha + invariant``.
+    """
+
+    impact: np.ndarray
+    risk: np.ndarray
+    alpha: np.ndarray
+    invariant: np.ndarray
+    objective: np.ndarray
+
+    @property
+    def execution(self) -> np.ndarray:
+        """``impact + risk`` — the half of the objective the signal cannot touch.
+
+        What :func:`~temper.oracle.alpha.execution_floor_bps` bounds from below,
+        rigorously and by a *certified* number, for any policy at all.
+        """
+        return self.impact + self.risk
+
+
+def signal_costs(
+    trajectories: np.ndarray,
+    signals: np.ndarray,
+    market: Market,
+    lambda_risk: float,
+    signal: AlphaSignal,
+) -> ConditionalCosts:
+    """``E[cost | s] + lambda V`` per path, through the grader's own route.
+
+    Deliberately :func:`~temper.oracle.cost.cost_moments` per schedule rather than
+    the vectorised :func:`~temper.oracle.alpha.signal_path_objective_bps` the
+    reference's bounds use — M4b's rule, unchanged: the two are pinned against each
+    other in ``tests/test_m5_conditional_grading.py``, and keeping the *graded*
+    path on the function every earlier milestone graded through is what stops a
+    fast twin quietly becoming the definition of the objective.
+    """
+    rows = [
+        cost_moments(trajectory, market, signal=signal, signals=path)
+        for trajectory, path in zip(trajectories, signals)
+    ]
+    return ConditionalCosts(
+        impact=np.array([row.temporary for row in rows]),
+        risk=np.array([lambda_risk * row.variance for row in rows]),
+        alpha=np.array([row.alpha for row in rows]),
+        invariant=np.array([row.permanent + row.spread for row in rows]),
+        objective=np.array([row.objective(lambda_risk) for row in rows]),
+    )
+
+
+@dataclass(frozen=True)
+class AlphaGrade:
+    """A signal-observing policy's objective, in the three parts the brief demands.
+
+    Every fraction carries its absolute bps beside it (§9's denominator entry) and
+    the headline never appears alone — :attr:`net_capture` is meaningless without
+    :attr:`alpha_capture` and :attr:`premium_ratio` next to it, which is M5's own
+    methodological finding rather than a house style.
+    """
+
+    name: str
+    #: ``J_M4a + mean[C_policy(s) - C_M4a(s)]``, bps. Paired, so unbiased with a
+    #: small interval rather than a level estimate with a large one.
+    objective: float
+    half_width_bps: float
+    paired_sd_bps: float
+    unpaired_sd_bps: float
+    paths: int
+    #: ``E[impact + risk]``, and the certified floor it may not go below.
+    execution_bps: float
+    execution_floor_bps: float
+    #: ``-E[alpha]`` — the gross signal the policy actually monetised, bps.
+    alpha_bps: float
+    #: The reference's own three, for the fractions below.
+    reference_objective: float
+    reference_alpha_bps: float
+    reference_premium_bps: float
+    deterministic_objective: float
+    #: ``E[impact + risk] < floor - eps``: a defect with a proof (convexity, and
+    #: the floor is M4a's certified optimum).
+    red_flag: bool
+    #: ``J < J_DP`` beyond the DP's residual *and* this grade's own half-width.
+    #: Reported and investigated, never auto-failed.
+    soft_flag: bool
+    mean_trajectory: np.ndarray
+
+    @property
+    def excess_bps(self) -> float:
+        """How far above the converged optimum this policy sits, in bps."""
+        return self.objective - self.reference_objective
+
+    @property
+    def net_capture(self) -> float:
+        """``(J_M4a - J) / (J_M4a - J_DP)`` — the headline, and never alone."""
+        return (self.deterministic_objective - self.objective) / (
+            self.deterministic_objective - self.reference_objective
+        )
+
+    @property
+    def alpha_capture(self) -> float:
+        """The gross signal monetised, over the optimum's. The numerator's half."""
+        return self.alpha_bps / self.reference_alpha_bps
+
+    @property
+    def execution_premium_bps(self) -> float:
+        """What this policy paid for its alpha, over the *certified* floor."""
+        return self.execution_bps - self.execution_floor_bps
+
+    @property
+    def premium_ratio(self) -> float:
+        """The premium as a multiple of the optimum's. The denominator's half."""
+        return self.execution_premium_bps / self.reference_premium_bps
+
+    def as_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "objective_bps": self.objective,
+            "half_width_bps": self.half_width_bps,
+            "paired_sd_bps": self.paired_sd_bps,
+            "unpaired_sd_bps": self.unpaired_sd_bps,
+            "paths": self.paths,
+            "excess_bps": self.excess_bps,
+            "net_capture": self.net_capture,
+            "alpha_bps": self.alpha_bps,
+            "alpha_capture": self.alpha_capture,
+            "execution_bps": self.execution_bps,
+            "execution_floor_bps": self.execution_floor_bps,
+            "execution_premium_bps": self.execution_premium_bps,
+            "premium_ratio": self.premium_ratio,
+            "red_flag": self.red_flag,
+            "soft_flag": self.soft_flag,
+            "mean_trajectory": [float(x) for x in self.mean_trajectory],
+        }
+def grade_signal(
+    trajectories: np.ndarray,
+    signals: np.ndarray,
+    market: Market,
+    order_size: float,
+    reference: AlphaReferenceRow,
+    signal: AlphaSignal,
+    *,
+    name: str = "agent",
+    soft_slack: float = 0.0,
+    red_flag_slack: float = 0.0,
+) -> AlphaGrade:
+    """Score realised schedules against `reference`'s alpha-aware optimum.
+
+    `reference` carries the lambda, the world and both of the milestone's
+    reference kinds; `signal` carries the law those were solved at, and the two
+    are checked to agree before anything is computed. There is no way to grade at
+    one lambda against an optimum computed at another, in one world against an
+    optimum solved in the other, or at one ``rho`` against a reference built at a
+    different one — they travel together (invariant 7).
+
+    **The level is never estimated directly**, for M4b's reason in M5's numbers.
+    Every policy is scored as a *difference* against M4a's certified optimum on the
+    same signal paths:
+
+    .. code::
+
+        J_policy = J_M4a + mean_p[ C_policy(s_p) - C_M4a(s_p) ]
+
+    Unbiased, and unusually cleanly so: M4a's schedule is deterministic, so
+    ``E[alpha(M4a, s)] = -A rho sum_k h_k E[s] = 0`` **exactly**, and the anchor
+    carries no sampling error at all. Task 0 measured the pairing at 31x in
+    variance — 0.0606 bps paired against 0.3396 unpaired.
+
+    Two flags, and they are different kinds of statement. The **hard** one is
+    ``E[impact + risk] < J_M4a_varying``: impact and risk are convex in the trade
+    weights and contain no signal, so by Jensen no policy of any kind can go below
+    that, and the bound is M4a's *certified* optimum rather than a converged one.
+    The **soft** one is ``J < J_DP``, reported and investigated and never
+    auto-failed, because ``J_DP`` is converged and the grade is a Monte-Carlo
+    estimate — `soft_slack` is the sum of the DP's own Richardson residual and this
+    grade's half-width, per the brief's amendment 1.
+    """
+    if reference.signal.get("rho") != signal.correlation():
+        raise ValueError(
+            f"the reference was solved at rho = {reference.signal.get('rho')!r} and "
+            f"the grade would be computed at {signal.correlation()!r}; the optimum "
+            "and the law it is the optimum of travel together"
+        )
+    lambda_risk = reference.lambda_risk
+    anchor = reference.optimal.trajectory
+    costs = signal_costs(trajectories, signals, market, lambda_risk, signal)
+    anchor_costs = signal_costs(
+        np.tile(anchor, (signals.shape[0], 1)), signals, market, lambda_risk, signal
+    )
+
+    difference = costs.objective - anchor_costs.objective
+    objective = reference.optimal.objective + float(difference.mean())
+    half_width = float(
+        1.96 * difference.std(ddof=1) / math.sqrt(difference.size)
+    )
+    execution = float(costs.execution.mean())
+    return AlphaGrade(
+        name=name,
+        objective=objective,
+        half_width_bps=half_width,
+        paired_sd_bps=float(difference.std(ddof=1)),
+        unpaired_sd_bps=float(costs.objective.std(ddof=1)),
+        paths=int(difference.size),
+        execution_bps=execution,
+        execution_floor_bps=reference.execution_floor,
+        alpha_bps=-float(costs.alpha.mean()),
+        reference_objective=reference.adaptive_bps,
+        reference_alpha_bps=reference.alpha_available,
+        reference_premium_bps=reference.execution_premium,
+        deterministic_objective=reference.optimal.objective,
+        red_flag=execution < reference.execution_floor - red_flag_slack,
+        soft_flag=objective < reference.adaptive_bps - soft_slack,
+        mean_trajectory=trajectories.mean(axis=0),
+    )

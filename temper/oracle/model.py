@@ -51,6 +51,22 @@ POWER_LAW_ENCODING = "power_law"
 ENCODINGS: tuple[str, ...] = (LINEAR_ENCODING, POWER_LAW_ENCODING)
 
 
+def alpha_coefficient(market: "Market") -> float:
+    """``A = sigma_bin * BPS`` — one unit of price shock, in bps of notional.
+
+    The scale ``ExecutionEnv`` multiplies its walk by, the square root of the
+    inventory penalty, and from M5 the coefficient on the alpha term of a
+    conditional cost. It lives here rather than beside any one of those because it
+    is a *units* quantity, and a derived number re-derived at three call sites is
+    the pattern that put a derived-quantities object on FrontierView's own backlog.
+
+    At the reference case it is 42.99 bps — **18x the whole objective** — which is
+    the single fact that fixes M5's shape: information about price is worth vastly
+    more per unit than information about cost.
+    """
+    return float(market.sigma_bin * BPS)
+
+
 @dataclass(frozen=True)
 class SymbolParams:
     """Observable market parameters for one symbol.

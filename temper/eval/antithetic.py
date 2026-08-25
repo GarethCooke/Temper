@@ -30,32 +30,31 @@ Two structural checks, on every step, permanently
 -------------------------------------------------
 The brief asks for both because they are cheap now and expensive later.
 
-* **Action identity across the pair — half of it retires in M5.** Through M4b
-  this was one conjunction: the two halves *see the same observation* and *realise
-  the same trade*. M5 separates them, because only the first is a claim about the
-  method.
+* **Action identity across the pair — it does *not* end in M5, and task 4
+  measured why.** The brief predicted this check would go red because the halves
+  would see signals they disagree about, and M5 task 3 duly made the mirror negate
+  the signal. Task 4 measured what that does to the estimator and reversed it.
 
-  The **observation** half retires. The mirror's signal is the primary's negated
-  (:class:`NegatedSignal`), so the halves disagree about ``s`` by construction —
-  which is what §9 predicted would end this check. What replaces it is a sharper
-  statement of the same kind: **the halves differ in exactly one coordinate, and it
-  is the coordinate the milestone is about.** Every other coordinate must still be
-  bitwise equal and the signal coordinate must be the exact *negation*, not merely
-  different — a mirror on a fresh signal path would differ too, and would be the
-  M4a bug wearing M5's clothes. In a world with no informative signal the old
-  bitwise equality is asserted verbatim, so three milestones keep the check they
-  were built under.
+  The pairing hands **one action to both halves**, so the mirror executes the
+  primary's schedule whatever it sees. Negating the signal therefore negates the
+  *whole* shock, ``xi = rho s + sqrt(1 - rho^2) e``, and the average of the two
+  realised costs is the shock-free cost: an agent trained on it has no reason to
+  tilt at all. Measured over 4 000 episodes at ``rho = 0.4``, the averaged reward
+  had a standard deviation of **exactly zero** across signal paths and a
+  correlation with the alpha term of **0.0016**. The estimator is blind to the
+  thing the milestone is about.
 
-  The **trade** half does not retire and is not scoped. The pair hands one action
-  to both halves, so equal realised trades is a statement about the clip and the
-  inventory path rather than about the policy, and it is as true in M5 as in M3.
+  **Sharing the signal and negating only the price is the arrangement that works,
+  and it is better than the brief hoped for.** Then the mirror's shock is
+  ``rho s - sqrt(1 - rho^2) e``, the two halves' shocks average to ``rho s`` —
+  the conditional mean, exactly — and the averaged reward is
+  ``E[cost | s]`` itself: 4.5e-12 bps from the closed form over 2 500 episodes with
+  a signal-reacting schedule, correlation 1.000000000. The unpredictable half of
+  the price noise is removed entirely and the predictable half is kept whole.
 
-  What genuinely ends is the *interpretation*: the average is no longer "the same
-  policy replayed against mirrored shocks", because a policy shown the mirror's
-  observation would not have chosen the primary's action. It is the primary's
-  actions evaluated in the mirrored world — which is what M5 task 4 has to measure
-  the consequences of, and is why this is recorded as a retirement rather than a
-  refinement.
+  So both halves see the same observation, take the same action, and the old
+  bitwise assertion stands verbatim in every world. What generalises instead is the
+  *shock* identity, below.
 * **Shock negation is exact.** The mirror's published cumulative shock is
   required to be the exact negation of the primary's, elementwise, on every
   step. IEEE arithmetic rounds symmetrically, so a sum of negated terms is the
@@ -67,15 +66,22 @@ The brief asks for both because they are cheap now and expensive later.
   so they take the same action and the price noise still cancels exactly given
   ``(x, L)``. What the pairing no longer removes is the *liquidity* noise, which
   is the reward variance M4b's agent has to train through.
-* **The signal is negated, exactly** (M5), and the halves are in one world. The
-  mirror's signal coordinate must be the primary's negated, every other
-  coordinate must be bitwise equal, and — checked once at construction, where a
-  mismatch is loud and free — the two halves must carry the same impact model and
-  the same three seed addresses. Negating the signal is not a preference: with
-  ``xi = rho s + sqrt(1 - rho^2) e``, negating ``e`` alone gives the mirror
-  ``rho s - sqrt(1 - rho^2) e``, which is **not** ``-xi``, and the shock-negation
-  identity above goes red. Negating both gives ``-xi`` exactly, so the pairing's
-  one remaining exact property survives the seam that ended its first one.
+* **The shocks average to the conditional mean** (M5) — which *is* the negation
+  identity above, generalised rather than replaced. The signal is **shared**, so
+  the mirror negates only the unpredictable component and
+
+  .. code::
+
+      (xi_k + xi'_k) / 2 = rho * s_{k-1} = E[xi_k | s]
+
+  exactly. At ``rho = 0`` that is ``xi' = -xi`` and the assertion is M3's verbatim,
+  which is why the earlier worlds keep the check they were built under rather than
+  inheriting a looser one. Measured worst 7.1e-14 bps per step at ``rho = 0.4``.
+
+  The halves are also required to be in one world, checked once at construction
+  where a mismatch is loud and free: the same impact model and the same three seed
+  addresses. That is M4a's lesson made structural — it was found there by a
+  cancellation band four orders wide, after a run.
 
 What M4b actually changed, against what §9 predicted
 ----------------------------------------------------
@@ -127,7 +133,7 @@ from numpy.random import Generator
 
 from temper.env import LIQUIDITY_KEY, SHOCK_KEY, ExecutionEnv, SignalStream
 from temper.eval.variate import SHARES_KEY
-from temper.oracle import AlphaSignal
+from temper.oracle import AlphaSignal, alpha_coefficient
 
 
 class PairDiverged(AssertionError):
@@ -182,22 +188,27 @@ class NegatedDraws:
 class NegatedSignal(AlphaSignal):
     """The mirror's signal: the primary's draws, negated. ``NegatedDraws``' twin.
 
+    **This is the arrangement M5 task 3 chose and task 4 measured and rejected**,
+    and it is kept because the rejection is a measurement the suite re-runs rather
+    than a paragraph. ``mirror_of`` does *not* use it.
+
+    Negating the signal does make the mirror's shock the exact negation of the
+    primary's — ``rho (-s) + sqrt(1 - rho^2) (-e) = -xi`` — which is why it looked
+    right. What it also does is cancel the *predictable* half of the shock, and the
+    predictable half is the entire content of the milestone: with one action fed to
+    both halves the averaged reward becomes the shock-free cost, whose standard
+    deviation across signal paths is exactly zero and whose correlation with the
+    alpha term is 0.0016. An agent trained on it would learn to ignore the signal.
+    See ``tests/test_m5_conditional_grading.py``, which measures both arrangements
+    side by side.
+
     Deliberately *not* a full :class:`~temper.oracle.signal.AlphaSignal`
     look-alike, for the reason :class:`NegatedDraws` is not a full
-    :class:`~numpy.random.Generator` one. What is delegated is every pure value —
-    the correlation, the lag, the moments, the quadrature — and what is negated is
-    exactly one thing: :meth:`draw`. The sampling routines that compose a signal
-    with an independent path (:meth:`draw_pair`, :meth:`shocks_from`) raise, because
-    a caller supplying its own independent draws would get something that is not a
-    mirror and would have no way to notice.
-
-    **``correlation`` is not negated, and that is the crux.** The env composes its
-    shock as ``rho * s + sqrt(1 - rho^2) * e``. The mirror wants ``-xi``, and it
-    gets it because both inputs are negated at the same ``rho``:
-    ``rho * (-s) + sqrt(1 - rho^2) * (-e) = -(rho * s + sqrt(1 - rho^2) * e)``.
-    Negating ``rho`` instead would flip the model rather than the draw, and would
-    produce a mirror in a different world at the same seed address — the M4a bug's
-    shape, one seam along.
+    :class:`~numpy.random.Generator` one: what is delegated is every pure value and
+    what is negated is exactly one thing, :meth:`draw`. ``correlation`` in
+    particular is **not** negated — negating it would flip the model rather than
+    the draw, and would put the mirror in a different world at the same seed
+    address, which is the M4a bug's shape one seam along.
     """
 
     base: AlphaSignal
@@ -320,41 +331,41 @@ def mirror_of(env: ExecutionEnv) -> MirrorEnv:
     their actions, and would trade the pairing's one exact property for a partial
     second one.
 
-    **The signal stream is the third, and it is the one that is mirrored** — the
-    opposite of liquidity, for a reason that is arithmetic rather than taste. The
-    env composes each shock as ``rho * s + sqrt(1 - rho^2) * e``. Only the price
-    generator is proxied by :class:`NegatedDraws`, so a mirror sharing the
-    primary's signal would realise ``rho * s - sqrt(1 - rho^2) * e``, which is not
-    ``-xi``, and the pair's shock-negation identity would go red on the first
-    step of any signal-bearing world. Negating the signal as well gives ``-xi``
-    exactly.
+    **The signal stream is the third, and it is SHARED, like liquidity** — which
+    is the opposite of what M5's brief predicted and of what task 3 first built.
+    Task 4 measured both arrangements and the difference is not marginal.
 
-    So the choice is forced, and what it costs is the *action* identity: the two
-    halves see signals of opposite sign, act differently, and the assertion that
-    they act identically retires here (scoped, not deleted — see the module
-    docstring). Given a choice between the pairing's exact property and its
-    derived one, this keeps the exact one.
+    The env composes each shock as ``rho * s + sqrt(1 - rho^2) * e``, and the pair
+    hands **one action to both halves**. A mirror that negates the signal realises
+    ``-xi`` exactly — which is why it looks right — and the two realised costs then
+    average to the *shock-free* cost, because the predictable part of the shock is
+    negated along with the unpredictable part. Measured: standard deviation across
+    signal paths exactly zero, correlation with the alpha term 0.0016. The
+    estimator would be blind to the milestone.
 
-    The wrap is applied **only when the signal is informative**, so a world with no
-    signal — M0 through M4b, and M5's own uninformative controls — gets the very
-    same :class:`~temper.env.signal.SignalStream` object it always did, and this
-    constructor is provably unchanged there rather than merely equivalent.
+    Sharing the signal gives the mirror ``rho * s - sqrt(1 - rho^2) * e``. The
+    unpredictable half is negated, the predictable half is not, and the two shocks
+    average to ``rho * s`` — the conditional mean, exactly. So the averaged reward
+    is ``E[cost | s]`` itself, to 4.5e-12 bps over 2 500 episodes with a
+    signal-reacting schedule. The pairing removes **all** of the price noise and
+    keeps the whole of the signal, which is the brief's "it should help more here
+    than in M4b" arriving by the opposite mechanism to the one the brief named.
+
+    Both halves therefore see the same observation and act identically, and the
+    action-identity assertion does not retire after all. What generalises is the
+    shock identity: ``(xi + xi') / 2 = rho * s``, which is ``xi' = -xi`` at
+    ``rho = 0`` and so is M3's assertion verbatim in every earlier world.
     """
     if not isinstance(env, ExecutionEnv):
         raise TypeError(f"mirror_of takes a raw ExecutionEnv, got {type(env)!r}")
     root_seed, pool, stream = env.seed_address
-    signal = env.signal
-    if signal.informative:
-        signal = SignalStream(
-            signal=NegatedSignal(signal.signal), pool=signal.pool, index=signal.index
-        )
     return MirrorEnv(
         env.market,
         env.order_size,
         env.lambda_risk,
         temporary_impact=env.temporary_impact,
         liquidity=env.liquidity,
-        signal=signal,
+        signal=env.signal,
         root_seed=root_seed,
         pool=pool,
         stream_index=stream,
@@ -455,47 +466,43 @@ class PairLedger:
 # ---------------------------------------------------------------------------
 
 
+#: Bar on ``|(walk + walk') / 2 - E[walk | s]|``, in bps. The two sides sum the
+#: same terms in different orders, so this cannot be bitwise; 1e-9 is four orders
+#: above the 7.1e-14 measured at ``rho = 0.4`` and ten below anything that could
+#: move a reported number. In a world with no signal the assertion is the exact
+#: negation instead and no tolerance is involved at all.
+CONDITIONAL_WALK_TOLERANCE = 1.0e-9
+
+
 def _same(a, b) -> bool:
     """Bitwise equality of two observations, as the arrays the env returned."""
     return np.array_equal(np.asarray(a), np.asarray(b))
 
 
-def _observation_disagreement(primary, mirror, *, mirrors_signal: bool) -> str | None:
+def _observation_disagreement(primary, mirror) -> str | None:
     """What, if anything, is wrong with how the two halves' observations relate.
 
-    ``None`` means they relate the way the pairing requires. Which relation that
-    is depends on the world, and both are exact:
+    Bitwise equality, in every world — M1a's assertion verbatim, and M5 does not
+    retire it after all. The pair shares the signal and negates only the
+    unpredictable half of the price, so the halves see the same market, the same
+    inventory and the same prediction, and take the same action.
 
-    * **No informative signal** — bitwise equal, M1a through M4b's assertion
-      verbatim. Retiring it here would have thrown away a live check on three
-      worlds to accommodate a fourth.
-    * **An informative signal** — every coordinate but the last bitwise equal, and
-      the last the exact negation. Stronger than "they differ": a mirror on a
-      *fresh* signal path would differ too, and would be the M4a bug wearing M5's
-      clothes.
+    Kept as its own function rather than inlined because M5 task 3 briefly needed a
+    second relation here, and the shape of that mistake is worth leaving room for:
+    a pairing arrangement is a choice about *which* exactness to keep, and the
+    check that states it should be one named thing rather than a condition buried
+    in two call sites.
     """
     a, b = np.asarray(primary), np.asarray(mirror)
     if a.shape != b.shape:
         return f"observation shapes differ ({a.shape} vs {b.shape})"
-    if not mirrors_signal:
-        if np.array_equal(a, b):
-            return None
-        return (
-            f"the observation depends on the shocks ({a} vs {b}). Analytic grading "
-            "and antithetic cancellation both assume a price-free observation"
-        )
-    if not np.array_equal(a[:-1], b[:-1]):
-        return (
-            f"the halves disagree on a coordinate that is not the signal ({a} vs "
-            f"{b}); the signal is the only place a mirrored pair may differ"
-        )
-    if not np.array_equal(b[-1], -a[-1]):
-        return (
-            f"the mirror's signal {b[-1]!r} is not the exact negation of the "
-            f"primary's {a[-1]!r}; the mirror is on a different signal path rather "
-            "than the reflected one"
-        )
-    return None
+    if np.array_equal(a, b):
+        return None
+    return (
+        f"the observation depends on the shocks ({a} vs {b}). Analytic grading "
+        "and antithetic cancellation both assume the halves agree about what they "
+        "are looking at"
+    )
 
 
 class AntitheticPair(Wrapper):
@@ -520,11 +527,13 @@ class AntitheticPair(Wrapper):
         super().__init__(env)
         self.mirror = mirror_of(env)
         self.ledger = ledger
-        # Whether the halves are entitled to disagree, and about exactly what.
-        # Read off the *primary* once: a mirror that had somehow been built
-        # signal-free would then fail the per-step check rather than quietly
-        # agreeing with a weaker rule.
-        self.mirrors_signal = env.signal.informative
+        # Whether the shock identity is the plain negation or its conditional-mean
+        # generalisation. Read off the *primary* once: a mirror that had somehow
+        # been built signal-free would then fail the per-step check rather than
+        # quietly agreeing with a weaker rule.
+        self.shares_signal = env.signal.informative
+        self._alpha_walk = alpha_coefficient(env.market) * env.signal.signal.correlation()
+        self._conditional_walk = np.zeros(env.market.n_bins + 1)
         self._primary_return = 0.0
         self._mirror_return = 0.0
 
@@ -564,15 +573,20 @@ class AntitheticPair(Wrapper):
         mirrored, _ = self.mirror.reset(seed=seed, options=options)
         if not self.mirror.negated:
             raise PairDiverged("the mirror did not install its negating draws")
-        wrong = _observation_disagreement(
-            observation, mirrored, mirrors_signal=self.mirrors_signal
-        )
+        wrong = _observation_disagreement(observation, mirrored)
         if wrong is not None:
             # The phrase "different observations" is load-bearing: M4b's
             # guarantee suite matches on it to show that a mirror on a different
             # liquidity path is refused before a step, and that behaviour is
             # unchanged here. The wording is part of the contract.
             raise PairDiverged(f"pair halves reset to different observations: {wrong}")
+        # E[walk_k | s] for each step boundary: the conditional mean the two
+        # halves' walks must average to. Zero in every world without a signal, so
+        # the assertion below is M3's exact negation there.
+        signals = self.primary.signals
+        self._conditional_walk[0] = 0.0
+        self._conditional_walk[1] = 0.0
+        np.cumsum(self._alpha_walk * signals[:-1], out=self._conditional_walk[2:])
         self._primary_return = 0.0
         self._mirror_return = 0.0
         return observation, info
@@ -584,9 +598,7 @@ class AntitheticPair(Wrapper):
         )
 
         # -- the structural checks, every step -------------------------------
-        wrong = _observation_disagreement(
-            observation, mirrored, mirrors_signal=self.mirrors_signal
-        )
+        wrong = _observation_disagreement(observation, mirrored)
         if wrong is not None:
             raise PairDiverged(f"pair halves diverged: {wrong}")
         if info[SHARES_KEY] != m_info[SHARES_KEY]:
@@ -598,11 +610,26 @@ class AntitheticPair(Wrapper):
                 f"pair halves realised different trades ({info[SHARES_KEY]} vs "
                 f"{m_info[SHARES_KEY]}) from the same action"
             )
-        if m_info[SHOCK_KEY] != -info[SHOCK_KEY]:
-            raise PairDiverged(
-                f"the mirror's shock {m_info[SHOCK_KEY]!r} is not the exact "
-                f"negation of the primary's {info[SHOCK_KEY]!r}"
-            )
+        if not self.shares_signal:
+            if m_info[SHOCK_KEY] != -info[SHOCK_KEY]:
+                raise PairDiverged(
+                    f"the mirror's shock {m_info[SHOCK_KEY]!r} is not the exact "
+                    f"negation of the primary's {info[SHOCK_KEY]!r}"
+                )
+        else:
+            # The same identity, generalised: the pair negates the unpredictable
+            # half of the shock and shares the predictable half, so the two walks
+            # average to E[walk | s] rather than to zero. Not bitwise — the two
+            # sides reach the number by different orderings — but ten orders inside
+            # anything that could matter, and measured at 7.1e-14 per step.
+            expected = self._conditional_walk[info["step"] + 1]
+            middle = 0.5 * (info[SHOCK_KEY] + m_info[SHOCK_KEY])
+            if abs(middle - expected) > CONDITIONAL_WALK_TOLERANCE:
+                raise PairDiverged(
+                    f"the pair's shocks average to {middle!r} where the signal "
+                    f"path says E[walk | s] = {expected!r}; the mirror is not "
+                    "negating exactly the unpredictable half of the price"
+                )
         if m_info[LIQUIDITY_KEY] != info[LIQUIDITY_KEY]:
             # M4b's third identity. Liquidity is *common* across the pair, not
             # mirrored: the halves must see the same market and negate only the
