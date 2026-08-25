@@ -251,3 +251,34 @@ def rebuilt(experiment):
         "shuffled": tuple(replace(shuffled, name=f"seed{i}_s") for i in range(n)),
         "detail": tuple(dict(detail) for _ in range(n)),
     }
+
+
+def test_the_training_env_and_the_graded_env_show_the_same_thing(experiment):
+    """The check that would have saved twenty minutes, and could have saved more.
+
+    M5 task 6's first sweep trained seed 0 on a two-coordinate observation —
+    `train_seed` had never been handed the signal stream — and graded it on a
+    three-coordinate one. The network is built at the training width, so grading
+    died on ``mat1 and mat2 shapes cannot be multiplied (1x3 and 2x64)``.
+
+    It was loud, and that is luck rather than design: had the widths happened to
+    match, an agent trained blind and graded sighted would have produced a
+    plausible capture fraction about a world it never traded in, with every
+    identity, differential and guard in this repo still green — because each of
+    them checks ONE env, and this is a statement about two.
+    """
+    driver = _driver()
+    training_space, graded_space = driver.assert_training_and_grading_agree(experiment)
+    assert training_space.shape == graded_space.shape == (3,), (
+        "M5's observation is (time left, inventory left, s); if this is two wide "
+        "the signal seam is not reaching the env the agent trains in"
+    )
+
+
+def test_training_and_evaluation_signals_come_from_disjoint_pools(experiment):
+    """Invariant 5's out-of-sample claim, where both halves are in scope at once."""
+    from temper.eval.sweep import evaluation_signal, training_signal
+
+    assert training_signal(experiment).pool == "m5/signal-train"
+    assert evaluation_signal(experiment).pool == "m5/signal-eval"
+    assert training_signal(experiment).pool != evaluation_signal(experiment).pool

@@ -93,6 +93,7 @@ from temper.agents.checkpoint import network_description, save_policy  # noqa: E
 from temper.agents.execution import fraction_to_shares  # noqa: E402
 from temper.eval.experiment import Experiment, load_experiment  # noqa: E402
 from temper.eval.figures import trajectory_overlay  # noqa: E402
+from temper.env import ExecutionEnv, impact_for  # noqa: E402
 from temper.eval.sweep import (  # noqa: E402
     ALPHA_CAPTURE_BAR,
     PREMIUM_RATIO_BAR,
@@ -1049,6 +1050,72 @@ class _TiltedSchedule:
         return min(max(slice_size * tilt, 0.0), inventory)
 
 
+def assert_training_and_grading_agree(experiment: Experiment) -> tuple:
+    """The training env and the graded env must show the policy the same thing.
+
+    Cheap, and it cost twenty minutes to learn. M5 task 6's first sweep trained
+    seed 0 on a **two**-coordinate observation — `train_seed` had never been handed
+    the signal stream — and then graded it on a three-coordinate one. The network
+    is built at the training width, so the first forward pass in grading died on
+    ``mat1 and mat2 shapes cannot be multiplied (1x3 and 2x64)``.
+
+    Loud is the only reason that cost a seed rather than a milestone. An agent
+    trained blind and graded sighted, had the widths happened to match, would have
+    produced a perfectly plausible capture fraction about a world it never traded
+    in — and every identity, differential and guard in this repo would have stayed
+    green, because each of them checks one env at a time and this is a statement
+    about **two**.
+
+    Returns the two observation spaces, so a caller can print what it checked.
+    """
+    from temper.agents.execution import execution_env_factory
+    from temper.eval.sweep import (
+        evaluation_liquidity,
+        evaluation_signal,
+        training_liquidity,
+        training_signal,
+    )
+
+    case = experiment.case
+    impact = impact_for(experiment.cost_encoding, case.market, case.order_size)
+    training = execution_env_factory(
+        case.market,
+        case.order_size,
+        experiment.lambda_risk,
+        root_seed=experiment.seeds.root_seed,
+        pool=experiment.seeds.train_pool,
+        stream_index=0,
+        temporary_impact=impact,
+        liquidity=training_liquidity(experiment),
+        signal=training_signal(experiment),
+    )()
+    graded = ExecutionEnv(
+        case.market,
+        case.order_size,
+        experiment.lambda_risk,
+        temporary_impact=impact,
+        liquidity=evaluation_liquidity(experiment),
+        signal=evaluation_signal(experiment),
+        root_seed=experiment.seeds.root_seed,
+        pool=experiment.seeds.eval_pool,
+    )
+    if training.observation_space.shape != graded.observation_space.shape:
+        raise AssertionError(
+            f"the training env shows {training.observation_space.shape} and the "
+            f"graded env shows {graded.observation_space.shape}. A policy trained "
+            "on one and graded on the other is being scored in a world it never "
+            "traded in — and if the widths had matched, nothing would have said so"
+        )
+    # And the two must be *different streams* of the same shape: same width,
+    # disjoint pools. Invariant 5's out-of-sample claim is a property of the spawn
+    # keys, and this is the one place both halves are in scope at once.
+    if experiment.signal.informative:
+        assert training.unwrapped.signal_address[1] != graded.signal_address[1], (
+            "training and evaluation draw their signal from the same pool"
+        )
+    return training.observation_space, graded.observation_space
+
+
 def alpha_reporting_pass(experiment: Experiment, *, paths: int = 256) -> dict:
     """Exercise **every** path that runs after the sweep, on fabricated data.
 
@@ -1085,6 +1152,11 @@ def alpha_reporting_pass(experiment: Experiment, *, paths: int = 256) -> dict:
     )
 
     case = experiment.case
+    training_space, graded_space = assert_training_and_grading_agree(experiment)
+    print(
+        f"  reporting pass · widths     training {training_space.shape} == "
+        f"graded {graded_space.shape}"
+    )
     reference = alpha_reference(experiment)
     policy = _TiltedSchedule(case.market, case.order_size)
 

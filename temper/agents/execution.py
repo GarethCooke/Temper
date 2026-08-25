@@ -45,7 +45,7 @@ import torch
 from gymnasium import Env, Wrapper, spaces
 
 from temper.agents.ppo import AGENT_DTYPE, Agent
-from temper.env import ExecutionEnv, LiquidityStream, TemporaryImpact
+from temper.env import ExecutionEnv, LiquidityStream, SignalStream, TemporaryImpact
 from temper.oracle import Market
 from temper.seeding import DIFFERENTIAL_POOL
 
@@ -173,6 +173,7 @@ def execution_env_factory(
     reward_wrapper: Callable[[Env], Env] | None = None,
     temporary_impact: TemporaryImpact | None = None,
     liquidity: LiquidityStream | None = None,
+    signal: SignalStream | None = None,
 ) -> Callable[[], Env]:
     """A thunk building one training env at one seed address.
 
@@ -208,6 +209,7 @@ def execution_env_factory(
             lambda_risk,
             temporary_impact=temporary_impact,
             liquidity=liquidity,
+            signal=signal,
             root_seed=root_seed,
             pool=pool,
             stream_index=stream_index,

@@ -189,6 +189,16 @@ def train_seed(
     # liquidity stream — and the pair asserts per step that they saw the same
     # multiplier rather than trusting that they did.
     liquidity = training_liquidity(experiment)
+    # The THIRD seam, and it is the one whose absence does not look like an
+    # absence. A training env without it is two observation coordinates wide; the
+    # graded env is three; the network is built at the training width and the
+    # first forward pass in grading dies on `mat1 and mat2 shapes cannot be
+    # multiplied (1x3 and 2x64)`. That is what happened on M5 task 6's first
+    # launch, twenty minutes into seed 0 — loudly, which is the only reason it
+    # cost a seed rather than a milestone: an agent trained blind and graded
+    # sighted would otherwise have produced a plausible capture fraction about a
+    # world it never traded in.
+    signal = training_signal(experiment)
 
     def hook(update: int, metrics: dict) -> None:
         if experiment.estimator.antithetic:
@@ -208,6 +218,7 @@ def train_seed(
             reward_wrapper=wrapper,
             temporary_impact=impact,
             liquidity=liquidity,
+            signal=signal,
         )
         for stream in seeds.env_streams(ordinal, ppo.num_envs)
     ]
