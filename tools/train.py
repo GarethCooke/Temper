@@ -1409,6 +1409,11 @@ def main() -> int:
             for name, g in sweep.liquidity_baselines.items()
         )
         print(f"  baselines graded through the same rollout (bps): {baselines}")
+    elif sweep.alpha_baselines:
+        baselines = ", ".join(
+            f"{name} {g.objective:.5f}" for name, g in sweep.alpha_baselines.items()
+        )
+        print(f"  baselines graded through the same rollout (bps): {baselines}")
     else:
         baselines = ", ".join(
             f"{name} {g.gap_fraction:+.4f}" for name, g in sweep.baselines.items()
@@ -1420,6 +1425,7 @@ def main() -> int:
 
     print_verdict(experiment, document)
 
+    verdict = document["verdict"]
     reached = "pass" if verdict["passed"] else "miss"
     print(f"sweep {verdict['sweep_seconds']:.0f}s · verdict: {reached.upper()}")
     if args.expect == "any":

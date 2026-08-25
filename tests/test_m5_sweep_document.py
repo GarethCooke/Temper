@@ -282,3 +282,60 @@ def test_training_and_evaluation_signals_come_from_disjoint_pools(experiment):
     assert training_signal(experiment).pool == "m5/signal-train"
     assert evaluation_signal(experiment).pool == "m5/signal-eval"
     assert training_signal(experiment).pool != evaluation_signal(experiment).pool
+
+
+def test_the_worst_seed_is_the_worst_seed(experiment, rebuilt):
+    """`summarise` calls `worst` the MAXIMUM, so only costs may be summarised.
+
+    M5's first sweep shipped a reported worst net capture of 0.9559 — its *best*
+    seed — because `net_capture` is a benefit and was summarised directly, then
+    inverted into `advantage_fraction`. The verdict was unaffected (the true worst,
+    0.1075, also clears the 0.25 bar) and the number was wrong, and a worse sweep
+    is exactly where it would have mattered.
+
+    So the direction is asserted rather than reasoned about: build a document from
+    grades with *known, different* net captures and require the reported worst to
+    be the one that actually did worst.
+    """
+    from dataclasses import replace as _replace
+
+    base = rebuilt["grades"][0]
+    n = experiment.seeds.n_seeds
+    # Ten grades whose net capture is strictly increasing, by moving the objective:
+    # net_capture = (J_M4a - J) / (J_M4a - J_DP), so a LOWER objective is better.
+    spread = [
+        _replace(base, objective=base.objective - 0.001 * i, name=f"seed{i}")
+        for i in range(n)
+    ]
+    captures = [g.net_capture for g in spread]
+    assert captures[0] < captures[-1], "the fixture is not actually spread"
+
+    driver = _driver()
+    sweep = SweepResult(
+        experiment=experiment,
+        baselines={},
+        grades=(),
+        training=tuple(driver._fabricated_training(experiment)),
+        seconds=1.0,
+        provenance=experiment.provenance(REPO_ROOT),
+        pairs=tuple(() for _ in range(n)),
+        ordinals=tuple(range(n)),
+        alpha_grades=tuple(spread),
+        shuffled_alpha_grades=rebuilt["shuffled"],
+        alpha_detail=rebuilt["detail"],
+        alpha_reference_row=rebuilt["reference"],
+        alpha_baselines={},
+    )
+    summary = build_alpha_document(sweep)["summary"]
+
+    assert summary["net_capture"]["worst"] == pytest.approx(min(captures)), (
+        "the reported worst net capture is not the smallest one; `summarise` "
+        "returns the MAXIMUM and net capture is a benefit, so it must be derived "
+        "from the cost rather than summarised directly"
+    )
+    assert summary["advantage_fraction"]["worst"] == pytest.approx(
+        max(1.0 - c for c in captures)
+    )
+    assert summary["advantage_fraction"]["median"] == pytest.approx(
+        1.0 - summary["net_capture"]["median"]
+    )

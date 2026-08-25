@@ -1193,24 +1193,38 @@ def build_alpha_document(sweep: SweepResult) -> dict:
 
     summary = {
         name: summarise(name, [getattr(g, name) for g in grades]).as_dict()
-        for name in ("objective", "excess_bps", "alpha_bps", "execution_premium_bps")
+        for name in (
+            "objective",
+            "excess_bps",
+            "alpha_bps",
+            "execution_premium_bps",
+            "alpha_capture",
+            "premium_ratio",
+        )
     }
-    for name in ALPHA_HEADLINE:
-        summary[name] = summarise(
-            name, [getattr(g, name) for g in grades]
-        ).as_dict()
-    # The bar is stated on the excess as a fraction of the advantage, which is
-    # 1 - net_capture. Derived from the SAME summary so the two can never
-    # disagree about which seed was worst.
-    net = summary["net_capture"]
-    summary["advantage_fraction"] = {
-        "name": "advantage_fraction",
-        "values": [1.0 - v for v in net["values"]],
-        "median": 1.0 - net["median"],
-        "q1": 1.0 - net["q3"],
-        "q3": 1.0 - net["q1"],
-        "iqr": net["iqr"],
-        "worst": 1.0 - net["worst"],
+    # **Summarise the COST and derive the benefit, never the other way round.**
+    # `summarise` defines `worst` as `max`, which is right for every quantity it
+    # was written for because all of them are costs. `net_capture` is a *benefit*,
+    # so summarising it directly makes its `worst` the BEST seed — and then
+    # inverting gives an `advantage_fraction.worst` that is the best seed too.
+    #
+    # M5's first sweep shipped exactly that: a reported worst of 0.0441 where the
+    # true worst was 0.1075. The verdict was unaffected (both clear the 0.25 bar)
+    # and the number was still wrong, and a worse sweep is precisely where it
+    # would have mattered. M4a and M4b get this right by summarising
+    # `advantage_fraction` and deriving `capture_fraction`; this now does the same.
+    summary["advantage_fraction"] = summarise(
+        "advantage_fraction", [1.0 - g.net_capture for g in grades]
+    ).as_dict()
+    advantage = summary["advantage_fraction"]
+    summary["net_capture"] = {
+        "name": "net_capture",
+        "values": [1.0 - v for v in advantage["values"]],
+        "median": 1.0 - advantage["median"],
+        "q1": 1.0 - advantage["q3"],
+        "q3": 1.0 - advantage["q1"],
+        "iqr": advantage["iqr"],
+        "worst": 1.0 - advantage["worst"],
     }
     graded_on = summary["advantage_fraction"]
 
