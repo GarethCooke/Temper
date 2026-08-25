@@ -1164,6 +1164,26 @@ ALPHA_DIRECTIONS = {
 ALPHA_DERIVED = {"net_capture": "advantage_fraction"}
 
 
+def invert_summary(name: str, source: dict) -> dict:
+    """A benefit's summary, read off the cost it is one minus.
+
+    Quartiles swap under the inversion and the IQR does not, which is the part
+    that is easy to write by hand and get subtly wrong. One definition, used by
+    :func:`build_alpha_document` and by ``tools/rebuild_m5_summary.py``, so a
+    correction applied to a written artefact cannot drift from the code that
+    wrote it.
+    """
+    return {
+        "name": name,
+        "values": [1.0 - v for v in source["values"]],
+        "median": 1.0 - source["median"],
+        "q1": 1.0 - source["q3"],
+        "q3": 1.0 - source["q1"],
+        "iqr": source["iqr"],
+        "worst": 1.0 - source["worst"],
+    }
+
+
 def alpha_headline(grade) -> dict:
     """One policy's three numbers, with the bps each fraction is a fraction of."""
     return {
@@ -1240,16 +1260,8 @@ def build_alpha_document(sweep: SweepResult) -> dict:
         [1.0 - g.net_capture for g in grades],
         direction=ALPHA_DIRECTIONS["advantage_fraction"],
     ).as_dict()
-    advantage = summary["advantage_fraction"]
-    summary["net_capture"] = {
-        "name": "net_capture",
-        "values": [1.0 - v for v in advantage["values"]],
-        "median": 1.0 - advantage["median"],
-        "q1": 1.0 - advantage["q3"],
-        "q3": 1.0 - advantage["q1"],
-        "iqr": advantage["iqr"],
-        "worst": 1.0 - advantage["worst"],
-    }
+    for derived, source in ALPHA_DERIVED.items():
+        summary[derived] = invert_summary(derived, summary[source])
     graded_on = summary["advantage_fraction"]
     # Every reported field states its direction or names the cost it inverts.
     # A field that does neither is a field whose ``worst`` nobody decided.

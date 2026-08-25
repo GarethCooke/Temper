@@ -6,7 +6,9 @@
     "config_sha256": "f4dc1716fbab0c89bed8506e3413766ae79881b31ddd7273e580396f3fecd3f4",
     "git_rev": "5f7c6759a78eb97d396595e7932133f41d110ba0",
     "git_dirty": false,
-    "python": "3.12.2"
+    "python": "3.12.2",
+    "unmodified_run_output": false,
+    "see": "summary_correction"
   },
   "config": {
     "path": "m5_alpha.yaml",
@@ -15402,7 +15404,7 @@
       "q1": 0.13991454195798608,
       "q3": 0.1535631843388184,
       "iqr": 0.013648642380832327,
-      "worst": 0.16435477554553116
+      "worst": 0.1326594378615124
     },
     "execution_premium_bps": {
       "name": "execution_premium_bps",
@@ -15442,7 +15444,7 @@
       "q1": 0.9448666320622342,
       "q3": 1.037038228939358,
       "iqr": 0.09217159687712384,
-      "worst": 1.1099156746672005
+      "worst": 0.8958716835960878
     },
     "premium_ratio": {
       "name": "premium_ratio",
@@ -15464,6 +15466,26 @@
       "iqr": 0.24117771319806902,
       "worst": 1.327940191684764
     },
+    "advantage_fraction": {
+      "name": "advantage_fraction",
+      "values": [
+        0.09913993310468783,
+        0.1074947840078232,
+        0.046242235866857606,
+        0.05389274950517464,
+        0.07635946420289441,
+        0.06540834072178325,
+        0.052802131096771676,
+        0.094203169401325,
+        0.04410310149078833,
+        0.06638780768198749
+      ],
+      "median": 0.06589807420188537,
+      "q1": 0.05307478569887242,
+      "q3": 0.08974224310171736,
+      "iqr": 0.03666745740284494,
+      "worst": 0.1074947840078232
+    },
     "net_capture": {
       "name": "net_capture",
       "values": [
@@ -15482,27 +15504,7 @@
       "q1": 0.9102577568982826,
       "q3": 0.9469252143011275,
       "iqr": 0.03666745740284494,
-      "worst": 0.9558968985092117
-    },
-    "advantage_fraction": {
-      "name": "advantage_fraction",
-      "values": [
-        0.09913993310468783,
-        0.1074947840078232,
-        0.046242235866857606,
-        0.05389274950517464,
-        0.07635946420289441,
-        0.06540834072178325,
-        0.052802131096771676,
-        0.094203169401325,
-        0.04410310149078833,
-        0.06638780768198749
-      ],
-      "median": 0.06589807420188531,
-      "q1": 0.05307478569887247,
-      "q3": 0.08974224310171741,
-      "iqr": 0.03666745740284494,
-      "worst": 0.04410310149078833
+      "worst": 0.8925052159921768
     }
   },
   "shuffled_control": {
@@ -15642,5 +15644,58 @@
     "median_excess_bps": 0.0053219786113043455,
     "alpha_capture_met": true,
     "premium_ratio_met": true
+  },
+  "summary_correction": {
+    "why": "summarise() reports `worst` as the maximum, which is right for a cost and backwards for a benefit. M5 is the first milestone to report capture fractions, and four aggregates were taken in the wrong direction, reporting the sweep's BEST seed as its worst.",
+    "produced_at_rev": "5f7c6759a78eb97d396595e7932133f41d110ba0",
+    "recomputed_at_rev": "a59224b2bc500976b357497999f28d43cfa917c4",
+    "recomputed_from": "this file's own per-seed values",
+    "per_seed_values_changed": 0,
+    "verdict_changed": false,
+    "fields": {
+      "advantage_fraction": {
+        "median": {
+          "was": 0.06589807420188531,
+          "now": 0.06589807420188537
+        },
+        "q1": {
+          "was": 0.05307478569887247,
+          "now": 0.05307478569887242
+        },
+        "q3": {
+          "was": 0.08974224310171741,
+          "now": 0.08974224310171736
+        },
+        "worst": {
+          "was": 0.04410310149078833,
+          "now": 0.1074947840078232
+        }
+      },
+      "alpha_bps": {
+        "worst": {
+          "was": 0.16435477554553116,
+          "now": 0.1326594378615124
+        }
+      },
+      "alpha_capture": {
+        "worst": {
+          "was": 1.1099156746672005,
+          "now": 0.8958716835960878
+        }
+      },
+      "net_capture": {
+        "worst": {
+          "was": 0.9558968985092117,
+          "now": 0.8925052159921768
+        }
+      }
+    },
+    "fields_audited_unchanged": [
+      "excess_bps",
+      "execution_premium_bps",
+      "objective",
+      "premium_ratio"
+    ],
+    "tool": "tools/rebuild_m5_summary.py"
   }
 }
