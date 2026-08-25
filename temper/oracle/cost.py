@@ -127,6 +127,52 @@ def shortfall_variance_bps2(trajectory, market: Market) -> float:
     return float((market.sigma_bin * BPS) ** 2 * np.sum((x[:-1] / order_size) ** 2))
 
 
+def conditional_shortfall_variance_bps2(
+    trajectory, market: Market, signal: AlphaSignal
+) -> float:
+    """``Var[cost | s]`` in bps² — ``V`` with the *predicted* part removed.
+
+    Conditioning on the signal path makes part of every shock known, so the
+    variance that is left is smaller than the graded ``V``. The arithmetic is
+    exactly as much smaller as the model says:
+
+    .. code::
+
+        Var[cost | s] = V - A^2 rho^2 sum_{k >= lag} h_k^2
+
+    and the sum **starts at ``lag``**, not at zero, because the first ``lag``
+    shocks are predicted by nothing and keep their whole variance. That is the
+    same ``h_0 = 1`` fact that removes the first bin from
+    :func:`conditional_alpha_bps` — there it takes a term *out* of the alpha sum,
+    here it leaves one *in* the variance, and getting it wrong in either place is
+    an off-by-one the aggregate bands would not see. At the reference case with
+    TWAP and ``rho = 0.6`` the difference between this and a flat
+    ``(1 - rho^2) V`` is 11 % of the variance, which is four sigmas of a
+    40 000-episode cell.
+
+    **This is not the graded ``V`` and must never be.** Constitution invariant 7's
+    frozen objective penalises *unconditional* price-shortfall variance; the shock
+    still has unit variance by construction, so ``V`` is untouched by the signal
+    and the objective needs no amendment. This function exists for the
+    differential's standardisation, where the null is a statement about what is
+    left after conditioning.
+
+    At ``rho = 0`` it returns :func:`shortfall_variance_bps2` **bitwise** — the
+    correction is ``A^2 * 0.0 * sum`` and subtracting a float zero is the identity
+    — so M5's conditional cell is M1's cell at a special value rather than a
+    second cell that agrees with it.
+    """
+    x = np.asarray(trajectory, dtype=float)
+    base = shortfall_variance_bps2(trajectory, market)
+    holdings = x[:-1] / x[0]
+    predicted = (
+        alpha_coefficient(market) ** 2
+        * signal.correlation() ** 2
+        * float(np.sum(holdings[signal.lag :] ** 2))
+    )
+    return base - predicted
+
+
 def conditional_alpha_bps(trajectory, market: Market, signals, signal: AlphaSignal) -> float:
     """``-A rho sum_k h_k s_{k-lag}`` — the alpha term of ``E[cost | s]``, in bps.
 

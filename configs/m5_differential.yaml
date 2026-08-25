@@ -1,0 +1,184 @@
+# M5 — the alpha-aware world: the differential (invariant 6).
+#
+# Committed input to `tests/test_m5_differential.py`. That test reads *this file*,
+# not literals: constitution invariant 3 fixes thresholds before the work, and a
+# threshold that lives in a test body is a threshold that drifts to fit the run.
+#
+# Its own file rather than an edit to configs/m4b_differential.yaml, for the same
+# reason M4b's was its own rather than an edit to M4a's: that file is the
+# committed input to the liquidity tests and its bytes are the only thing standing
+# between M4b's pre-stated bands and a later session's idea of them.
+
+brief: docs/briefs/M5-alpha-aware-execution.md
+
+# --- the world --------------------------------------------------------------
+# M4a's power law plus M5's INVENTED one-step-ahead signal. Liquidity is
+# DETERMINISTIC: this is M4a's world plus a signal, not M4b's world plus a
+# signal, and the difference is an attribution decision rather than a detail.
+world:
+  cost_encoding: power_law
+  signal:
+    model: one_step
+    rho: 0.01
+
+canonical_bins: 13
+
+# --- randomness -------------------------------------------------------------
+# Its own pool for the price stream, and the signal draws from m5/signal-eval via
+# the env's own third address — never the price generator, or every committed
+# Phase-1, M4a and M4b shock would move. Streams are addressed, not drawn:
+# stream_index = stream_base + case_ordinal * n_schedules + schedule_ordinal over
+# the `cases` and `schedules` lists in their committed order.
+seeding:
+  root_seed: 20260825
+  pool: m5/differential        # never `train` or `eval` — invariant 5
+  process_stream: 800          # the signal process's own moment checks
+
+# --- schedules under test ---------------------------------------------------
+# M4a's four. `static` has no analogue here: a zero-mean signal gives a FIXED
+# schedule nothing to re-solve for, so the best schedule that knows the signal law
+# is the one that knows nothing about it — which is M5 task 0's first result and
+# is why this list is M4a's rather than M4b's.
+# Order fixes the stream addressing above, so it is part of the committed contract.
+schedules: [twap, ac, tangent, optimal]
+
+# --- the Monte-Carlo tiers --------------------------------------------------
+# TWO checks per cell, as in M4b, and the conditional one carries a correction
+# that is M5's own.
+#
+# (a) CONDITIONAL. z = (C - E[cost | s]) / sqrt((1 - rho^2) V), standardised per
+#     episode against its OWN realised signal path. Exactly N(0, 1) under the
+#     null, and the (1 - rho^2) is not a fudge: conditioning on the signal makes
+#     the predictable part of each shock KNOWN, so what is left is
+#     sqrt(1 - rho^2) e per bin and the conditional variance is (1 - rho^2) V.
+#     The graded V is unchanged — it is the UNCONDITIONAL price-shortfall
+#     variance, the shock still has unit variance by construction, and invariant 7
+#     needs no amendment. At rho = 0 the factor is exactly 1.0 and this is M1's
+#     statement, character for character, rather than a second statement that
+#     agrees with it.
+#
+#       |mean(z)|    <= mean_z_sigmas / sqrt(N)
+#       |var(z) - 1| <= var_z_sigmas * sqrt(2 / N)
+#
+# (b) UNCONDITIONAL. The sample mean cost against the closed form
+#     A_pow sum w^(1+0.6) + permanent + spread — with NO alpha term, because
+#     E[alpha] = -A rho sum h_k E[s] = 0 exactly for a fixed schedule. Exact bands
+#     again (realised cost is Gaussian here; there is only one noise source), and
+#     this is the check that would catch the shock's variance having been changed
+#     by the mixture, which (a) conditions away.
+tiers:
+  fast:
+    # In `make test`. One case per symbol at the middle lambda.
+    n_sim: 10000
+    mean_z_sigmas: 4.0
+    var_z_sigmas: 4.0
+    mean_cost_sigmas: 4.0
+    stream_base: 0
+    runtime_budget_seconds: 180
+    expected_steps: 1560000     # 12 cells x 10 000 x 13
+    cases:
+      - core:AAPL:X100000:T6.5:lam1e-05
+      - core:MSFT:X250000:T6.5:lam1e-05
+      - core:JPM:X500000:T6.5:lam1e-05
+  deep:
+    # `make m5-differential`, marker `deep`. The acceptance gate: the full 3 x 3
+    # golden grid at M1's N_sim.
+    n_sim: 200000
+    mean_z_sigmas: 4.0
+    var_z_sigmas: 4.0
+    mean_cost_sigmas: 4.0
+    stream_base: 100
+    runtime_budget_seconds: 2400
+    expected_steps: 93600000    # 36 cells x 200 000 x 13
+    cases:
+      - core:AAPL:X100000:T6.5:lam1e-07
+      - core:AAPL:X100000:T6.5:lam1e-05
+      - core:AAPL:X100000:T6.5:lam0.001
+      - core:MSFT:X250000:T6.5:lam1e-07
+      - core:MSFT:X250000:T6.5:lam1e-05
+      - core:MSFT:X250000:T6.5:lam0.001
+      - core:JPM:X500000:T6.5:lam1e-07
+      - core:JPM:X500000:T6.5:lam1e-05
+      - core:JPM:X500000:T6.5:lam0.001
+
+# --- the process itself -----------------------------------------------------
+# The env's own draws against the oracle's closed forms — two deliberately
+# different routes to one distribution — plus the two things that are M5's rather
+# than M4b's.
+#
+# `residual_*` is the independence claim at the PER-DRAW level, and it is stated
+# on the residual rather than on the shock. corr(s_k, xi_{k+1}) is rho BY DESIGN,
+# so a check that the signal and the price are uncorrelated would be false. What
+# must hold is that after removing the modelled correlation nothing is left:
+# e_k = (xi_k - rho s_{k-1}) / sqrt(1 - rho^2) must be unit-variance, serially
+# uncorrelated, and uncorrelated with EVERY s_j. If the signal were drawn from the
+# price generator the residual would carry the trace.
+process:
+  draws: 500000                # episodes x bins from the env's own stream
+  mean_sigmas: 4.0             # |mean(s)| <= sigmas * sd / sqrt(n)
+  variance_rtol: 0.02          # sample variance against 1
+  autocorrelation_sigmas: 4.0  # lag-1 on s, against its own 1/sqrt(n) null
+  residual_variance_rtol: 0.02 # sample variance of e against 1
+  residual_sigmas: 4.5         # every corr(e_k, s_j) and lag-1 on e, in sd units
+  correlation_sigmas: 4.5      # corr(s_k, xi_{k+1}) against rho, in sd units
+
+# --- the pairing identity ---------------------------------------------------
+# (xi + xi') / 2 = rho * s_{k-1} = E[xi | s], per step, with the step count
+# asserted. Everything M5 reports rests on the pair's average being the
+# conditional mean — it is what makes the training reward and the grading formula
+# the same object — and as of task 4 that claim has exactly one measurement behind
+# it. So it runs at M1's tiers rather than at smoke scale.
+#
+# NOT a statistical band. The identity is arithmetic and the only slack is the
+# order two sums are taken in; 1e-9 bps is four orders above the 7.1e-14 measured
+# at rho = 0.4 and ten below anything that could move a reported number. At
+# rho = 0 the assertion is the EXACT negation instead, with no tolerance at all,
+# which is the same statement at a special value rather than a second one.
+pairing:
+  fast_episodes: 20000
+  deep_episodes: 200000
+  walk_tolerance_bps: 1.0e-9
+
+# --- the conditional expectation against sampled prices ---------------------
+# Task 4 ran the cheap version at one pinned signal path. This is the full tier:
+# several pinned paths, each with enough price draws that the alpha term is many
+# half-widths wide, and the closed form required inside the interval every time.
+#
+# `alpha_half_widths` is a NON-VACUITY bar rather than an accuracy one: the check
+# has to be able to REJECT a formula with no alpha term, which needs the term to
+# be wider than the interval, and 2.0 puts a margin on that. It is not larger
+# because the alpha term depends on the drawn path — some paths have a small
+# sum h.s and a bar tuned to the luckiest draw would be a lottery rather than a
+# threshold. The rejection itself is asserted directly beside it.
+#
+# rho is raised for this section alone and says so — at the milestone's 0.01 the
+# term is 0.05 bps against a per-episode SD of 95, and no affordable sample
+# resolves it.
+conditional:
+  pinned_paths: 6
+  episodes_per_path: 20000
+  rho: 0.4
+  mean_sigmas: 4.0
+  alpha_half_widths: 2.0
+
+# --- the discriminative cell ------------------------------------------------
+# The differential at the milestone's rho = 0.01 CANNOT see an index error in the
+# alpha term: a shifted index leaves the unconditional mean untouched (E[alpha] is
+# zero either way) and inflates var(z) from 1 - rho^2 to 1 + rho^2, which is
+# 1.0001 against a band of 0.057. That is worth stating rather than discovering,
+# and worth making measurable rather than merely stated — so the conditional check
+# runs again at a rho where the same arithmetic is unmistakable: 1 - rho^2 = 0.64
+# against a shifted 1.36, both hundreds of sigmas from the band.
+#
+# The index itself is checked on paper in tests/test_m5_conditional_grading.py.
+# This is the cell that says the differential would ALSO have caught it, at a rho
+# where it can, which is what stops "the differential is green" from being read as
+# more than it is.
+discrimination:
+  rho: 0.6
+  n_sim: 40000
+  mean_z_sigmas: 4.0
+  var_z_sigmas: 4.0
+  stream_base: 700
+  case: core:AAPL:X100000:T6.5:lam1e-05
+  schedule: twap

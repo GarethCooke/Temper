@@ -52,6 +52,10 @@ class SampleResult:
     #: ``None`` otherwise — the deep tier is 2.7 million episodes and a
     #: ``(n, n_bins)`` array per tier is not free.
     liquidity: np.ndarray | None = None
+    #: M5: each episode's realised signal path, on the same terms and for the same
+    #: reason — the conditional standardisation needs the path the episode was
+    #: shown, and asking for it always would cost a second array per tier.
+    signals: np.ndarray | None = None
 
     @property
     def n_episodes(self) -> int:
@@ -128,6 +132,7 @@ def sample_costs(
     seed: int | None = None,
     require_fixed_schedule: bool = False,
     record_liquidity: bool = False,
+    record_signals: bool = False,
 ) -> SampleResult:
     """Realised cost of `n_episodes` episodes, in bps of notional.
 
@@ -144,6 +149,14 @@ def sample_costs(
     depend on the multiplier at all — so the exact bands M1 stated survive
     verbatim, and this is the argument they survive *by*. An option rather than
     always-on because the deep tier is millions of episodes.
+
+    `record_signals` is M5's, and the argument is one rung sharper. Conditioned on
+    the signal path the shortfall is *still* a fixed linear combination of
+    independent Gaussian shocks — but there are fewer of them: the predictable
+    part of each shock is now known, so the conditional variance is
+    ``(1 - rho^2) V`` rather than ``V``. M1's bands survive on ``z`` standardised
+    by that, and the correction is the differential's own measurement of how much
+    of the price the signal explains.
     """
     if n_episodes <= 0:
         raise ValueError(f"n_episodes must be positive, got {n_episodes}")
@@ -156,12 +169,19 @@ def sample_costs(
         if record_liquidity
         else None
     )
+    drawn = (
+        np.empty((n_episodes, env.market.n_bins), dtype=np.float64)
+        if record_signals
+        else None
+    )
     reference: np.ndarray | None = None
     for index in range(n_episodes):
         summary, _ = _episode(env, policy, record=False)
         costs[index] = summary["cost_bps"]
         if paths is not None:
             paths[index] = summary["liquidity"]
+        if drawn is not None:
+            drawn[index] = summary["signals"]
         trajectory = summary["trajectory"]
         if reference is None:
             reference = trajectory
@@ -172,7 +192,9 @@ def sample_costs(
             )
 
     assert reference is not None  # n_episodes > 0
-    return SampleResult(costs=costs, trajectory=reference, liquidity=paths)
+    return SampleResult(
+        costs=costs, trajectory=reference, liquidity=paths, signals=drawn
+    )
 
 
 def standardise(costs: np.ndarray, expected: float, variance: float) -> np.ndarray:

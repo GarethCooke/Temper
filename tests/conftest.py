@@ -289,6 +289,92 @@ def build_liquidity_env(case, stream_index: int, *, pool: str | None = None):
     )
 
 
+M5_CONFIG_PATH = REPO_ROOT / "configs" / "m5_differential.yaml"
+
+#: M5's committed input: the alpha-aware differential's tiers, the signal
+#: process's bands, the pairing identity's tolerance and the discriminative cell.
+#: Its own file for the reason M4a's and M4b's were — editing an earlier
+#: milestone's committed thresholds in place would put two worlds' bars in one
+#: blast radius.
+M5_CONFIG: dict = yaml.safe_load(M5_CONFIG_PATH.read_text(encoding="utf-8"))
+M5_ENCODING: str = str(M5_CONFIG["world"]["cost_encoding"])
+
+
+def m5_signal_law(rho: float | None = None):
+    """The invented signal law M5's differential runs under.
+
+    `rho` overrides the committed one for the two sections that need a value the
+    arithmetic can resolve — the sampled-price tier and the discriminative cell —
+    and both say so in the config rather than here.
+    """
+    from temper.oracle import signal_for
+
+    block = dict(M5_CONFIG["world"]["signal"])
+    if rho is not None:
+        block["rho"] = float(rho)
+    return signal_for(block.pop("model"), **block)
+
+
+def build_signal_env(case, stream_index: int, *, rho: float | None = None, pool: str | None = None):
+    """The same env in M5's world, with all three seams named and none default.
+
+    One ``ExecutionEnv`` and one ``step`` loop; the only difference from
+    :func:`build_power_law_env` is the injected signal stream and the third
+    observation coordinate that comes with it. Liquidity is *deterministic* and
+    named so: M5 is M4a's world plus a signal, and a differential that quietly
+    inherited M4b's second noise source would be checking a world nobody named.
+
+    The signal pool is the *eval* one by default, for M4b's reason: the
+    differential is a check on the world, and checking it on the streams a graded
+    result is scored over is the cheapest way to find out those streams are what
+    the config says.
+    """
+    from temper.env import DETERMINISTIC_LIQUIDITY, ExecutionEnv, SignalStream, impact_for
+    from temper.seeding import SIGNAL_EVAL_POOL
+
+    seeding = M5_CONFIG["seeding"]
+    return ExecutionEnv(
+        case.market,
+        case.order_size,
+        case.lambda_risk,
+        temporary_impact=impact_for(M5_ENCODING, case.market, case.order_size),
+        liquidity=DETERMINISTIC_LIQUIDITY,
+        signal=SignalStream(signal=m5_signal_law(rho), pool=pool or SIGNAL_EVAL_POOL),
+        root_seed=int(seeding["root_seed"]),
+        pool=seeding["pool"],
+        stream_index=stream_index,
+    )
+
+
+def signal_pairs(tier: str) -> list[DifferentialPair]:
+    """Every (case, schedule) cell of M5's `tier`, addressed as its config says.
+
+    Four schedules wide rather than M4b's five: a zero-mean signal gives a fixed
+    schedule nothing to re-solve for, so there is no static rung distinct from
+    optimal — which is M5 task 0's first result, appearing here as an absence.
+    """
+    spec = M5_CONFIG["tiers"][tier]
+    schedules = M5_CONFIG["schedules"]
+    n_sim = int(spec["n_sim"])
+    return [
+        DifferentialPair(
+            tier=tier,
+            case=case_by_id(case_id),
+            schedule=schedule,
+            n_sim=n_sim,
+            stream_index=(
+                int(spec["stream_base"])
+                + case_ordinal * len(schedules)
+                + schedule_ordinal
+            ),
+            mean_band=float(spec["mean_z_sigmas"]) / math.sqrt(n_sim),
+            var_band=float(spec["var_z_sigmas"]) * math.sqrt(2.0 / n_sim),
+        )
+        for case_ordinal, case_id in enumerate(spec["cases"])
+        for schedule_ordinal, schedule in enumerate(schedules)
+    ]
+
+
 def liquidity_pairs(tier: str) -> list[DifferentialPair]:
     """Every (case, schedule) cell of M4b's `tier`, addressed as its config says.
 
@@ -467,6 +553,10 @@ POOL_ALLOWANCE: dict[str, frozenset[str]] = {
     # M5 task 4 samples price draws at a pinned signal path and measures the
     # pairing. Its own diagnostic pool; it reports no number and grades nothing.
     "test_m5_conditional_grading.py": frozenset({"m5/differential"}),
+    # M5 task 5 - the differential itself. Its own pool, and nothing else: the
+    # world is checked on the streams a graded result is scored over only through
+    # the SIGNAL pool, which is not one the env's price generator is addressed in.
+    "test_m5_differential.py": frozenset({"m5/differential"}),
 }
 
 #: The modules that regenerate a committed result and so legitimately hold both

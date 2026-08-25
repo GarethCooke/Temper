@@ -418,6 +418,92 @@ def trajectory_quantiles(
 # M5 — the same pattern, conditioned on the signal path
 # ---------------------------------------------------------------------------
 
+#: The seams a conditional grade may condition on, named so the two sides of the
+#: check below speak one vocabulary rather than two.
+LIQUIDITY_SEAM = "liquidity"
+SIGNAL_SEAM = "signal"
+
+
+class ConditioningMismatch(ValueError):
+    """The grade's conditioning set is not the policy's observation set.
+
+    Raised rather than warned, and *before* a number is produced, for the reason
+    :class:`~temper.eval.grading.ScheduleNotDeterministic` is: a policy that fails
+    this has not been scored badly, it has not been scored at all.
+    """
+
+
+def observed_seams(env: ExecutionEnv) -> frozenset[str]:
+    """The stochastic seams this env's observation actually exposes.
+
+    Read off the env's own seam objects rather than the observation's width,
+    because width is a consequence and this is about *which* information is in
+    there. A seam that is present but uninformative — deterministic liquidity, an
+    absent signal, a signal pointed at an already-committed shock — exposes
+    nothing and is correctly absent from this set.
+    """
+    seams = set()
+    if env.liquidity.stochastic:
+        seams.add(LIQUIDITY_SEAM)
+    if env.signal.informative:
+        seams.add(SIGNAL_SEAM)
+    return frozenset(seams)
+
+
+def check_conditioning_matches_observation(
+    env: ExecutionEnv, conditioned_on: frozenset[str] | set[str]
+) -> frozenset[str]:
+    """The conditioning set of the grade must be the observation set of the policy.
+
+    This is the property that keeps "the reward is the grade" honest, and until M5
+    nothing in the repo asserted it. Every conditional grade since M4b rests on it
+    and each was legitimate for a reason argued in prose: M4b conditioned on the
+    liquidity path *because* that is what the observation carried, and M5
+    conditions on the signal path for the same reason. Prose is not a check, and
+    the two failure directions are opposite and both silent.
+
+    **Observation strictly larger than conditioning.** The policy reacts to
+    something the grade averages over, so the grade is a conditional expectation
+    with respect to the wrong sigma-algebra: it is **biased**, and biased in the
+    direction of the policy's own cleverness. Stack M4b's liquidity under M5's
+    signal — a real backlog item, explicitly out of scope — and grade with
+    ``signal_costs`` alone, and every identity in the differential still passes
+    while the headline measures something nobody named.
+
+    **Conditioning strictly larger than observation.** The grade knows something
+    the policy never did, so it removes noise the policy actually faced: a policy
+    is scored as though it were more deterministic than it is, its interval
+    collapses, and the extreme of this is conditioning on the realised price,
+    where "expected cost" becomes realised cost and every agent looks perfect.
+
+    Equality, therefore, and it is checked where the env is built rather than
+    where the number is computed — the env is the only object that knows what the
+    policy could see.
+    """
+    observed = observed_seams(env)
+    conditioning = frozenset(conditioned_on)
+    if observed == conditioning:
+        return observed
+    missing = observed - conditioning
+    extra = conditioning - observed
+    detail = []
+    if missing:
+        detail.append(
+            f"the policy observes {sorted(missing)} that the grade does not "
+            "condition on, so the grade is biased by whatever the policy does "
+            "with it"
+        )
+    if extra:
+        detail.append(
+            f"the grade conditions on {sorted(extra)} that the policy never "
+            "observed, so it removes noise the policy actually faced"
+        )
+    raise ConditioningMismatch(
+        f"conditioning set {sorted(conditioning)} against observation set "
+        f"{sorted(observed)}: " + "; and ".join(detail)
+    )
+
+
 #: Paired **signal** paths per graded policy. Larger than M4b's 20 000 because
 #: task 0 measured both: the 95 % half-width falls from 1.0405 % of the advantage
 #: to 0.3219 % for about twenty seconds of extra rollout, which puts the median
@@ -435,6 +521,7 @@ def signal_rollouts(
     *,
     temporary_impact: TemporaryImpact,
     signal: SignalStream,
+    liquidity: LiquidityStream | None = None,
     root_seed: int,
     pool: str,
     stream_index: int = 0,
@@ -462,11 +549,17 @@ def signal_rollouts(
         order_size,
         lambda_risk,
         temporary_impact=temporary_impact,
+        liquidity=liquidity,
         signal=signal,
         root_seed=root_seed,
         pool=pool,
         stream_index=stream_index,
     )
+    # The licence, checked where the env is built and before a number exists:
+    # this grade conditions on the signal path and nothing else, so the policy
+    # must observe the signal path and nothing else.
+    check_conditioning_matches_observation(env, {SIGNAL_SEAM})
+
     trajectories = np.empty((paths, market.n_bins + 1))
     signals = np.empty((paths, market.n_bins))
     for index in range(paths):

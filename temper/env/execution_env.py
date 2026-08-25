@@ -652,6 +652,11 @@ class ExecutionEnv(Env):
         return {
             "trajectory": self._trajectory.copy(),
             "liquidity": self._multipliers.copy(),
+            # M5's third seam, on the same terms as the second: the path the
+            # policy was *shown*, so a grader can price E[cost | s] at what the
+            # episode actually faced. Never the realised shocks, which have
+            # exactly one public route and it is `info[SHOCK_KEY]`.
+            "signals": self._signals[: self._n_bins].copy(),
             "cost_bps": BPS * (1.0 - self._proceeds / self.order_size),
             "shortfall_bps": self._shortfall_total,
             "penalty_bps": self._penalty_total,

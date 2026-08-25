@@ -16,7 +16,7 @@ M4A_CONFIG  ?= configs/m4a_power_law.yaml
 M4B_CONFIG  ?= configs/m4b_liquidity.yaml
 M5_CONFIG   ?= configs/m5_alpha.yaml
 
-.PHONY: help test test-verbose differential smoke sweep reference validate frontier frontier-figure frontier-check m4a-reference m4a-guarantees m4a-regression m4a m4a-figure checkpoint m4b-reference m4b-oracle m4b-differential m4b-guarantees m4b-regression m4b m4b-figure m5-reference m5-oracle m5-regression m5-guard m5-conditional m6-figure anvil-check m6-predict m6 m6-thin m6-wide m6-feeder goldens clean
+.PHONY: help test test-verbose differential smoke sweep reference validate frontier frontier-figure frontier-check m4a-reference m4a-guarantees m4a-regression m4a m4a-figure checkpoint m4b-reference m4b-oracle m4b-differential m4b-guarantees m4b-regression m4b m4b-figure m5-reference m5-oracle m5-regression m5-guard m5-conditional m5-differential m6-figure anvil-check m6-predict m6 m6-thin m6-wide m6-feeder goldens clean
 
 help:
 	@echo "make test          run the pytest suite (the gate); excludes the marked tiers"
@@ -44,6 +44,7 @@ help:
 	@echo "make m5-regression M5 task 2: one committed seed per world, bitwise - ~1 h"
 	@echo "make m5-guard      M5 task 3: the amended guard, and what it still refuses"
 	@echo "make m5-conditional M5 task 4: E[cost|s], its index, and the pairing"
+	@echo "make m5-differential M5 task 5: the deep tier through three seams"
 	@echo "make m6-figure     redraw results/m6_prediction.* from the five committed M6 runs"
 	@echo "make checkpoint    M6 prerequisite: export M4a's median seed as a policy .npz - ~15 min"
 	@echo "make anvil-check   M6 task 0: Anvil's documented behaviour, against a live server"
@@ -249,6 +250,14 @@ m5-guard:
 # rather than predicted. Seconds, and in  too; this is the named entry.
 m5-conditional:
 	 -m pytest tests/test_m5_conditional_grading.py -v
+
+# M5 task 5 - the differential through three seams (invariant 6). The fast tier
+# is in `make test`; this runs the deep one, 36 cells x 200 000 episodes, plus the
+# pairing identity at M1's episode count. What it measures that M4b's could not:
+# that the signal and the price are independent APART FROM THE MODEL, stated on
+# the residual because corr(s, xi) is rho by design.
+m5-differential:
+	$(PYTHON) -m pytest tests/test_m5_differential.py -m deep -v
 
 # M5's oracle checks - the signal's joint law, the conditional cost against
 # sampled price draws, the decomposition by two routes, the convexity floor, the
