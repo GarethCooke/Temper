@@ -90,7 +90,8 @@ exact per-episode identity pins the realised noise to the specific draws the env
 the cost assembly holds by construction and the Monte-Carlo tiers certify only that the
 shocks are iid normal. Alongside it: six exact per-episode identities, an exact step
 count, and a variational certificate that the schedule M2 grades against really is the
-minimiser. M4b (stochastic liquidity) is next. See `ROADMAP.md`.
+minimiser. M4b (stochastic liquidity) and M5 (an invented alpha signal) have
+landed since, both on that same seam discipline. See `ROADMAP.md`.
 
 ## What this does and does not establish
 
@@ -107,8 +108,10 @@ is deliberately narrower than it might sound.
   signal-to-noise ratio the same agent misses the bar as a lottery, and that miss is
   committed beside the pass. The frontier (M3) is nine points of that same world.
 - **Phase 2 — the agent finds the optimum of a world whose closed form is derived at a
-  tangent.** Half of it has landed (M4a). FrontierView's temporary impact is a 0.6-power
-  law; Almgren–Chriss has no closed form for that, so the vendored library *linearises* at
+  tangent.** It landed in three parts — M4a, M4b and M5 — and the last two go past the
+  heading: they are worlds the closed form has no answer for at all. FrontierView's temporary
+  impact is a 0.6-power law; Almgren–Chriss has no closed form for that, so the vendored
+  library *linearises* at
   the tangent to it and solves the linear problem instead. M4a makes the power law the
   world and grades the agent against that world's own optimum — solved by Newton on the KKT
   system and **certified** (Cholesky PD, relative KKT residual 1.2e-15, 3 600 perturbations
@@ -175,6 +178,64 @@ is deliberately narrower than it might sound.
   needed no amendment. The stated claim is exactly this and no wider: *with a one-parameter
   invented liquidity process, seeing liquidity is worth 2.6% of the objective and the agent
   captured 99% of it.* Not "the agent adapts to real market liquidity".
+
+  **The signal half (M5) is done, and it is the first milestone whose headline cannot be
+  read at all on its own.** M4a's advantage came from a better fixed schedule; M4b's came
+  from reacting to something the schedule could not know. M5's comes from *predicting* the
+  price, and the agent has to pay for the prediction: tilting the schedule to monetise a
+  signal costs execution quality, so the net gain is a **difference of two quantities that
+  move together**, and the optimum itself gives back 45.5 % of the gross effect. A single
+  capture fraction cannot tell a policy that traded the signal well from one that traded it
+  badly and executed well, so **the three numbers are reported together, always, with the
+  absolute bps beside every fraction**:
+
+  | | fraction | absolute | bar |
+  | --- | --- | --- | --- |
+  | alpha capture | **+0.9767** | +0.14463 of 0.14808 bps gross | ≥ 0.85 |
+  | execution premium | **1.0480x** | +0.07055 of 0.06732 bps the optimum pays | ≤ 1.30x |
+  | net capture | **+0.9341** | +0.00532 bps over `J_DP`, on an advantage of 0.08076 bps | ≥ 0.90 |
+
+  Worst seed 0.8925 net capture; IQR 0.037. The denominator is the **net** signal advantage
+  `A − P` — what the converged DP gains over M4a's certified optimum in the same world
+  — not the gross alpha, which would read 1.83x larger in the flattering direction.
+
+  **The signal is Temper's own invention and the claim is only ever about it.** FrontierView
+  vendored an impact law and no signal, so §7's "vendored, not invented" cover does not reach
+  here either. The model is one parameter: `s_k ~ N(0, 1)` in the observation at the decision
+  point for bin k, with `E[xi_{k+1} | s_k] = rho * s_k` and `rho = 0.01`, so the signal explains
+  **one part in ten thousand** of the next bin's return variance. The result is therefore a
+  curve again — the oracle reports the advantage at `rho` = 0.0025 through 0.2, worth
+  0.0057 to 8.89 bps — and the share the optimum gives back *falls* from 49 % to 20 %
+  across it, so a bigger signal is worth proportionally more and not merely more.
+
+  **The control is the claim, not an appendix.** Re-graded with the observed signal shuffled
+  — the same policies, the same price paths, a signal about someone else's shocks —
+  net capture goes to a median **−0.87**. The gap between +0.93 and −0.87 is what says the
+  agent is trading the signal rather than having found a better fixed schedule; a policy
+  tilting on an unrelated signal pays the premium and monetises nothing, which is exactly
+  where the control lands.
+
+  **`J_DP` is a dynamic program over `(inventory, signal)`, so it is converged rather than
+  certified** — the same word M4b earned and M4a's Cholesky-certified optimum does not
+  need. What it has is a Richardson residual, a certified floor under its execution half
+  (impact and risk are convex and carry no signal, so no policy can go below M4a's certified
+  optimum on them — which makes the red-flag test a *proof* rather than a threshold), and
+  a return to M4a's certified value at `rho` = 0.
+
+  **The most portable thing the milestone produced is not in the table.** M2 found that on
+  this same case, with a signal-to-noise ratio of roughly **1:70** per episode, rediscovering
+  a closed form on the *realised* reward is a lottery — and that recorded miss is committed
+  beside the pass. M5 gives the same algorithm, at the same budget, a signal **seven hundred
+  times weaker** and a reward with **zero conditional variance**, and it captures 93 % of what
+  is there. Same agent, same configuration: it fails on a large signal under noise and
+  succeeds on a tiny one without it. Across Phase 1 and Phase 2 the binding constraint was
+  the **estimator's variance**, not the signal's strength, and Phase 2 now has both ends of
+  that measured.
+
+  The stated claim is exactly this and no wider: *with a one-parameter invented one-step-ahead
+  price signal explaining 1e-4 of next-bin return variance, the available advantage is 0.081
+  bps and ten seeds captured a median 93 % of it, monetising 98 % of the gross alpha while
+  paying 1.05x the optimum's execution premium.* Not "the agent trades alpha".
 - **Phase 3 — it ran on a wire, and the venue did exactly what was predicted.** The
   stretch leg (M6) is done. The trained policy — M4a's median seed, exported as a
   committed `.npz` and run through a numpy forward pass with no torch on the client's
@@ -266,6 +327,8 @@ make m4a-reference # M4a task 0: the power-law table and its three gates — min
 make m4a           # M4a task 5: ten seeds in the power-law world — ~2 h
 make m4b-reference # M4b task 0: the liquidity table and its four gates — ~5 min
 make m4b           # M4b task 5: ten seeds in the stochastic-liquidity world — ~2.5 h
+make m5-reference  # M5 tasks 0+1: the alpha table, its four gates and its word — ~7 min
+make m5            # M5 task 6: ten seeds in the alpha-aware world — ~4.5 h
 make checkpoint    # M6's prerequisite: export M4a's median seed as a policy .npz — ~15 min
 make m6-predict    # M6 task 4: the closed-form prediction; no server needed
 make m6            # M6 task 5: the measured ladder run against a live anvil_server
@@ -332,6 +395,22 @@ driver so the per-commit loop never waits on them:
   paths. Everything except the liquidity block and the bars is M4a's config verbatim.
   ~2.5 h, unattended. `make m4b-figure` redraws `results/m4b_adaptivity.png` from the
   committed sweep and task 0's table, without training.
+- `make m5-reference` — M5's tasks 0 and 1, oracle only and ~7 minutes: the dynamic
+  program over `(inventory, signal)`, the reference table across the vendor grid, the
+  impact / risk / alpha / objective decomposition with its identity asserted at every node,
+  and the four gates. `make m5-oracle` runs the signal's own checks, including the
+  `rho -> 0` differential against M4a's *certified* value and task 1's timing instrument.
+  `make m5-guard`, `make m5-conditional` and `make m5-differential` are the three seams the
+  milestone opened: what the amended observation guard still refuses, `E[cost | s]` and its
+  index, and the deep differential through all three seams at once.
+- `make m5` — M5's acceptance run, from `configs/m5_alpha.yaml`: ten seeds in the
+  alpha-aware world, graded by conditional expectation on held-out **signal** paths with no
+  price sampling at all. ~4.5 h, unattended, and it runs the whole reporting path on
+  fabricated data before the first seed launches. `make m5-figure` redraws
+  `results/m5_alpha.png` from the committed sweep and the oracle table, without training;
+  `python tools/train.py --config configs/m5_alpha.yaml --rehearse` runs the reporting path
+  *and this driver's own exit branches* in about eight seconds, which is the cheapest way to
+  find out that the run's last line is broken before spending the run on it.
 
 - `make checkpoint` — M6's prerequisite, and a repo gap rather than an M6 one: until it
   landed, every network this project trained was discarded the moment it had been graded.
