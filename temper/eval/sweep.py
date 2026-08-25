@@ -1139,6 +1139,30 @@ def grade_liquidity_baselines(
 #: its absolute bps beside it (§9's denominator entry).
 ALPHA_HEADLINE = ("alpha_capture", "premium_ratio", "net_capture")
 
+# Which way each summarised quantity runs, stated once, in one place.
+#
+# :func:`summarise` calls ``worst`` the maximum. That is right for a cost and
+# exactly backwards for a benefit, and M5 is the first milestone to report both:
+# a capture fraction is a fraction of an available advantage and larger is
+# better. Its first sweep summarised two captures as costs and reported its best
+# seed as its worst, twice — so the direction is a table the summariser reads
+# rather than a property of the field name that a reader is expected to know.
+#
+# A new reported field lands as a KeyError here. That is the intent: the
+# direction is not defaultable, because both defaults are wrong half the time.
+ALPHA_DIRECTIONS = {
+    "objective": "cost",
+    "excess_bps": "cost",
+    "alpha_bps": "benefit",
+    "execution_premium_bps": "cost",
+    "alpha_capture": "benefit",
+    "premium_ratio": "cost",
+    "advantage_fraction": "cost",
+}
+# Reported by inversion from the cost named beside it, rather than summarised,
+# so the pair can never disagree about which seed was worst.
+ALPHA_DERIVED = {"net_capture": "advantage_fraction"}
+
 
 def alpha_headline(grade) -> dict:
     """One policy's three numbers, with the bps each fraction is a fraction of."""
@@ -1192,15 +1216,13 @@ def build_alpha_document(sweep: SweepResult) -> dict:
     shuffled = sweep.shuffled_alpha_grades
 
     summary = {
-        name: summarise(name, [getattr(g, name) for g in grades]).as_dict()
-        for name in (
-            "objective",
-            "excess_bps",
-            "alpha_bps",
-            "execution_premium_bps",
-            "alpha_capture",
-            "premium_ratio",
-        )
+        name: summarise(
+            name,
+            [getattr(g, name) for g in grades],
+            direction=ALPHA_DIRECTIONS[name],
+        ).as_dict()
+        for name in ALPHA_DIRECTIONS
+        if name != "advantage_fraction"
     }
     # **Summarise the COST and derive the benefit, never the other way round.**
     # `summarise` defines `worst` as `max`, which is right for every quantity it
@@ -1214,7 +1236,9 @@ def build_alpha_document(sweep: SweepResult) -> dict:
     # would have mattered. M4a and M4b get this right by summarising
     # `advantage_fraction` and deriving `capture_fraction`; this now does the same.
     summary["advantage_fraction"] = summarise(
-        "advantage_fraction", [1.0 - g.net_capture for g in grades]
+        "advantage_fraction",
+        [1.0 - g.net_capture for g in grades],
+        direction=ALPHA_DIRECTIONS["advantage_fraction"],
     ).as_dict()
     advantage = summary["advantage_fraction"]
     summary["net_capture"] = {
@@ -1227,9 +1251,25 @@ def build_alpha_document(sweep: SweepResult) -> dict:
         "worst": 1.0 - advantage["worst"],
     }
     graded_on = summary["advantage_fraction"]
+    # Every reported field states its direction or names the cost it inverts.
+    # A field that does neither is a field whose ``worst`` nobody decided.
+    undeclared = set(summary) - set(ALPHA_DIRECTIONS) - set(ALPHA_DERIVED)
+    if undeclared:
+        raise AssertionError(
+            f"reported without a direction: {sorted(undeclared)}. Add each to "
+            "ALPHA_DIRECTIONS (cost or benefit) or to ALPHA_DERIVED beside the "
+            "cost it inverts — `worst` is the maximum for a cost and the "
+            "minimum for a benefit, and defaulting gets half of them backwards"
+        )
 
+    # A COST here, and it is the same field that is a benefit above. A control
+    # shown a signal about nothing is supposed to do worse than doing nothing;
+    # the seed to worry about is the one that captured the MOST, so ``worst`` is
+    # the maximum. The direction belongs to what is being asked, not to the name.
     shuffled_summary = (
-        summarise("net_capture", [g.net_capture for g in shuffled]).as_dict()
+        summarise(
+            "net_capture", [g.net_capture for g in shuffled], direction="cost"
+        ).as_dict()
         if shuffled
         else None
     )

@@ -412,14 +412,34 @@ class SeedSummary:
         }
 
 
-def summarise(name: str, values: Sequence[float]) -> SeedSummary:
-    """Median, quartiles and the worst seed. ``worst`` is the largest value.
+def summarise(
+    name: str, values: Sequence[float], *, direction: str = "cost"
+) -> SeedSummary:
+    """Median, quartiles and the worst seed.
 
-    Every quantity summarised here — objective excess, gap fraction, trajectory
-    deviation — is a cost, so larger is worse without exception and ``worst`` can
-    be ``max`` rather than a per-metric direction that would eventually get one
-    of them backwards.
+    Through M4b every quantity summarised here — objective excess, gap fraction,
+    trajectory deviation — was a cost, so larger was worse without exception and
+    ``worst`` could be ``max`` rather than a per-metric direction that would
+    eventually get one of them backwards.
+
+    "Eventually" was M5. It reports *captures*: fractions of an available
+    advantage, where larger is BETTER. Summarised as costs their ``worst`` is the
+    best seed, and M5's first sweep shipped exactly that, twice::
+
+        alpha_capture   reported worst 1.1099, true worst 0.8959
+        net_capture     reported worst 0.9559, true worst 0.8925
+
+    So the direction is a parameter now rather than a comment. ``cost`` keeps the
+    old behaviour and stays the default, so every call written before M5 still
+    means what it meant; ``benefit`` takes the minimum instead. The direction
+    belongs to the *reporting*, not to the number: the shuffled control
+    summarises ``net_capture`` as a COST, because a control that captures alpha
+    is the alarming outcome there.
     """
+    if direction not in ("cost", "benefit"):
+        raise ValueError(
+            f"direction must be 'cost' or 'benefit', not {direction!r}"
+        )
     array = np.asarray(list(values), dtype=float)
     if array.size == 0:
         raise ValueError(f"nothing to summarise for {name!r}")
@@ -430,7 +450,7 @@ def summarise(name: str, values: Sequence[float]) -> SeedSummary:
         median=median,
         q1=q1,
         q3=q3,
-        worst=float(np.max(array)),
+        worst=float(np.max(array) if direction == "cost" else np.min(array)),
     )
 
 
@@ -448,9 +468,9 @@ def median_ordinal(values: Sequence[float]) -> int:
     That direction is the point. Anything selected out of a sweep and then
     shipped is a choice that could flatter the artefact, and the cheapest
     defence is a tie-break that can only ever cost: the exported policy is at or
-    below the sweep's median, never above it. Every quantity this repo
-    summarises is a cost (see :func:`summarise`), so ascending order is
-    best-to-worst and no per-metric direction is needed here either.
+    below the sweep's median, never above it. Every quantity this function is
+    asked to rank is a cost (M5's captures are reported, not selected on),
+    so ascending order is best-to-worst and no direction is needed here.
     """
     array = np.asarray(list(values), dtype=float)
     if array.size == 0:

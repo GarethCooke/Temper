@@ -31,6 +31,8 @@ from temper.agents.ppo import TrainResult
 from temper.eval.experiment import load_experiment
 from temper.eval.sweep import (
     ALPHA_CAPTURE_BAR,
+    ALPHA_DERIVED,
+    ALPHA_DIRECTIONS,
     ALPHA_HEADLINE,
     PREMIUM_RATIO_BAR,
     SHUFFLED_NET_CAPTURE_BAR,
@@ -339,3 +341,105 @@ def test_the_worst_seed_is_the_worst_seed(experiment, rebuilt):
     assert summary["advantage_fraction"]["median"] == pytest.approx(
         1.0 - summary["net_capture"]["median"]
     )
+
+
+@pytest.fixture(scope="module")
+def dominated(experiment, rebuilt):
+    """Ten grades in which ONE seed is worse than every other by every measure.
+
+    The blind spot that let the first sweep ship its best seed as its worst was
+    fabricated data with no spread: repeat one grade ten times and `max` and `min`
+    return the same number, so a direction error is invisible. Repeat it with a
+    spread and the test can still be written to agree with whatever table the code
+    happens to hold — which is a tautology, not a check.
+
+    So the spread here is *dominated*: seed 9 has the highest objective, the least
+    gross alpha and the highest execution cost, and therefore the worst value of
+    every quantity the document reports, derived ones included. No table is
+    consulted to know that. "The worst seed is seed 9" is the definition of worst,
+    and every reported ``worst`` has to be seed 9's number or it is wrong.
+    """
+    base = rebuilt["grades"][0]
+    n = experiment.seeds.n_seeds
+    grades = tuple(
+        replace(
+            base,
+            name=f"seed{i}",
+            objective=base.objective + 0.0011 * i,
+            alpha_bps=base.alpha_bps * (1.0 - 0.02 * i),
+            execution_bps=base.execution_bps + 0.0009 * i,
+        )
+        for i in range(n)
+    )
+    sweep = SweepResult(
+        experiment=experiment,
+        baselines={},
+        grades=(),
+        training=tuple(_driver()._fabricated_training(experiment)),
+        seconds=1.0,
+        provenance=experiment.provenance(REPO_ROOT),
+        pairs=tuple(() for _ in range(n)),
+        ordinals=tuple(range(n)),
+        alpha_grades=grades,
+        shuffled_alpha_grades=rebuilt["shuffled"],
+        alpha_detail=rebuilt["detail"],
+        alpha_reference_row=rebuilt["reference"],
+        alpha_baselines={},
+    )
+    return sweep, build_alpha_document(sweep), n - 1
+
+
+def test_every_reported_worst_is_the_seed_that_is_worst_by_construction(dominated):
+    """The general form of the defect, asked of every reported field at once.
+
+    ``test_the_worst_seed_is_the_worst_seed`` fabricates a spread in one field and
+    checks that field. This checks all of them, against a seed that is worst on
+    every axis at once, so no direction table is trusted to define the answer.
+
+    What it catches that the single-field fix did not: ``alpha_capture`` reported
+    1.1099 — its BEST seed — as its worst, in the same artefact and for the same
+    reason, and repairing ``net_capture`` by hand did nothing for it. A per-field
+    repair fixes a field; this fixes the class.
+    """
+    _, document, worst_seed = dominated
+    summary = document["summary"]
+    for name, block in summary.items():
+        values = block["values"]
+        assert min(values) < max(values), f"{name} does not vary across seeds"
+        assert block["worst"] == pytest.approx(values[worst_seed]), (
+            f"{name} reports worst={block['worst']}, but the seed that is worse "
+            f"than every other on every axis reads {values[worst_seed]}"
+        )
+    # And the declared direction has to match what the dominated seed showed, or
+    # the table and the document are agreeing with each other about a wrong answer.
+    for name, direction in ALPHA_DIRECTIONS.items():
+        values = summary[name]["values"]
+        observed = "cost" if values[worst_seed] == max(values) else "benefit"
+        assert observed == direction, f"{name} is declared {direction}, reads {observed}"
+
+
+def test_a_reported_field_with_no_declared_direction_is_refused(dominated, monkeypatch):
+    """The table has to be consulted, not merely written down.
+
+    A field added to the summary and to neither table is a field whose ``worst``
+    nobody chose. Simulated by removing a declaration rather than adding a field,
+    which is the same hole approached from the other side.
+    """
+    import temper.eval.sweep as sweep_module
+
+    trimmed = dict(ALPHA_DIRECTIONS)
+    trimmed.pop("alpha_capture")
+    monkeypatch.setattr(sweep_module, "ALPHA_DIRECTIONS", trimmed)
+    with pytest.raises((AssertionError, KeyError)):
+        build_alpha_document(dominated[0])
+
+
+def test_summarise_refuses_a_direction_it_does_not_understand():
+    """A typo in the direction must not silently mean `cost`."""
+    from temper.eval.grading import summarise
+
+    assert summarise("c", [1.0, 3.0, 2.0]).worst == 3.0
+    assert summarise("c", [1.0, 3.0, 2.0], direction="cost").worst == 3.0
+    assert summarise("b", [1.0, 3.0, 2.0], direction="benefit").worst == 1.0
+    with pytest.raises(ValueError, match="cost.*benefit"):
+        summarise("x", [1.0], direction="higher_is_better")
