@@ -78,6 +78,24 @@ file was written — must be exercisable on **fabricated data, without running t
 in a test that takes milliseconds. The rule is about the property, not about any one
 function: name the function and the next defect appears in the function beside it.
 
+Two clauses the rule needed and did not have until M5 paid for them.
+
+**The fabricated data must vary along every axis the path computes over.** Ten identical
+grades exercise `worst` ten times and cannot catch a direction error, because the best and
+the worst of ten identical numbers are the same number. Constant data proves the imports
+resolved and the shapes line up; it says nothing about what the path *computes*. Vary the
+input along every dimension the output claims to summarise, and prefer a fabricated case
+whose right answer is known independently — one seed dominated on every axis, say, so
+"which is worst" needs no agreement with the code to establish.
+
+**The entry point is a path too.** A rule written over *functions* stops at the last
+function, and `main` is below it: argument handling, the exit code, the `--expect` check,
+the lines that print where things were written. Those are not reachable by calling a
+function, so they have to be run — the driver invoked end to end against a fabricated or
+committed artefact, in-process, asserting on its exit. `tests/test_m6_runs.py` already does
+this for the M6 figure tool. The pattern existed and M5 did not apply it, which is the whole
+of why two of its three defects reached a finished run.
+
 **Why this inverts an instinct, and why the inversion is the point.** The natural ranking
 puts model and training code first and reporting code last: the training loop is where the
 hard thinking is, the reporter is "just printing". The ranking is backwards, and the reason
@@ -126,9 +144,48 @@ failure modes that must stay visible (a red flag, and a missing input that shoul
 figure rather than half-draw it). Twenty-nine tests, seconds, no training anywhere. Each of
 the four defects above is now one of them.
 
-**A test that would have caught all five.** Take the artefact your producer writes, hand it
-to every function that runs after the producer, and require them to complete. If a function
-cannot be called that way, that is the finding — extract it until it can.
+
+**Measured again (Temper M5, 2026-08-25), three times, and this time the pre-run pass
+existed, ran, and reported green.** M5's brief required a fabricated-data pass over the
+*whole* reporting path and named its stages: the three-number computation, the shuffled
+control's re-grade, the red-flag evaluation, the figure and its caption, and every line
+reporting where a file was written. The pass was written, it called every one of those
+functions before the first seed trained, and it caught nothing.
+
+| # | where | when it fired | what it cost |
+| - | --- | --- | --- |
+| 1 | `main`'s `--expect` check read a bare `verdict`, unbound since the block that set it became `print_verdict` | after the artefact was written and the verdict printed | nothing, purely by ordering — but exit 1 on a sweep that passed |
+| 2 | the closing line read `sweep.baselines`, which is `{}` in the alpha world; the four graded baselines live in `sweep.alpha_baselines` | after all ten seeds | the baselines were absent from the report and present in the file, so the report was quietly less than the run |
+| 3 | `summarise` calls `worst` the maximum, right for a cost and backwards for a capture fraction | never — it was written to the artefact and stayed there | a wrong number in a shipped file: `alpha_capture.worst = 1.109916`, the sweep's *best* seed, and more alpha than the optimum has to give |
+
+Numbers 1 and 2 are in `main`. The pass is a function that calls functions, and `main` is
+not one of them, so no amount of coverage below it could have reached either. Number 3 the
+pass *did* call — ten times, on ten identical fabricated grades, where `max` and `min`
+return the same number and a direction error is invisible by construction. Three defects,
+one pass, zero catches, and each one for a structural reason rather than by bad luck.
+
+Number 3 is the one to remember, for a reason the other two do not have: it is the only
+defect in this note that never fired at all. Numbers 1, 2, M4a's and all four of M4b's
+announced themselves by crashing. A wrong number does not crash. It is quoted.
+
+**And the first attempt to test it was worse than no test.** The check written for number 3
+read the module's own direction table and asked whether the document agreed with it.
+Reintroducing the defect — flip one field's declared direction — and the test **passed**,
+because the table and the document were now agreeing with each other about a wrong answer.
+*The oracle for a test must not be the thing under test.* The version that works fabricates
+ten grades in which one seed is worse on every axis at once and requires every reported
+`worst` to be that seed's number; "which seed is worst" is then established by construction
+rather than by the code under test. Flip the direction now and it fails, naming the field.
+
+**A test that would have caught all five, and the two clauses it needed to catch all
+eight.** Take the artefact your producer writes, hand it to every function that runs after
+the producer, and require them to complete. If a function cannot be called that way, that is
+the finding — extract it until it can. That much catches M4a's and M4b's five. It caught
+none of M5's three, so: hand the artefact to the **entry point** as well, running it the way
+a user does and asserting on its exit code; and fabricate the artefact with **variation along
+every axis the reporting summarises**, ideally with one case whose right answer is known
+without asking the code. "Completes" is the weakest possible assertion, and three of these
+eight defects were in code that completed.
 
 **Why it generalises.** Any project with an expensive producer and a cheap reporter has this
 shape: a benchmark harness writing a results file, a capture tool rendering a report, a
@@ -136,9 +193,11 @@ deploy script emitting a summary, a migration printing what it changed. The repo
 usually the part edited most often and tested least, because reaching it honestly means
 paying for the producer. Fabricating its input is not a compromise — the reporter's contract
 is over *data*, not over how the data was obtained — and it converts "found after the run"
-into "found before it". Two useful smells: if a function's only test is marked slow, ask
-whether the function is actually slow or merely *downstream* of something that is; and if a
-milestone cites this note, check what it did for the paths the citation did **not** name.
+into "found before it". Three useful smells: if a function's only test is marked slow, ask
+whether the function is actually slow or merely *downstream* of something that is; if a
+milestone cites this note, check what it did for the paths the citation did **not** name;
+and if a fabricated-data test constructs its input by repeating one record, ask which of the
+computations under test can tell the copies apart.
 ---
 
 ## A clock that cannot see the interval reports zero, not an error
