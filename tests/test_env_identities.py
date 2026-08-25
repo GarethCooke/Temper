@@ -369,6 +369,15 @@ def test_the_observation_carries_no_information_about_the_shock():
     size — the walk itself, a noisy price, a realised-cost field — breaks this,
     including one that a shape assertion would miss because it replaced a field
     rather than adding one.
+
+    **Amended by M5, and this is the pre-amendment form kept where it still
+    holds.** From M5 an observation may carry a prediction of a shock the current
+    decision can still act on, so this exact comparison is no longer the whole
+    rule — see ``tests/observation_guard.py``, which generalises it by pinning the
+    signal stream, and ``tests/test_m5_observation_guard.py``, which points the
+    generalisation at every case that must still be refused. Nothing changes for
+    the env under test here: it has no signal, so the amended guard's first clause
+    *is* this test and its second has nothing to measure.
     """
     case = CASES[0]
     policy_trades = twap_trajectory(case.market, case.order_size)

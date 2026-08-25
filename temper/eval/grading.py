@@ -49,8 +49,10 @@ import numpy as np
 
 from temper.env import (
     DETERMINISTIC_LIQUIDITY,
+    NO_SIGNAL_STREAM,
     ExecutionEnv,
     LiquidityStream,
+    SignalStream,
     TemporaryImpact,
     impact_for,
 )
@@ -108,6 +110,7 @@ def deterministic_schedule(
     streams: Sequence[int] = DEFAULT_EVAL_STREAMS,
     temporary_impact: TemporaryImpact | None = None,
     liquidity: LiquidityStream | None = None,
+    signal: SignalStream | None = None,
     expect_encoding: str | None = None,
 ) -> np.ndarray:
     """The inventory trajectory `policy` induces, verified **price**-independent.
@@ -135,6 +138,16 @@ def deterministic_schedule(
     the comparison would be vacuous. `liquidity` is pinned to `streams[0]`'s index
     here, so the two rollouts differ in the price and in nothing else.
 
+    **Generalised again by M5, on the same axis and for a sharper reason.** The
+    signal stream is pinned too, so what is asserted is still "the price never
+    entered the decision" — now at a fixed liquidity path *and* a fixed signal
+    path. Without the pin this check would be worse than vacuous in a
+    signal-bearing world: an unpinned signal moves with the stream index, so the
+    trajectories would differ and a correct policy would be refused; and an env
+    built with no signal at all would pass trivially while rolling the policy out
+    in the wrong world, which is the M4a mirror bug at the grading path. The
+    caller names the signal for the same reason it names the impact model.
+
     `temporary_impact` names the world the policy is rolled out in; ``None`` is
     Phase 1, which is what the env itself defaults to. `liquidity` likewise
     defaults to the deterministic multiplier, which is the market M0-M4a ran in.
@@ -149,6 +162,9 @@ def deterministic_schedule(
     stream_pin = (
         DETERMINISTIC_LIQUIDITY if liquidity is None else liquidity
     ).pinned_to(int(streams[0]))
+    signal_pin = (
+        NO_SIGNAL_STREAM if signal is None else signal
+    ).pinned_to(int(streams[0]))
 
     trajectories = []
     for stream in streams:
@@ -158,6 +174,7 @@ def deterministic_schedule(
             lambda_risk,
             temporary_impact=temporary_impact,
             liquidity=stream_pin,
+            signal=signal_pin,
             root_seed=root_seed,
             pool=pool,
             stream_index=int(stream),
@@ -178,9 +195,11 @@ def deterministic_schedule(
             raise ScheduleNotDeterministic(
                 f"policy {getattr(policy, 'name', policy)!r} realised different "
                 f"schedules on price streams {streams[0]} and {stream} at one "
-                f"pinned liquidity path — worst difference {worst:.3e} shares. "
-                "The observation must carry no price, or neither analytic grading "
-                "nor the conditional expectation E[cost | L] is valid."
+                f"pinned liquidity path and one pinned signal path — worst "
+                f"difference {worst:.3e} shares. The observation may carry a "
+                "prediction of a shock that has not been committed; it may never "
+                "carry the realised price, or neither analytic grading nor the "
+                "conditional expectations E[cost | L] and E[cost | s] are valid."
             )
     return reference
 

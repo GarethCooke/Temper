@@ -460,6 +460,10 @@ POOL_ALLOWANCE: dict[str, frozenset[str]] = {
     # third seed address without stepping them, and drives its own seam checks
     # from `m5/differential`, which is what that pool is for.
     "test_m5_signal_seam.py": frozenset({"m5/differential", "train", "eval"}),
+    # M5 task 3 drives the amended observation guard, which builds envs on its own
+    # diagnostic pool and steps them tens of thousands of times. It reports no
+    # number and grades nothing, so it holds neither reserved pool.
+    "test_m5_observation_guard.py": frozenset({"m5/differential"}),
 }
 
 #: The modules that regenerate a committed result and so legitimately hold both

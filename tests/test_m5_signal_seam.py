@@ -71,7 +71,14 @@ from temper.env import (
     SignalStream,
     signal_stream,
 )
-from temper.eval.antithetic import mirror_of
+from temper.eval import antithetic
+from temper.eval.antithetic import (
+    AntitheticPair,
+    MirrorEnv,
+    NegatedSignal,
+    PairDiverged,
+    mirror_of,
+)
 from temper.eval.experiment import load_experiment
 from temper.eval.grading import grade_policy
 from temper.eval.sweep import (
@@ -82,6 +89,7 @@ from temper.eval.sweep import (
     training_liquidity,
     training_signal,
 )
+from temper.env import impact_for
 from temper.oracle import (
     LINEAR_ENCODING,
     POWER_LAW_ENCODING,
@@ -346,9 +354,9 @@ def test_the_mirror_is_built_in_the_same_signal_world_as_the_primary():
     """M4a's lesson, applied to the third seam before an estimator can be bitten.
 
     A mirror that defaulted would be a signal-free env averaged against a
-    signal-bearing primary. Whether the pair should *negate* the signal is M5 task
-    4's question and is deliberately not answered here; what task 2 owes is that
-    both halves are in the same world.
+    signal-bearing primary. **Amended by task 3:** the mirror is handed the
+    primary's signal *negated* rather than shared, so what "same world" means here
+    is same law, same pool, same index, opposite draw.
     """
     stream = signal_stream(OneStepSignal(0.2), SIGNAL_TRAIN_POOL)
     env = ExecutionEnv(
@@ -361,9 +369,287 @@ def test_the_mirror_is_built_in_the_same_signal_world_as_the_primary():
         stream_index=4,
     )
     mirror = mirror_of(env)
-    assert mirror.signal is stream
+    assert isinstance(mirror.signal.signal, NegatedSignal)
+    assert mirror.signal.signal.base is stream.signal
+    assert mirror.signal.pool == stream.pool and mirror.signal.index == stream.index
     assert mirror.signal_address == env.signal_address
     assert mirror.observation_space.shape == env.observation_space.shape
+    # The correlation is NOT negated — negating it would put the mirror in a
+    # different world at the same address rather than reflecting this one.
+    assert mirror.signal.signal.correlation() == stream.signal.correlation()
+    assert mirror.signal.signal.lag == stream.signal.lag
+
+
+def test_a_signal_free_mirror_is_the_object_it_always_was():
+    """The wrap is applied only where there is something to negate.
+
+    M0 through M4b get the identical :class:`SignalStream`, so this constructor is
+    provably unchanged for them rather than merely equivalent.
+    """
+    env = ExecutionEnv(
+        _case_market(),
+        100_000.0,
+        1e-4,
+        root_seed=11,
+        pool=M5_DIFFERENTIAL_POOL,
+        stream_index=4,
+    )
+    assert mirror_of(env).signal is env.signal is NO_SIGNAL_STREAM
+
+
+def test_negating_the_signal_is_what_keeps_the_shock_negation_exact():
+    """Why the mirror negates the signal, measured rather than argued.
+
+    With ``xi = rho s + sqrt(1 - rho^2) e`` and only the price generator negated,
+    a mirror *sharing* the signal realises ``rho s - sqrt(1 - rho^2) e``, which is
+    not ``-xi``. Negating both gives ``-xi`` to the bit. So the choice is forced by
+    the pairing's one exact property, not by preference — and this shows both
+    sides of it rather than only the one that works.
+    """
+    market = _case_market()
+    schedule = -np.diff(twap_trajectory(market, 100_000.0))
+    stream = signal_stream(OneStepSignal(0.4), SIGNAL_TRAIN_POOL)
+
+    def primary():
+        return ExecutionEnv(
+            market,
+            100_000.0,
+            1e-4,
+            signal=stream,
+            root_seed=11,
+            pool=M5_DIFFERENTIAL_POOL,
+            stream_index=5,
+        )
+
+    # The arrangement that works: the pair, as built.
+    pair = AntitheticPair(primary())
+    pair.reset(seed=5)
+    for shares in schedule:
+        pair.step(float(shares))
+    assert np.array_equal(pair.mirror.signals, -pair.primary.signals)
+
+    # The arrangement that does not: a mirror on the *shared* signal. Built by
+    # hand, because `mirror_of` no longer produces one.
+    shared = MirrorEnv(
+        market,
+        100_000.0,
+        1e-4,
+        temporary_impact=primary().temporary_impact,
+        signal=stream,
+        root_seed=11,
+        pool=M5_DIFFERENTIAL_POOL,
+        stream_index=5,
+    )
+    reference, shared_env = primary(), shared
+    reference.reset(seed=5)
+    shared_env.reset(seed=5)
+    for shares in schedule:
+        _, _, _, _, info = reference.step(float(shares))
+        _, _, _, _, m_info = shared_env.step(float(shares))
+    assert m_info[SHOCK_KEY] != -info[SHOCK_KEY], (
+        "a mirror sharing the signal happened to negate the shock anyway, so this "
+        "test cannot distinguish the two arrangements"
+    )
+
+
+def test_action_identity_has_ended_and_the_replacement_is_exact():
+    """The retirement, and what stands in its place.
+
+    Retired: "the two halves see the same observation". Standing in its place:
+    every coordinate but the signal is bitwise equal, and the signal is the exact
+    negation. Both halves of that are checked here, and the retirement is shown to
+    be *material* rather than nominal — a policy shown the mirror's observation
+    would choose a different action, which is the whole content of the claim that
+    ended.
+    """
+    market = _case_market()
+    schedule = -np.diff(twap_trajectory(market, 100_000.0))
+    pair = AntitheticPair(
+        ExecutionEnv(
+            market,
+            100_000.0,
+            1e-4,
+            signal=signal_stream(OneStepSignal(0.4), SIGNAL_TRAIN_POOL),
+            root_seed=11,
+            pool=M5_DIFFERENTIAL_POOL,
+            stream_index=6,
+        )
+    )
+    assert pair.mirrors_signal
+
+    def tilt(observation):
+        """A policy that reads the signal — the simplest one that can."""
+        return float(observation[2])
+
+    observation, _ = pair.reset(seed=6)
+    differing = 0
+    for shares in schedule:
+        mirrored = pair.mirror._observation()
+        assert np.array_equal(observation[:2], mirrored[:2]), (
+            "the halves disagree about time or inventory, which no amendment "
+            "permits"
+        )
+        assert mirrored[2] == -observation[2]
+        if tilt(observation) != tilt(mirrored):
+            differing += 1
+        observation, _, _, _, _ = pair.step(float(shares))
+
+    assert differing >= market.n_bins - 1, (
+        f"a signal-reading policy chose the same action on both halves at "
+        f"{market.n_bins - differing} of {market.n_bins} decision points; the "
+        "retirement of action identity would be nominal rather than real"
+    )
+
+
+def test_action_identity_is_kept_verbatim_where_it_still_holds():
+    """Three milestones keep the check they were built under.
+
+    The retirement is scoped to worlds with an informative signal. A signal-free
+    world — and a world whose signal is pointed at an already-committed shock, so
+    the observation never grows — must still satisfy the old bitwise assertion,
+    and the pair must be asserting it rather than skipping to the weaker rule.
+    """
+    market = _case_market()
+    schedule = -np.diff(twap_trajectory(market, 100_000.0))
+    for label, stream in (
+        ("absent", None),
+        (
+            "already-committed",
+            signal_stream(OneStepSignal(0.9, bins_ahead=0), SIGNAL_TRAIN_POOL),
+        ),
+    ):
+        pair = AntitheticPair(
+            ExecutionEnv(
+                market,
+                100_000.0,
+                1e-4,
+                signal=stream,
+                root_seed=11,
+                pool=M5_DIFFERENTIAL_POOL,
+                stream_index=7,
+            )
+        )
+        assert not pair.mirrors_signal, label
+        observation, _ = pair.reset(seed=7)
+        for shares in schedule:
+            assert np.array_equal(observation, pair.mirror._observation()), label
+            observation, _, _, _, _ = pair.step(float(shares))
+
+
+def test_the_pair_refuses_a_mirror_on_a_fresh_signal_path():
+    """The replacement has teeth: "different" is not enough, it must be the negation.
+
+    A mirror drawing its own signal would disagree with the primary on exactly the
+    coordinate the amendment permits them to disagree on — and would be averaging
+    two unrelated worlds. This is the M4a mirror bug wearing M5's clothes, and the
+    exact-negation form of the check is what refuses it.
+    """
+    market = _case_market()
+    pair = AntitheticPair(
+        ExecutionEnv(
+            market,
+            100_000.0,
+            1e-4,
+            signal=signal_stream(OneStepSignal(0.4), SIGNAL_TRAIN_POOL),
+            root_seed=11,
+            pool=M5_DIFFERENTIAL_POOL,
+            stream_index=8,
+        )
+    )
+    pair.mirror.signal = pair.mirror.signal.pinned_to(4242)
+    pair.mirror._signal_rng = None
+    with pytest.raises(PairDiverged, match="not the exact negation"):
+        pair.reset(seed=8)
+
+
+def test_the_pair_refuses_a_mirror_in_another_world_before_a_step(monkeypatch):
+    """M4a's bug, refused at construction now rather than by a per-step band.
+
+    That bug cost a run: `mirror_of` rebuilt the mirror without the primary's
+    impact model, so a Phase-1 env was averaged against a power-law primary, and
+    it was found by a cancellation band four orders wide rather than by anything
+    structural. The pair now asks the question once, at construction, where the
+    answer is free — so a fourth injected seam cannot repeat it quietly.
+
+    `mirror_of` is replaced rather than the mirror mutated, because the check runs
+    inside ``__init__`` and mutating afterwards would test nothing.
+    """
+    market = _case_market()
+    stream = signal_stream(OneStepSignal(0.4), SIGNAL_TRAIN_POOL)
+    env = ExecutionEnv(
+        market,
+        100_000.0,
+        1e-4,
+        temporary_impact=impact_for(POWER_LAW_ENCODING, market, 100_000.0),
+        signal=stream,
+        root_seed=11,
+        pool=M5_DIFFERENTIAL_POOL,
+        stream_index=9,
+    )
+    assert AntitheticPair(env).mirror.cost_encoding == POWER_LAW_ENCODING
+
+    def defaulting_mirror(primary):
+        """M4a's defect verbatim: the impact model is not handed over."""
+        root_seed, pool, index = primary.seed_address
+        return MirrorEnv(
+            primary.market,
+            primary.order_size,
+            primary.lambda_risk,
+            signal=primary.signal,
+            root_seed=root_seed,
+            pool=pool,
+            stream_index=index,
+        )
+
+    monkeypatch.setattr(antithetic, "mirror_of", defaulting_mirror)
+    with pytest.raises(PairDiverged, match="must be one world"):
+        AntitheticPair(env)
+
+
+def test_the_pair_refuses_a_mirror_at_another_signal_address(monkeypatch):
+    """A mirrored signal is the same stream negated, never a second stream.
+
+    The exact-negation check catches a mirror on a different *index*; this catches
+    one in a different *pool*, which would draw an unrelated path that the
+    per-step check would also refuse — but one bin later and with a message about
+    arithmetic rather than about addressing. Refusing it at construction says the
+    right thing about the right thing.
+    """
+    market = _case_market()
+    stream = signal_stream(OneStepSignal(0.4), SIGNAL_TRAIN_POOL)
+    env = ExecutionEnv(
+        market,
+        100_000.0,
+        1e-4,
+        signal=stream,
+        root_seed=11,
+        pool=M5_DIFFERENTIAL_POOL,
+        stream_index=10,
+    )
+    assert AntitheticPair(env).mirror.signal_address == env.signal_address
+
+    def wrong_pool(primary):
+        root_seed, pool, index = primary.seed_address
+        moved = SignalStream(
+            signal=NegatedSignal(primary.signal.signal),
+            pool=SIGNAL_EVAL_POOL,
+            index=primary.signal.index,
+        )
+        assert moved.pool != primary.signal.pool
+        return MirrorEnv(
+            primary.market,
+            primary.order_size,
+            primary.lambda_risk,
+            temporary_impact=primary.temporary_impact,
+            signal=moved,
+            root_seed=root_seed,
+            pool=pool,
+            stream_index=index,
+        )
+
+    monkeypatch.setattr(antithetic, "mirror_of", wrong_pool)
+    with pytest.raises(PairDiverged, match="never a second stream"):
+        AntitheticPair(env)
 
 
 # ---------------------------------------------------------------------------
@@ -385,6 +671,13 @@ def test_the_observation_minimality_guard_refuses_the_signal_world():
     and every reassurance the guard has provided since M1a would be worth less
     than it looks. Seeing it refuse is what makes task 3's amendment a narrowing
     of something real rather than the deletion of a formality.
+
+    **Task 3 has since landed that amendment**, and this test is kept unchanged as
+    the evidence it rests on: the *unamended* clause refuses this env, and the
+    amended one — pin the signal, vary the price, then require every seam
+    coordinate to correlate only with shocks the current decision can still act on
+    — permits it (``tests/test_m5_observation_guard.py``). Two clauses, one
+    refusing and one permitting the same env, is what "narrowed" means here.
 
     The refusal is quantified rather than merely observed, because "different" is
     a weak thing to know: the coordinate that differs is the third one, it is the
