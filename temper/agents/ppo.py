@@ -82,8 +82,19 @@ class PPOConfig:
     norm_adv: bool = True
     hidden_sizes: tuple[int, ...] = (64, 64)
     log_std_init: float = 0.0
-    #: Cap on wall-clock seconds. A stop here is reported, never silently
-    #: rounded up to "converged": :class:`TrainResult` carries `timed_out`.
+    #: Cap on wall-clock seconds — a **runaway guard, not the budget**. The
+    #: budget is `total_timesteps`; this exists so a pathological run cannot hold
+    #: a box overnight, and a run that hits it has trained fewer updates than the
+    #: config asked for and is a different result from one that did not.
+    #:
+    #: Reported, never silently rounded up to "converged" (:attr:`TrainResult
+    #: .timed_out`), and from M5 **refused** by anything that compares results:
+    #: :func:`~temper.eval.sweep.refuse_if_budget_bound`. M5 task 2 is why. Two
+    #: sweeps contending for one box each trained fewer updates than their config
+    #: named, and the bitwise regression they were feeding would have come back
+    #: RED — a defect reported about a seam that was fine, from a comparison that
+    #: was never valid. No committed sweep has ever bound; the guard is what keeps
+    #: that a checked fact rather than a lucky one.
     max_seconds: float | None = None
     #: Intra-op thread count for torch. Part of the *experiment*, not of the
     #: host, because it is the one input to a trained artefact that the seed
@@ -373,6 +384,14 @@ class TrainResult:
             "updates": self.updates,
             "seconds": self.seconds,
             "timed_out": self.timed_out,
+            # What the budget did, in the artefact rather than derivable from it.
+            # `timed_out` has been recorded since M2 and nothing ever read it; a
+            # reader could not tell "stopped at 612 of 751" from "stopped at 750
+            # of 751" without loading the config, and the two are a different
+            # result and a rounding error. See `temper.eval.sweep.BudgetBound`.
+            "target_updates": self.config.num_updates,
+            "bound_at_update": self.updates if self.timed_out else None,
+            "max_seconds": self.config.max_seconds,
             "final_train_return": self.returns[-1] if self.returns else None,
             "train_returns": self.returns,
             "train_return_variance": self.return_variances,

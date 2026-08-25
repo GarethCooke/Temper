@@ -513,6 +513,73 @@ def check_conditioning_matches_observation(
 DEFAULT_SIGNAL_PATHS = 200_000
 
 
+class ShuffledSignal(Wrapper):
+    """M5's overfit control: the observed signal is drawn independently of the
+    one the shock is composed from.
+
+    The env charges its own market — its shocks are still ``rho s + ...`` in the
+    signal *it* drew — and the observation is overwritten with a draw from an
+    unrelated address. So the policy sees a signal of exactly the right shape,
+    the same distribution, the same scale, and no relationship whatsoever to the
+    prices it is about to pay.
+
+    **This is the claim, not an extra.** A policy that still captures the
+    advantage under it is not using the signal: it has found a better *fixed*
+    schedule, and the milestone's headline would be measuring something nobody
+    named. M5's prediction is stronger than M4b's was — the control should come
+    back **negative**, because a policy that tilts on noise pays the execution
+    premium and monetises nothing, so it does worse than not tilting at all.
+
+    The realised signal is read off the **env**, never off this wrapper: the
+    control lies to the policy about the market and must not be able to lie to
+    the grader about it. Same rule as
+    :class:`ShuffledLiquidity`, and it is the rule that keeps a control from
+    quietly becoming a second world.
+    """
+
+    def __init__(
+        self, env: ExecutionEnv, *, root_seed: int, pool: str, stream_index: int
+    ) -> None:
+        if not isinstance(env, ExecutionEnv):
+            raise TypeError(
+                f"ShuffledSignal wraps a raw ExecutionEnv, got {type(env)!r}"
+            )
+        if not env.signal.informative:
+            raise ValueError(
+                "shuffling an uninformative signal is a control over nothing: the "
+                "observation does not carry it, so there is no channel to break"
+            )
+        super().__init__(env)
+        self._rng = pool_rng(root_seed, pool, stream_index)
+        self._law = env.signal.signal
+        self._shown = np.zeros(env.market.n_bins + 1)
+        self._index = 0
+
+    @property
+    def shown(self) -> np.ndarray:
+        """The signal the policy was actually shown this episode."""
+        return self._shown[: self.env.market.n_bins].copy()
+
+    def _replace(self, observation):
+        observation = np.asarray(observation, dtype=np.float64).copy()
+        observation[-1] = self._shown[self._index]
+        return observation
+
+    def reset(self, *, seed: int | None = None, options: dict | None = None):
+        observation, info = self.env.reset(seed=seed, options=options)
+        self._shown[: self.env.market.n_bins] = self._law.draw(
+            self._rng, self.env.market.n_bins
+        )
+        self._shown[self.env.market.n_bins] = 0.0
+        self._index = 0
+        return self._replace(observation), info
+
+    def step(self, action):
+        observation, reward, terminated, truncated, info = self.env.step(action)
+        self._index += 1
+        return self._replace(observation), reward, terminated, truncated, info
+
+
 def signal_rollouts(
     policy,
     market: Market,
@@ -526,6 +593,7 @@ def signal_rollouts(
     pool: str,
     stream_index: int = 0,
     paths: int = DEFAULT_SIGNAL_PATHS,
+    shuffle: tuple[str, int] | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Roll `policy` out on `paths` signal paths; return schedules and paths.
 
@@ -560,10 +628,20 @@ def signal_rollouts(
     # must observe the signal path and nothing else.
     check_conditioning_matches_observation(env, {SIGNAL_SEAM})
 
+    driven = (
+        env
+        if shuffle is None
+        else ShuffledSignal(
+            env, root_seed=root_seed, pool=shuffle[0], stream_index=shuffle[1]
+        )
+    )
+
     trajectories = np.empty((paths, market.n_bins + 1))
     signals = np.empty((paths, market.n_bins))
     for index in range(paths):
-        trajectories[index] = run_episode(env, policy).trajectory
+        trajectories[index] = run_episode(driven, policy).trajectory
+        # Read off the *env*, never the wrapper: the control lies to the policy
+        # about the market and must not be able to lie to the grader about it.
         signals[index] = env.signals
     return trajectories, signals
 

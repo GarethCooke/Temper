@@ -41,7 +41,7 @@ from temper.agents.execution import PPOPolicy
 from temper.env import DETERMINISTIC_LIQUIDITY, ExecutionEnv
 from temper.eval.experiment import load_experiment
 from temper.eval.grading import grade_policy
-from temper.eval.sweep import train_seed, training_liquidity
+from temper.eval.sweep import refuse_if_budget_bound, train_seed, training_liquidity
 from temper.oracle import LINEAR_ENCODING, POWER_LAW_ENCODING, Market, SymbolParams
 
 from .conftest import REPO_ROOT
@@ -157,6 +157,7 @@ def test_one_committed_seed_per_world_retrains_bitwise(encoding):
     """
     experiment, document = _load(encoding)
     committed = document["seeds"][0]["grade"]
+    committed_training = document["seeds"][0]["training"]
 
     _, policy = train_seed(experiment, 0)
     assert isinstance(policy, PPOPolicy)
@@ -169,6 +170,16 @@ def test_one_committed_seed_per_world_retrains_bitwise(encoding):
         pool=experiment.seeds.eval_pool,
         streams=experiment.seeds.eval_streams,
         name="seed0",
+    )
+
+    # Neither side of a bitwise comparison may be a run whose wall-clock guard
+    # bound early: that is fewer updates than the config named, and the
+    # comparison would be between two different amounts of training. M5 task 2
+    # spent an hour producing exactly that RED before the guard existed.
+    refuse_if_budget_bound(
+        [committed_training, result],
+        comparison="the bitwise seed regression",
+        labels=["the committed seed 0", "the retrained seed 0"],
     )
 
     assert regraded.objective == committed["objective_bps"], (

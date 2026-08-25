@@ -83,6 +83,7 @@ from temper.eval.experiment import load_experiment
 from temper.eval.grading import grade_policy
 from temper.eval.sweep import (
     evaluation_signal,
+    refuse_if_budget_bound,
     grade_liquidity,
     liquidity_reference,
     train_seed,
@@ -781,6 +782,7 @@ def test_one_committed_seed_per_world_retrains_bitwise(world):
     """
     experiment, document = _load(world)
     committed = document["seeds"][0]["grade"]
+    committed_training = document["seeds"][0]["training"]
 
     _, policy = train_seed(experiment, 0)
     assert isinstance(policy, PPOPolicy)
@@ -807,6 +809,16 @@ def test_one_committed_seed_per_world_retrains_bitwise(world):
         )
         observed = np.asarray(regraded.trajectory, dtype=float)
         expected = np.asarray(committed["trajectory"], dtype=float)
+
+    # Neither side of a bitwise comparison may be a run whose wall-clock guard
+    # bound early: that is fewer updates than the config named, and the
+    # comparison would be between two different amounts of training. M5 task 2
+    # spent an hour producing exactly that RED before the guard existed.
+    refuse_if_budget_bound(
+        [committed_training, result],
+        comparison="the bitwise seed regression",
+        labels=["the committed seed 0", "the retrained seed 0"],
+    )
 
     assert regraded.objective == committed["objective_bps"], (
         f"{world}: seed 0's objective moved by "

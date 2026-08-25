@@ -16,7 +16,7 @@ M4A_CONFIG  ?= configs/m4a_power_law.yaml
 M4B_CONFIG  ?= configs/m4b_liquidity.yaml
 M5_CONFIG   ?= configs/m5_alpha.yaml
 
-.PHONY: help test test-verbose differential smoke sweep reference validate frontier frontier-figure frontier-check m4a-reference m4a-guarantees m4a-regression m4a m4a-figure checkpoint m4b-reference m4b-oracle m4b-differential m4b-guarantees m4b-regression m4b m4b-figure m5-reference m5-oracle m5-regression m5-guard m5-conditional m5-differential m6-figure anvil-check m6-predict m6 m6-thin m6-wide m6-feeder goldens clean
+.PHONY: help test test-verbose differential smoke sweep reference validate frontier frontier-figure frontier-check m4a-reference m4a-guarantees m4a-regression m4a m4a-figure checkpoint m4b-reference m4b-oracle m4b-differential m4b-guarantees m4b-regression m4b m4b-figure m5-reference m5-oracle m5-regression m5-guard m5-conditional m5-differential m5 m6-figure anvil-check m6-predict m6 m6-thin m6-wide m6-feeder goldens clean
 
 help:
 	@echo "make test          run the pytest suite (the gate); excludes the marked tiers"
@@ -45,6 +45,7 @@ help:
 	@echo "make m5-guard      M5 task 3: the amended guard, and what it still refuses"
 	@echo "make m5-conditional M5 task 4: E[cost|s], its index, and the pairing"
 	@echo "make m5-differential M5 task 5: the deep tier through three seams"
+	@echo "make m5           M5 task 6: ten seeds in the alpha-aware world - ~4 h"
 	@echo "make m6-figure     redraw results/m6_prediction.* from the five committed M6 runs"
 	@echo "make checkpoint    M6 prerequisite: export M4a's median seed as a policy .npz - ~15 min"
 	@echo "make anvil-check   M6 task 0: Anvil's documented behaviour, against a live server"
@@ -258,6 +259,16 @@ m5-conditional:
 # the residual because corr(s, xi) is rho by design.
 m5-differential:
 	$(PYTHON) -m pytest tests/test_m5_differential.py -m deep -v
+
+# M5 task 6 - the training point. Ten seeds in the alpha-aware world, graded by
+# conditional expectation on 200 000 held-out signal paths, with the signal-shuffled
+# control re-graded per seed. The whole reporting path runs on FABRICATED data
+# before seed 0 (docs/house-notes.md: no code path reachable only at the end of a
+# long run). Serial and unattended: 512 envs x 8 threads saturates the box, and
+# two concurrent sweeps bind each other's wall-clock guard - which now fails the
+# verdict rather than producing a meaningless comparison.
+m5:
+	$(PYTHON) tools/train.py --config $(M5_CONFIG) --expect pass
 
 # M5's oracle checks - the signal's joint law, the conditional cost against
 # sampled price draws, the decomposition by two routes, the convexity floor, the

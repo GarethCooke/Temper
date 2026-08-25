@@ -36,11 +36,15 @@ from temper.env import LiquidityStream, SignalStream, impact_for
 from temper.eval.antithetic import PairLedger, PairUpdateStats, antithetic_reward
 from temper.eval.conditional import (
     DEFAULT_EVAL_PATHS,
+    DEFAULT_SIGNAL_PATHS,
+    AlphaGrade,
     LiquidityGrade,
     conditional_costs,
     conditional_rollouts,
     fixed_schedule_grade,
     grade_conditional,
+    grade_signal,
+    signal_rollouts,
     trajectory_quantiles,
 )
 from temper.eval.experiment import ANTITHETIC, CONTROL_VARIATE, SAMPLED, Experiment
@@ -51,13 +55,25 @@ from temper.eval.grading import (
     summarise,
 )
 from temper.eval.provenance import Provenance
-from temper.eval.reference import LiquidityReferenceRow, liquidity_reference_row
+from temper.eval.reference import (
+    REFERENCE_SCHEDULES,
+    AlphaReferenceRow,
+    LiquidityReferenceRow,
+    alpha_reference_row,
+    liquidity_reference_row,
+)
 from temper.eval.variate import deterministic_reward
-from temper.oracle import clairvoyant_trajectories
+from temper.oracle import (
+    AlphaSignal,
+    Market,
+    alpha_coefficient,
+    clairvoyant_trajectories,
+)
 from temper.seeding import (
     LIQUIDITY_EVAL_POOL,
     LIQUIDITY_TRAIN_POOL,
     M4B_REFERENCE_POOL,
+    M5_REFERENCE_POOL,
     SIGNAL_EVAL_POOL,
     SIGNAL_TRAIN_POOL,
     pool_seeds,
@@ -267,6 +283,13 @@ class SweepResult:
     #: single trajectory for the analytic grader to score and the honest thing is
     #: an empty tuple rather than a number computed from one arbitrary path.
     liquidity_reference: LiquidityReferenceRow | None = None
+    #: M5's, and the same rule: a signal-observing policy is graded by
+    #: conditional expectation and has no analytic `Grade` to summarise.
+    alpha_grades: tuple = ()
+    shuffled_alpha_grades: tuple = ()
+    alpha_detail: tuple = ()
+    alpha_reference_row: AlphaReferenceRow | None = None
+    alpha_baselines: dict = field(default_factory=dict)
     liquidity_grades: tuple[LiquidityGrade, ...] = ()
     shuffled_grades: tuple[LiquidityGrade, ...] = ()
     liquidity_baselines: dict[str, LiquidityGrade] = field(default_factory=dict)
@@ -334,6 +357,15 @@ def run_sweep(
     started = time.perf_counter()
 
     stochastic = experiment.liquidity.stochastic
+    informative = experiment.signal.informative
+    if stochastic and informative:
+        raise ValueError(
+            "this config stacks M4b's stochastic liquidity under M5's signal. "
+            "That is a real milestone and it is BACKLOG: bundled, a red result "
+            "cannot be attributed, and the two adaptivities respond to different "
+            "randomness and compete for the same schedule shape"
+        )
+    alpha_row = alpha_reference(experiment) if informative else None
     reference = liquidity_reference(experiment) if stochastic else None
     multipliers = (
         liquidity_evaluation_paths(experiment) if stochastic else None
@@ -353,7 +385,12 @@ def run_sweep(
         if stochastic
         else None
     )
-    baselines = {} if stochastic else grade_baselines(experiment)
+    alpha_baselines = (
+        grade_alpha_baselines(experiment, alpha_row, DEFAULT_SIGNAL_PATHS)
+        if informative
+        else {}
+    )
+    baselines = {} if stochastic or informative else grade_baselines(experiment)
     liquidity_baselines = (
         grade_liquidity_baselines(experiment, reference, multipliers)
         if stochastic
@@ -362,6 +399,9 @@ def run_sweep(
     grades: list[Grade] = []
     liquidity_grades: list[LiquidityGrade] = []
     shuffled_grades: list[LiquidityGrade] = []
+    alpha_grades: list[AlphaGrade] = []
+    shuffled_alpha: list[AlphaGrade] = []
+    alpha_detail: list[dict] = []
     quantiles: list[dict] = []
     training: list[TrainResult] = []
     pairs: list[tuple[PairUpdateStats, ...]] = []
@@ -379,7 +419,27 @@ def run_sweep(
         result, policy = train_seed(
             experiment, ordinal, progress=progress, ledger=ledger
         )
-        if stochastic:
+        if informative:
+            seed_grade, detail = grade_alpha(
+                experiment, policy, alpha_row, name=f"seed{ordinal}"
+            )
+            # The control is part of the milestone, not an extra, and it runs
+            # here rather than in a later pass because it costs a re-grade rather
+            # than a re-train and because a control run after the verdict is a
+            # control nobody would have to publish. It is also the one path in
+            # this sweep that no fast test reaches, which is why the pre-run
+            # fabricated pass gives it its own line.
+            shuffled_grade, _ = grade_alpha(
+                experiment,
+                policy,
+                alpha_row,
+                name=f"seed{ordinal}_shuffled",
+                shuffled=True,
+            )
+            alpha_grades.append(seed_grade)
+            shuffled_alpha.append(shuffled_grade)
+            alpha_detail.append(detail)
+        elif stochastic:
             seed_grade, seed_quantiles = grade_liquidity(
                 experiment,
                 policy,
@@ -423,6 +483,11 @@ def run_sweep(
         shuffled_grades=tuple(shuffled_grades),
         liquidity_baselines=liquidity_baselines,
         schedule_quantiles=tuple(quantiles),
+        alpha_grades=tuple(alpha_grades),
+        shuffled_alpha_grades=tuple(shuffled_alpha),
+        alpha_detail=tuple(alpha_detail),
+        alpha_reference_row=alpha_row,
+        alpha_baselines=alpha_baselines,
     )
 
 
@@ -524,6 +589,75 @@ def _gate_block(experiment: Experiment, median_gap: float) -> dict | None:
     }
 
 
+class BudgetBound(RuntimeError):
+    """A training run stopped on wall-clock rather than on its update budget.
+
+    ``ppo.max_seconds`` is a **runaway guard, not the budget** — M3's config says
+    so in as many words — and until M5 nothing checked that it had not bound. A
+    run that hits it has trained fewer updates than its config named, so it is a
+    different result from one that did not, and every comparison drawn against it
+    is a comparison between two different amounts of training.
+
+    M5 task 2 is the reason this exists rather than the reason it might. Two
+    sweeps were left contending for one eight-core box; each was getting a
+    fraction of the machine, each would have bound at 90 minutes with a few
+    hundred updates missing, and the bitwise regression they were feeding would
+    have come back **RED** — a defect reported about a seam that was fine, from a
+    comparison that was never valid, at the end of an hour. The run this protects
+    is ten seeds against a committed artefact, which is the run one least wants to
+    repeat.
+
+    Raised rather than warned, for the reason
+    :class:`~temper.eval.grading.ScheduleNotDeterministic` is: a result whose
+    budget bound has not been compared badly, it has not been compared at all.
+    """
+
+
+def budget_record(result) -> dict:
+    """What the budget did, as a block a result file and a message can share."""
+    return {
+        "timed_out": bool(result.timed_out),
+        "updates": int(result.updates),
+        "target_updates": int(result.config.num_updates),
+        "bound_at_update": int(result.updates) if result.timed_out else None,
+        "seconds": float(result.seconds),
+        "max_seconds": result.config.max_seconds,
+    }
+
+
+def refuse_if_budget_bound(results, *, comparison: str, labels=None) -> None:
+    """Raise :class:`BudgetBound` if any of `results` stopped on wall-clock.
+
+    `results` are :class:`~temper.agents.ppo.TrainResult` objects or the dicts a
+    committed artefact stores them as — both, because the comparisons this
+    guards have one of each on their two sides and the *committed* half is
+    exactly as capable of having bound as the fresh one.
+
+    `comparison` names what would have been compared, because the message has to
+    say why the run stopped rather than what the assertion was called.
+    """
+    bound = []
+    for index, result in enumerate(results):
+        if isinstance(result, dict):
+            timed_out = bool(result.get("timed_out"))
+            done = result.get("updates")
+            target = result.get("target_updates")
+        else:
+            timed_out = bool(result.timed_out)
+            done = result.updates
+            target = result.config.num_updates
+        if timed_out:
+            name = labels[index] if labels is not None else f"result {index}"
+            bound.append(f"{name} (stopped at update {done} of {target})")
+    if bound:
+        raise BudgetBound(
+            f"{comparison} would compare against a run whose wall-clock budget "
+            f"bound early: {', '.join(bound)}. `max_seconds` is a runaway guard "
+            "and not the budget, so this is not a tolerance to widen — it is two "
+            "different amounts of training. Re-run it on an idle box."
+        )
+
+
 def build_document(sweep: SweepResult) -> dict:
     """The results JSON: the claim, the provenance, the numbers, the verdict.
 
@@ -543,6 +677,11 @@ def build_document(sweep: SweepResult) -> dict:
     question.
     """
     experiment = sweep.experiment
+    if experiment.signal.informative:
+        # M5's, dispatched on the world for M4b's reason: a signal-observing
+        # policy is graded by conditional expectation, reports three numbers
+        # rather than one, and shares only a skeleton with either of the others.
+        return build_alpha_document(sweep)
     if experiment.liquidity.stochastic:
         # M4b's document, and the dispatch is on the *world* rather than on which
         # fields happen to be populated: a liquidity-observing policy is graded by
@@ -606,8 +745,15 @@ def build_document(sweep: SweepResult) -> dict:
             sweep.seconds <= experiment.runtime.sweep_seconds
         ),
     }
+    verdict["budgets"] = [budget_record(r) for r in sweep.training]
     verdict["passed"] = bool(
-        verdict["epsilon_met"] and verdict["per_seed_met"] and not red_flags
+        verdict["epsilon_met"]
+        and verdict["per_seed_met"]
+        and not red_flags
+        # A sweep whose wall-clock guard bound trained fewer updates than its
+        # config named on at least one seed, so its median and its worst seed are
+        # summaries over different amounts of training. Not a tolerance.
+        and not verdict["timed_out"]
     )
     gate = _gate_block(experiment, summary["gap_fraction"]["median"])
     verdict["denominator_bps"] = experiment.denominator_bps(reference)
@@ -698,6 +844,167 @@ def liquidity_reference(experiment: Experiment) -> LiquidityReferenceRow:
         experiment.liquidity,
         root_seed=experiment.seeds.root_seed,
     )
+
+
+# ---------------------------------------------------------------------------
+# M5 — the alpha-aware sweep
+# ---------------------------------------------------------------------------
+
+#: M5's shuffled-signal control bar, pre-stated in the brief. **Negative**, and
+#: that is the point: a policy tilting on a signal unrelated to the prices pays
+#: the execution premium and monetises nothing, so it should do *worse* than not
+#: tilting at all. M4b's control bar was 0.15 — "does not survive"; M5's is a
+#: prediction with a sign, which is a stronger thing to be wrong about.
+SHUFFLED_NET_CAPTURE_BAR = -0.50
+
+#: The other two of M5's three, pre-stated in the brief's numbers table. An agent
+#: may pay more for its alpha than the optimum does, but not half as much again.
+ALPHA_CAPTURE_BAR = 0.85
+PREMIUM_RATIO_BAR = 1.30
+
+#: The oracle's own paths for M5's grading, and the pool they come from.
+SIGNAL_SHUFFLE_ADDRESS = (M5_REFERENCE_POOL, 500)
+
+
+def alpha_reference(experiment: Experiment) -> AlphaReferenceRow:
+    """The alpha-aware row every policy on the chart is scored against."""
+    return alpha_reference_row(
+        experiment.case.market,
+        experiment.case.order_size,
+        experiment.lambda_risk,
+        experiment.signal,
+        root_seed=experiment.seeds.root_seed,
+    )
+
+
+def per_bin_alpha_bps(
+    trajectories: np.ndarray,
+    signals: np.ndarray,
+    market: Market,
+    signal: AlphaSignal,
+) -> list[float]:
+    """The alpha term split by the bin whose inventory it is charged on.
+
+    ``-A rho * mean_p[h_k(p) s_{k-lag}(p)]`` for each ``k``, summing to the total
+    the grade reports. Recorded per seed because **three separate defects in this
+    milestone lived at the first bin** — the alpha sum starting one bin too early,
+    the conditional variance losing the first bin's whole share, and the seam's
+    own timing being one bin out — and a per-bin attribution turns the fourth from
+    a hunt into a glance. Entries below ``lag`` are exactly zero and are kept in
+    the list rather than trimmed, because a shifted index shows up as a non-zero
+    first entry and an absent entry cannot be non-zero.
+    """
+    lag = signal.lag
+    holdings = trajectories[:, :-1] / trajectories[:, :1]
+    scale = -alpha_coefficient(market) * signal.correlation()
+    contributions = [0.0] * market.n_bins
+    for k in range(lag, market.n_bins):
+        contributions[k] = scale * float(
+            np.mean(holdings[:, k] * signals[:, k - lag])
+        )
+    return contributions
+
+
+def grade_alpha(
+    experiment: Experiment,
+    policy,
+    reference: AlphaReferenceRow,
+    *,
+    name: str,
+    paths: int = DEFAULT_SIGNAL_PATHS,
+    shuffled: bool = False,
+) -> tuple[AlphaGrade, dict]:
+    """Roll a policy out on held-out signal paths and score the conditional cost.
+
+    The licence runs first and in this order, as M4b's does.
+    :func:`~temper.eval.grading.deterministic_schedule` pins the signal stream and
+    varies the *price* stream and requires the trajectory bitwise identical —
+    what makes ``E[cost | s]`` a closed form at all — and
+    :func:`~temper.eval.conditional.check_conditioning_matches_observation` runs
+    inside the rollout, so the grade cannot condition on more or less than the
+    policy could see.
+
+    `shuffled` runs the overfit control: the observation's signal comes from an
+    independent address while the env charges its own. It is part of the claim
+    rather than an extra.
+    """
+    case = experiment.case
+    impact = impact_for(experiment.cost_encoding, case.market, case.order_size)
+    signal = evaluation_signal(experiment)
+
+    if not shuffled:
+        deterministic_schedule(
+            policy,
+            case.market,
+            case.order_size,
+            experiment.lambda_risk,
+            root_seed=experiment.seeds.root_seed,
+            pool=experiment.seeds.eval_pool,
+            streams=experiment.seeds.eval_streams,
+            temporary_impact=impact,
+            signal=signal,
+            expect_encoding=experiment.cost_encoding,
+        )
+
+    trajectories, signals = signal_rollouts(
+        policy,
+        case.market,
+        case.order_size,
+        experiment.lambda_risk,
+        temporary_impact=impact,
+        signal=signal,
+        root_seed=experiment.seeds.root_seed,
+        pool=experiment.seeds.eval_pool,
+        stream_index=experiment.seeds.eval_streams[0],
+        paths=paths,
+        shuffle=SIGNAL_SHUFFLE_ADDRESS if shuffled else None,
+    )
+    grade = grade_signal(
+        trajectories,
+        signals,
+        case.market,
+        case.order_size,
+        reference,
+        experiment.signal,
+        name=name,
+        soft_slack=reference.feasible.half_width_bps,
+    )
+    detail = {
+        "per_bin_alpha_bps": per_bin_alpha_bps(
+            trajectories, signals, case.market, experiment.signal
+        ),
+        "schedule_quantiles": trajectory_quantiles(trajectories),
+    }
+    return grade, detail
+
+
+def grade_alpha_baselines(
+    experiment: Experiment, reference: AlphaReferenceRow, paths: int
+) -> dict:
+    """The four fixed schedules, scored through the same conditional route.
+
+    Every one of them has an alpha term of exactly zero in expectation — they are
+    fixed, and ``E[s] = 0`` — so what this measures is the *sampling* half: on the
+    same paths a fixed schedule's realised alpha is not zero, and scoring it here
+    rather than quoting its closed form is what makes the agent's row and the
+    baseline rows comparable path by path.
+    """
+    return {
+        name: grade_alpha(
+            experiment,
+            baseline(
+                name,
+                experiment.case.market,
+                experiment.case.order_size,
+                experiment.lambda_risk,
+                encoding=experiment.cost_encoding,
+            ),
+            reference,
+            name=name,
+            paths=paths,
+        )[0]
+        for name in REFERENCE_SCHEDULES[experiment.cost_encoding]
+    }
 
 
 def grade_liquidity(
@@ -813,6 +1120,207 @@ def grade_liquidity_baselines(
     }
 
 
+#: The three numbers M5 reports, and it reports them **together**. Named in one
+#: place so no call site can quote one of them: at the optimum 45 % of the gross
+#: effect is paid back, so `net_capture` alone cannot tell a policy that trades
+#: the signal well from one that trades it badly and executes well. Each carries
+#: its absolute bps beside it (§9's denominator entry).
+ALPHA_HEADLINE = ("alpha_capture", "premium_ratio", "net_capture")
+
+
+def alpha_headline(grade) -> dict:
+    """One policy's three numbers, with the bps each fraction is a fraction of."""
+    return {
+        "alpha_capture": grade.alpha_capture,
+        "alpha_bps": grade.alpha_bps,
+        "reference_alpha_bps": grade.reference_alpha_bps,
+        "premium_ratio": grade.premium_ratio,
+        "execution_premium_bps": grade.execution_premium_bps,
+        "reference_premium_bps": grade.reference_premium_bps,
+        "net_capture": grade.net_capture,
+        "excess_bps": grade.excess_bps,
+        "advantage_bps": (
+            grade.deterministic_objective - grade.reference_objective
+        ),
+    }
+
+
+def format_alpha_headline(grade) -> str:
+    """The one line a console and a caption both use. All three, never one.
+
+    Formatted here rather than at the call sites so that "never the net capture
+    alone" is a property of the code rather than of everyone's discipline.
+    """
+    numbers = alpha_headline(grade)
+    return (
+        f"alpha {numbers['alpha_capture']:+.3f} "
+        f"({numbers['alpha_bps']:+.5f} of {numbers['reference_alpha_bps']:.5f} bps) · "
+        f"premium {numbers['premium_ratio']:.3f}x "
+        f"({numbers['execution_premium_bps']:+.5f} of "
+        f"{numbers['reference_premium_bps']:.5f} bps) · "
+        f"net {numbers['net_capture']:+.3f} "
+        f"({numbers['excess_bps']:+.5f} bps over J_DP)"
+    )
+
+
+def build_alpha_document(sweep: SweepResult) -> dict:
+    """M5's results JSON: three numbers per seed, the control, and the per-bin alpha."""
+    experiment = sweep.experiment
+    if sweep.ordinals and tuple(sweep.ordinals) != tuple(
+        range(experiment.seeds.n_seeds)
+    ):
+        raise ValueError(
+            f"this sweep trained ordinals {list(sweep.ordinals)} of the config's "
+            f"{experiment.seeds.n_seeds}; a metrics document is a claim about a "
+            "sweep and cannot be written from a subset"
+        )
+    tolerances = experiment.tolerances
+    reference = sweep.alpha_reference_row
+    grades = sweep.alpha_grades
+    shuffled = sweep.shuffled_alpha_grades
+
+    summary = {
+        name: summarise(name, [getattr(g, name) for g in grades]).as_dict()
+        for name in ("objective", "excess_bps", "alpha_bps", "execution_premium_bps")
+    }
+    for name in ALPHA_HEADLINE:
+        summary[name] = summarise(
+            name, [getattr(g, name) for g in grades]
+        ).as_dict()
+    # The bar is stated on the excess as a fraction of the advantage, which is
+    # 1 - net_capture. Derived from the SAME summary so the two can never
+    # disagree about which seed was worst.
+    net = summary["net_capture"]
+    summary["advantage_fraction"] = {
+        "name": "advantage_fraction",
+        "values": [1.0 - v for v in net["values"]],
+        "median": 1.0 - net["median"],
+        "q1": 1.0 - net["q3"],
+        "q3": 1.0 - net["q1"],
+        "iqr": net["iqr"],
+        "worst": 1.0 - net["worst"],
+    }
+    graded_on = summary["advantage_fraction"]
+
+    shuffled_summary = (
+        summarise("net_capture", [g.net_capture for g in shuffled]).as_dict()
+        if shuffled
+        else None
+    )
+
+    red_flags = [g.name for g in grades if g.red_flag]
+    verdict = {
+        "tolerance_denominator": tolerances.denominator,
+        "graded_attribute": "advantage_fraction",
+        "epsilon_met": bool(graded_on["median"] <= tolerances.epsilon_fraction),
+        "per_seed_met": bool(graded_on["worst"] <= tolerances.per_seed_fraction),
+        # Rigorous and CERTIFIED, not numerical: impact and risk are convex and
+        # carry no signal, so E[impact + risk] >= M4a's certified optimum for any
+        # policy at all. An agent below it is a defect with a proof.
+        "red_flags": red_flags,
+        "soft_flags": [g.name for g in grades if g.soft_flag],
+        "shuffled_control_met": (
+            None
+            if shuffled_summary is None
+            else bool(shuffled_summary["median"] <= SHUFFLED_NET_CAPTURE_BAR)
+        ),
+        "shuffled_net_capture_bar": SHUFFLED_NET_CAPTURE_BAR,
+        "timed_out": [
+            ordinal
+            for ordinal, result in zip(sweep.addresses, sweep.training)
+            if result.timed_out
+        ],
+        "budgets": [budget_record(r) for r in sweep.training],
+        "sweep_seconds": sweep.seconds,
+        "within_sweep_budget": bool(
+            sweep.seconds <= experiment.runtime.sweep_seconds
+        ),
+    }
+    verdict["passed"] = bool(
+        verdict["epsilon_met"]
+        and verdict["per_seed_met"]
+        and not red_flags
+        and verdict["shuffled_control_met"] is not False
+        and not verdict["timed_out"]
+    )
+    # The three, at the sweep level, in one block. Never one of them.
+    verdict["headline"] = {
+        "alpha_capture_median": summary["alpha_capture"]["median"],
+        "alpha_bps_median": summary["alpha_bps"]["median"],
+        "reference_alpha_bps": reference.alpha_available,
+        "premium_ratio_median": summary["premium_ratio"]["median"],
+        "execution_premium_bps_median": summary["execution_premium_bps"]["median"],
+        "reference_premium_bps": reference.execution_premium,
+        "net_capture_median": summary["net_capture"]["median"],
+        "median_excess_bps": summary["excess_bps"]["median"],
+        "advantage_bps": reference.signal_advantage,
+    }
+    verdict["denominator_bps"] = reference.signal_advantage
+    verdict["median_excess_bps"] = summary["excess_bps"]["median"]
+    verdict["alpha_capture_met"] = bool(
+        summary["alpha_capture"]["median"] >= ALPHA_CAPTURE_BAR
+    )
+    verdict["premium_ratio_met"] = bool(
+        summary["premium_ratio"]["median"] <= PREMIUM_RATIO_BAR
+    )
+
+    points = experiment.trace_points
+    pairs = sweep.pairs if sweep.pairs else tuple(() for _ in grades)
+    seeds = []
+    for index, ordinal in enumerate(sweep.addresses):
+        seeds.append(
+            {
+                "ordinal": ordinal,
+                "env_stream_base": ordinal * experiment.seeds.env_stream_stride,
+                "training": _training_record(sweep.training[index], points),
+                "budget": budget_record(sweep.training[index]),
+                **({"pair": _pair_record(pairs[index], points)} if experiment.estimator.antithetic else {}),
+                "grade": grades[index].as_dict(),
+                "headline": alpha_headline(grades[index]),
+                # Per bin, for the reported seeds. Three separate defects in this
+                # milestone lived at the first bin; a per-bin attribution turns
+                # the fourth from a hunt into a glance.
+                "per_bin_alpha_bps": sweep.alpha_detail[index]["per_bin_alpha_bps"],
+                "schedule_quantiles": sweep.alpha_detail[index][
+                    "schedule_quantiles"
+                ],
+                "shuffled": (
+                    shuffled[index].as_dict() if index < len(shuffled) else None
+                ),
+                "shuffled_headline": (
+                    alpha_headline(shuffled[index])
+                    if index < len(shuffled)
+                    else None
+                ),
+            }
+        )
+
+    return {
+        "milestone": experiment.milestone,
+        "claim": experiment.estimator.claim,
+        "provenance": sweep.provenance.as_dict(),
+        "config": experiment.as_dict(),
+        "signal": experiment.signal.as_dict(),
+        "reference": reference.as_dict(),
+        "reference_kind": {
+            name: kind.as_dict()
+            for name, kind in reference.reference_kinds.items()
+        },
+        "baselines": {
+            name: grade.as_dict() for name, grade in sweep.alpha_baselines.items()
+        },
+        "trace_points": points,
+        "seeds": seeds,
+        "summary": summary,
+        "shuffled_control": {
+            "bar": SHUFFLED_NET_CAPTURE_BAR,
+            "net_capture": shuffled_summary,
+            "address": list(SIGNAL_SHUFFLE_ADDRESS),
+        },
+        "verdict": verdict,
+    }
+
+
 def build_liquidity_document(sweep: "SweepResult") -> dict:
     """M4b's results JSON. Same skeleton, a different question underneath.
 
@@ -900,12 +1408,14 @@ def build_liquidity_document(sweep: "SweepResult") -> dict:
             sweep.seconds <= experiment.runtime.sweep_seconds
         ),
     }
+    verdict["budgets"] = [budget_record(r) for r in sweep.training]
     verdict["passed"] = bool(
         verdict["epsilon_met"]
         and verdict["per_seed_met"]
         and not red_flags
         and not below
         and verdict["shuffled_control_met"] is not False
+        and not verdict["timed_out"]
     )
     verdict["denominator_bps"] = reference.adaptive_advantage
     verdict["median_excess_bps"] = summary["excess"]["median"]

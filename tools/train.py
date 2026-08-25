@@ -31,6 +31,7 @@ import argparse
 import json
 import os
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -92,6 +93,11 @@ from temper.agents.checkpoint import network_description, save_policy  # noqa: E
 from temper.agents.execution import fraction_to_shares  # noqa: E402
 from temper.eval.experiment import Experiment, load_experiment  # noqa: E402
 from temper.eval.figures import trajectory_overlay  # noqa: E402
+from temper.eval.sweep import (  # noqa: E402
+    ALPHA_CAPTURE_BAR,
+    PREMIUM_RATIO_BAR,
+    format_alpha_headline,
+)
 from temper.eval.grading import median_ordinal  # noqa: E402
 from temper.eval.provenance import Provenance, config_digest  # noqa: E402
 from temper.eval.sweep import build_document, grade, run_sweep, train_seed  # noqa: E402
@@ -309,6 +315,13 @@ def _seed_line(ordinal: int, grade, result) -> str:
         f"{' (TIMED OUT)' if result.timed_out else ''}"
         f"{' · RED FLAG' if grade.red_flag else ''}"
     )
+    if hasattr(grade, "premium_ratio"):  # AlphaGrade — three numbers, never one
+        return (
+            f"  seed {ordinal}: J {grade.objective:.6f} ± "
+            f"{grade.half_width_bps:.6f} bps · {format_alpha_headline(grade)} · "
+            f"{grade.paths:,} paths"
+            f"{' · soft flag' if grade.soft_flag else ''} · {common}"
+        )
     if hasattr(grade, "paths"):  # LiquidityGrade — graded by conditional expectation
         below = (
             ""
@@ -357,6 +370,15 @@ def write_figure(experiment: Experiment, document: dict) -> None:
     two hours of CPU would either not be applied or would silently produce a
     figure and a metrics file from different runs.
     """
+    if experiment.signal.informative:
+        # M5's figure is the wrap-up session's, deliberately. Said out loud here
+        # rather than silently skipped, because a `write_figure` that quietly
+        # returns is exactly how a reporting path goes unexercised — and
+        # `tests/test_m5_sweep_document.py` asserts that this branch is still the
+        # one that runs, so writing the figure without wiring it into the pre-run
+        # fabricated pass turns that test red.
+        print("  (no figure: M5's is the wrap-up session's, not this run's)")
+        return
     if experiment.liquidity.stochastic:
         _write_liquidity_figure(experiment, document)
         return
@@ -792,6 +814,100 @@ def run_export(experiment: Experiment, args) -> int:
     return 0
 
 
+def print_alpha_verdict(experiment: Experiment, document: dict) -> None:
+    """M5's verdict, and the rule it exists to enforce: **all three, always**.
+
+    The headline cannot appear alone. At the optimum 45 % of the gross effect is
+    paid back, so a net capture of 0.9 is consistent with a policy that monetises
+    everything and executes badly *and* with one that monetises little and
+    executes well, and those are different results. The three come out of one
+    formatter (:func:`~temper.eval.sweep.format_alpha_headline`) so that is a
+    property of the code rather than of everyone's discipline, and every fraction
+    carries the bps it is a fraction of.
+
+    A pure function of ``(experiment, document)``, for the reason
+    :func:`print_verdict` is one — and this milestone gave that reason a third
+    airing, so the pre-run pass calls this on fabricated data before a seed runs.
+    """
+    verdict, summary = document["verdict"], document["summary"]
+    head = verdict["headline"]
+    graded = summary["advantage_fraction"]
+    print()
+    print(
+        f"median advantage_fraction {graded['median']:.4f} (IQR {graded['iqr']:.4f}, "
+        f"worst {graded['worst']:.4f}) against ε = "
+        f"{experiment.tolerances.epsilon_fraction} and a per-seed floor of "
+        f"{experiment.tolerances.per_seed_fraction}, both fractions of the net "
+        f"signal advantage ({verdict['denominator_bps']:.5f} bps)"
+    )
+    print()
+    print("THE THREE NUMBERS, and never one of them:")
+    print(
+        f"  alpha capture     {head['alpha_capture_median']:+.4f}  "
+        f"({head['alpha_bps_median']:+.5f} of {head['reference_alpha_bps']:.5f} bps "
+        f"gross) against a bar of {ALPHA_CAPTURE_BAR:.2f} — "
+        f"{'met' if verdict['alpha_capture_met'] else 'MISSED'}"
+    )
+    print(
+        f"  execution premium {head['premium_ratio_median']:.4f}x  "
+        f"({head['execution_premium_bps_median']:+.5f} of "
+        f"{head['reference_premium_bps']:.5f} bps the optimum pays) against a bar "
+        f"of {PREMIUM_RATIO_BAR:.2f}x — "
+        f"{'met' if verdict['premium_ratio_met'] else 'MISSED'}"
+    )
+    print(
+        f"  net capture       {head['net_capture_median']:+.4f}  "
+        f"({head['median_excess_bps']:+.5f} bps over J_DP, on an advantage of "
+        f"{head['advantage_bps']:.5f} bps)"
+    )
+    print(
+        "  The optimum gives back "
+        f"{head['reference_premium_bps'] / head['reference_alpha_bps']:.1%} of the "
+        "gross effect, so the net figure alone cannot distinguish a policy that "
+        "trades the signal well from one that trades it badly and executes well."
+    )
+
+    control = document["shuffled_control"]["net_capture"]
+    print()
+    if control is None:
+        print("signal-shuffled control: NOT RUN")
+    else:
+        print(
+            f"signal-shuffled control: median net capture {control['median']:+.4f} "
+            f"(worst {control['worst']:+.4f}) against a bar of "
+            f"{verdict['shuffled_net_capture_bar']:+.2f} — "
+            f"{'met' if verdict['shuffled_control_met'] else 'MISSED'}. The gap "
+            f"between {head['net_capture_median']:+.4f} and {control['median']:+.4f} "
+            "is the actual claim: a policy tilting on a signal unrelated to the "
+            "prices pays the premium and monetises nothing."
+        )
+
+    if verdict["red_flags"]:
+        print(
+            f"RED FLAG (rigorous, and CERTIFIED): {verdict['red_flags']} scored "
+            f"E[impact + risk] below M4a's certified optimum "
+            f"({document['reference']['execution_floor_bps']:.6f} bps). Impact and "
+            "risk are convex and carry no signal, so no policy can be below that."
+        )
+    if verdict["soft_flags"]:
+        print(
+            f"soft flag: {verdict['soft_flags']} scored below J_DP beyond the DP's "
+            "own residual and this grade's half-width — reported and investigated, "
+            "never auto-failed, because J_DP is converged and not certified"
+        )
+    if verdict["timed_out"]:
+        print(
+            f"BUDGET BOUND: seeds {verdict['timed_out']} stopped on wall-clock "
+            "rather than on their update budget, so this sweep compares different "
+            "amounts of training and does not pass whatever else it says"
+        )
+    print()
+    print(
+        f"verdict: {'PASSED' if verdict['passed'] else 'NOT PASSED'} · "
+        f"{verdict['sweep_seconds']:.0f}s"
+    )
+
+
 def print_verdict(experiment: Experiment, document: dict) -> None:
     """Everything the run says after the last seed, in whichever world it ran in.
 
@@ -810,6 +926,9 @@ def print_verdict(experiment: Experiment, document: dict) -> None:
     distribution of schedules, so there is no single trajectory deviation to
     quote and no derived band to quote it against.
     """
+    if experiment.signal.informative:
+        print_alpha_verdict(experiment, document)
+        return
     verdict, summary = document["verdict"], document["summary"]
     graded = summary[experiment.tolerances.graded_attribute]
     print()
@@ -892,6 +1011,177 @@ def print_verdict(experiment: Experiment, document: dict) -> None:
             f"{gate['reference_median_gap_fraction']:.5f}) · "
             f"{'MET' if gate['met'] else 'MISSED'}"
         )
+
+
+class _TiltedSchedule:
+    """A fabricated policy that actually *reads* the signal coordinate.
+
+    The reporting pass needs one, and TWAP will not do. A fixed schedule ignores
+    the observation, so the shuffled re-grade returns the identical number and the
+    control's whole code path is exercised without the control being exercised —
+    which is the shape of check that passes and means nothing.
+
+    This tilts each bin's TWAP slice by the observed signal, clipped to the
+    reachable set. Not a good policy and not meant to be: what it has to do is
+    react, so that shuffling the signal it reacts to *changes the answer*, and the
+    pass can assert that it did.
+    """
+
+    name = "fabricated_tilt"
+
+    def __init__(self, market, order_size: float, strength: float = 4.0) -> None:
+        self._market = market
+        self._order_size = float(order_size)
+        self._strength = float(strength)
+        self._step = 0
+
+    def reset(self) -> None:
+        self._step = 0
+
+    def act(self, observation) -> float:
+        remaining_bins = self._market.n_bins - self._step
+        self._step += 1
+        inventory = float(observation[1]) * self._order_size
+        if remaining_bins <= 1:
+            return inventory
+        slice_size = inventory / remaining_bins
+        tilt = 1.0 - self._strength * float(observation[2])
+        return min(max(slice_size * tilt, 0.0), inventory)
+
+
+def alpha_reporting_pass(experiment: Experiment, *, paths: int = 256) -> dict:
+    """Exercise **every** path that runs after the sweep, on fabricated data.
+
+    ``docs/house-notes.md``, *No code path may be reachable only at the end of a
+    long run*, applied as M5's ROADMAP row asks: to the whole reporting path
+    rather than to the producer. M4b obeyed that note where its brief named the
+    function and was bitten **four more times** in code the brief had not named,
+    twice after a full sweep had already been graded.
+
+    So the list is explicit and each entry is named rather than implied:
+
+    1. the document assembly (:func:`~temper.eval.sweep.build_alpha_document`);
+    2. the three-number computation — alpha capture, execution premium, net
+       capture — through the formatter every call site uses;
+    3. the **shuffled-control re-grade**, which is the one path here that no fast
+       test reaches and that in a real run executes only after a seed has trained
+       (its own line, below, for exactly that reason);
+    4. the red-flag evaluation, on a fabricated grade that *trips* it, because a
+       flag that has never fired is a branch that has never run;
+    5. the verdict block (:func:`print_alpha_verdict`);
+    6. the per-seed line (:func:`_seed_line`);
+    7. every line that reports where a file was written
+       (:func:`write_outputs`, into a scratch directory).
+
+    Returns the fabricated document, so a test can assert on the same object the
+    run exercised rather than on a second one built to look like it.
+    """
+    from temper.eval.sweep import (
+        SweepResult,
+        alpha_reference,
+        build_alpha_document,
+        grade_alpha,
+    )
+
+    case = experiment.case
+    reference = alpha_reference(experiment)
+    policy = _TiltedSchedule(case.market, case.order_size)
+
+    # (2) and (3): a real grade and a real *shuffled* re-grade, at a path count
+    # that costs seconds. The control is the one path that only executes after a
+    # seed exists in a real run, which is the exposure the house note describes.
+    grade, detail = grade_alpha(
+        experiment, policy, reference, name="fabricated", paths=paths
+    )
+    shuffled, _ = grade_alpha(
+        experiment,
+        policy,
+        reference,
+        name="fabricated_shuffled",
+        paths=paths,
+        shuffled=True,
+    )
+    print(f"  reporting pass · grade      {format_alpha_headline(grade)}")
+    print(f"  reporting pass · shuffled   {format_alpha_headline(shuffled)}")
+    # The control has to *do* something, or its code path is exercised while the
+    # control is not. A reacting policy shown an unrelated signal must land
+    # somewhere else.
+    if shuffled.alpha_bps == grade.alpha_bps:
+        raise AssertionError(
+            "the shuffled re-grade returned the same alpha as the real one, so "
+            "the control changed nothing. Either the fabricated policy is not "
+            "reading the signal or ShuffledSignal is not replacing it"
+        )
+
+    # (4) the red-flag branch, fired rather than merely present.
+    tripped = replace(grade, red_flag=True, soft_flag=True, name="fabricated_flagged")
+    assert tripped.red_flag and tripped.soft_flag
+
+    fabricated = _fabricated_training(experiment)
+    sweep = SweepResult(
+        experiment=experiment,
+        baselines={},
+        grades=(),
+        training=tuple(fabricated),
+        seconds=1.0,
+        provenance=experiment.provenance(REPO_ROOT),
+        pairs=tuple(() for _ in fabricated),
+        ordinals=tuple(range(experiment.seeds.n_seeds)),
+        alpha_grades=tuple(
+            replace(grade, name=f"seed{i}") for i in range(experiment.seeds.n_seeds)
+        ),
+        shuffled_alpha_grades=tuple(
+            replace(shuffled, name=f"seed{i}_shuffled")
+            for i in range(experiment.seeds.n_seeds)
+        ),
+        alpha_detail=tuple(dict(detail) for _ in range(experiment.seeds.n_seeds)),
+        alpha_reference_row=reference,
+        alpha_baselines={"twap": grade},
+    )
+
+    # (1) the document, (5) the verdict, (6) the per-seed line, (7) the writes.
+    document = build_alpha_document(sweep)
+    for ordinal in range(experiment.seeds.n_seeds):
+        print(_seed_line(ordinal, sweep.alpha_grades[ordinal], fabricated[ordinal]))
+    print(_seed_line(0, tripped, fabricated[0]))
+    print_alpha_verdict(experiment, document)
+
+    scratch = REPO_ROOT / "results" / "scratch"
+    scratch.mkdir(parents=True, exist_ok=True)
+    write_outputs(replace(experiment, results_metrics=scratch / "m5_pass.json"), document)
+    return document
+
+
+def _fabricated_training(experiment: Experiment):
+    """One :class:`TrainResult` per seed, with nothing trained.
+
+    Deliberately *not* a mock: the reporting path reads `config.num_updates`,
+    `timed_out` and the traces off these, and a stub that answered by attribute
+    would exercise the reporting rather than the reporting's contract with the
+    trainer. One of them is marked budget-bound, so the branch that refuses a
+    bound sweep runs here too.
+    """
+    from temper.agents.ppo import TrainResult
+
+    updates = experiment.ppo.num_updates
+    return [
+        TrainResult(
+            agent=None,
+            config=experiment.ppo,
+            seed=ordinal,
+            global_step=experiment.ppo.total_timesteps,
+            updates=updates,
+            seconds=1.0,
+            timed_out=False,
+            returns=[0.0] * min(updates, 8),
+            episode_counts=[1] * min(updates, 8),
+            approx_kls=[0.0] * min(updates, 8),
+            entropies=[0.0] * min(updates, 8),
+            value_losses=[0.0] * min(updates, 8),
+            return_variances=[0.0] * min(updates, 8),
+        )
+        for ordinal in range(experiment.seeds.n_seeds)
+    ]
 
 
 def main() -> int:
@@ -1005,6 +1295,13 @@ def main() -> int:
         return 0
 
     _header(experiment)
+    if experiment.signal.informative:
+        # BEFORE the first seed, not after the last. Every path that runs after
+        # the sweep, exercised on fabricated data — including the shuffled
+        # control, which in a real run cannot execute until a seed has trained.
+        print("\n-- pre-run reporting pass (fabricated data, no training) --")
+        alpha_reporting_pass(experiment)
+        print("-- reporting pass complete; starting seed 0 --\n")
     with _KeepAwake():
         sweep = run_sweep(
             experiment,

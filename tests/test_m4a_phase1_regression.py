@@ -32,7 +32,7 @@ import pytest
 from temper.agents.execution import PPOPolicy
 from temper.eval.experiment import load_experiment
 from temper.eval.grading import grade_policy
-from temper.eval.sweep import train_seed
+from temper.eval.sweep import refuse_if_budget_bound, train_seed
 from temper.oracle import LINEAR_ENCODING
 
 from .conftest import REPO_ROOT
@@ -70,6 +70,7 @@ def test_one_m3_seed_retrains_bitwise_identically_through_the_new_seam():
     Equality is the only bar that means "the Phase-1 arithmetic is unchanged".
     """
     committed = DOCUMENT["seeds"][0]["grade"]
+    committed_training = DOCUMENT["seeds"][0]["training"]
     _, policy = train_seed(M3, 0)
     assert isinstance(policy, PPOPolicy)
 
@@ -82,6 +83,16 @@ def test_one_m3_seed_retrains_bitwise_identically_through_the_new_seam():
         pool=M3.seeds.eval_pool,
         streams=M3.seeds.eval_streams,
         name="seed0",
+    )
+
+    # Neither side of a bitwise comparison may be a run whose wall-clock guard
+    # bound early: that is fewer updates than the config named, and the
+    # comparison would be between two different amounts of training. M5 task 2
+    # spent an hour producing exactly that RED before the guard existed.
+    refuse_if_budget_bound(
+        [committed_training, result],
+        comparison="the bitwise seed regression",
+        labels=["the committed seed 0", "the retrained seed 0"],
     )
 
     assert regraded.objective == committed["objective_bps"], (

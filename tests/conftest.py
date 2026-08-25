@@ -557,6 +557,10 @@ POOL_ALLOWANCE: dict[str, frozenset[str]] = {
     # world is checked on the streams a graded result is scored over only through
     # the SIGNAL pool, which is not one the env's price generator is addressed in.
     "test_m5_differential.py": frozenset({"m5/differential"}),
+    # M5 task 6's pre-run reporting pass grades a fabricated policy on the EVAL
+    # streams, which is the pool a graded result is scored over and exactly the
+    # pool the pass has to exercise: the point is to run the real reporting path.
+    "test_m5_sweep_document.py": frozenset({"eval"}),
 }
 
 #: The modules that regenerate a committed result and so legitimately hold both
