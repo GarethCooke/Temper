@@ -30,7 +30,9 @@ from temper.eval.sweep import (
     ALPHA_DIRECTIONS,
     PREMIUM_RATIO_BAR,
     SHUFFLED_NET_CAPTURE_BAR,
+    BAR_SUFFIX,
     invert_summary,
+    seal_verdict,
 )
 
 from .conftest import REPO_ROOT
@@ -195,3 +197,28 @@ def test_the_recorded_before_values_are_the_ones_the_defect_produced(result):
         for key, record in changed.items():
             assert record["was"] == as_costs[name][key], f"{name}.{key} was"
             assert record["now"] == summary[name][key], f"{name}.{key} now"
+
+
+def test_the_committed_verdict_still_passes_under_the_gate_that_reads_all_five_bars(
+    result,
+):
+    """The gating change is not retroactive, and that is a measurement.
+
+    When this sweep ran, `passed` was the AND over two bars; `alpha_capture_met`
+    and `premium_ratio_met` were computed below the line and gated nothing. Both
+    are true, so re-sealing the committed verdict under the rule that gates on
+    every recorded bar returns the same answer — which is worth asserting rather
+    than assuming, because the alternative is a milestone whose recorded PASS was
+    only a pass under a rule the repo has since stopped using.
+    """
+    verdict = dict(result["verdict"])
+    recorded = verdict["passed"]
+    bars = sorted(k for k in verdict if k.endswith(BAR_SUFFIX))
+    assert len(bars) == 5, bars
+
+    seal_verdict(verdict)
+
+    assert verdict["passed"] is recorded is True
+    assert verdict["failed_bars"] == []
+    assert verdict["bars_not_applicable"] == []
+    assert verdict["gated_on"] == bars

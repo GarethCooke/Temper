@@ -670,6 +670,59 @@ def refuse_if_budget_bound(results, *, comparison: str, labels=None) -> None:
         )
 
 
+#: The suffix that makes a recorded boolean a BAR. It is the contract, not a
+#: naming habit: :func:`seal_verdict` gates on every field carrying it and on
+#: nothing else, so `within_sweep_budget` is a note and `epsilon_met` is a gate,
+#: and the difference is visible in the name at the point where it is written.
+BAR_SUFFIX = "_met"
+
+
+def seal_verdict(verdict: dict) -> dict:
+    """Close a verdict by gating ``passed`` on every bar it records.
+
+    Written over the verdict's own fields rather than over a list of them, the way
+    invariant 5's disjointness is written over ``POOLS`` itself. A bar a future
+    milestone adds gates automatically; a bar that disappears cannot silently
+    un-gate, because ``gated_on`` is written into the document beside the answer
+    and a reader can see which bars the ``passed`` in front of them was computed
+    from.
+
+    M5 is why. Its verdict enumerated the two bars it had when the line was
+    written, and then recorded ``alpha_capture_met`` and ``premium_ratio_met``
+    *below* that line, where they gated nothing. That is not a slip about two
+    fields: M5's entire methodological content is that net capture alone cannot
+    separate a policy that trades the signal well from one that trades it badly
+    and executes well, so a verdict gating on the net number and decorating itself
+    with the other two says in code the opposite of what the brief says in prose
+    — and the next milestone inherits the single-number verdict, not the finding.
+
+    ``None`` means a bar that does not apply to this world (no shuffled control
+    was run, so there is nothing to meet). It does not gate, and it is recorded in
+    ``bars_not_applicable`` rather than dropped, because "did not apply" and "was
+    not checked" look identical once a field is simply absent.
+    """
+    bars = {k: v for k, v in verdict.items() if k.endswith(BAR_SUFFIX)}
+    if not bars:
+        raise AssertionError(
+            "a verdict with no bars is not a verdict. Every sweep document states "
+            f"at least epsilon{BAR_SUFFIX} and per_seed{BAR_SUFFIX}; a document "
+            "with none has lost its tolerances rather than met them"
+        )
+    verdict["gated_on"] = sorted(bars)
+    verdict["failed_bars"] = sorted(k for k, v in bars.items() if v is False)
+    verdict["bars_not_applicable"] = sorted(k for k, v in bars.items() if v is None)
+    verdict["passed"] = bool(
+        not verdict["failed_bars"]
+        and not verdict["red_flags"]
+        # A sweep whose wall-clock guard bound trained fewer updates than its
+        # config named on at least one seed, so its median and its worst seed are
+        # summaries over different amounts of training. Not a tolerance, which is
+        # why it is refused here rather than recorded as a bar.
+        and not verdict["timed_out"]
+    )
+    return verdict
+
+
 def build_document(sweep: SweepResult) -> dict:
     """The results JSON: the claim, the provenance, the numbers, the verdict.
 
@@ -758,22 +811,16 @@ def build_document(sweep: SweepResult) -> dict:
         ),
     }
     verdict["budgets"] = [budget_record(r) for r in sweep.training]
-    verdict["passed"] = bool(
-        verdict["epsilon_met"]
-        and verdict["per_seed_met"]
-        and not red_flags
-        # A sweep whose wall-clock guard bound trained fewer updates than its
-        # config named on at least one seed, so its median and its worst seed are
-        # summaries over different amounts of training. Not a tolerance.
-        and not verdict["timed_out"]
-    )
     gate = _gate_block(experiment, summary["gap_fraction"]["median"])
     verdict["denominator_bps"] = experiment.denominator_bps(reference)
     verdict["median_excess_bps"] = summarise(
         "excess", [g.excess for g in sweep.grades]
     ).median
     if gate is not None:
+        # Recorded BEFORE the seal, which is the whole point of sealing last.
+        # M3's gate_met was written after `passed` and gated nothing.
         verdict["gate_met"] = gate["met"]
+    seal_verdict(verdict)
 
     points = experiment.trace_points
     antithetic = experiment.estimator.antithetic
@@ -1314,13 +1361,6 @@ def build_alpha_document(sweep: SweepResult) -> dict:
             sweep.seconds <= experiment.runtime.sweep_seconds
         ),
     }
-    verdict["passed"] = bool(
-        verdict["epsilon_met"]
-        and verdict["per_seed_met"]
-        and not red_flags
-        and verdict["shuffled_control_met"] is not False
-        and not verdict["timed_out"]
-    )
     # The three, at the sweep level, in one block. Never one of them.
     verdict["headline"] = {
         "alpha_capture_median": summary["alpha_capture"]["median"],
@@ -1341,6 +1381,10 @@ def build_alpha_document(sweep: SweepResult) -> dict:
     verdict["premium_ratio_met"] = bool(
         summary["premium_ratio"]["median"] <= PREMIUM_RATIO_BAR
     )
+    # Last, and only here. Every bar this document records is now written, so
+    # `passed` is the AND over all five rather than over the two that happened to
+    # exist when the line was first typed.
+    seal_verdict(verdict)
 
     points = experiment.trace_points
     pairs = sweep.pairs if sweep.pairs else tuple(() for _ in grades)

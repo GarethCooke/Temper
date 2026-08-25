@@ -31,6 +31,7 @@ from temper.agents.ppo import TrainResult
 from temper.eval.experiment import load_experiment
 from temper.eval.sweep import (
     ALPHA_CAPTURE_BAR,
+    BAR_SUFFIX,
     ALPHA_DERIVED,
     ALPHA_DIRECTIONS,
     ALPHA_HEADLINE,
@@ -40,6 +41,7 @@ from temper.eval.sweep import (
     SweepResult,
     build_alpha_document,
     format_alpha_headline,
+    seal_verdict,
     refuse_if_budget_bound,
 )
 
@@ -443,3 +445,98 @@ def test_summarise_refuses_a_direction_it_does_not_understand():
     assert summarise("b", [1.0, 3.0, 2.0], direction="benefit").worst == 1.0
     with pytest.raises(ValueError, match="cost.*benefit"):
         summarise("x", [1.0], direction="higher_is_better")
+
+
+#: Every bar M5's document records, written out here so a bar a future milestone
+#: adds has to arrive with its own veto case rather than inheriting a green suite.
+#: The test below requires this list to be exactly what the document carries.
+M5_BARS = [
+    "alpha_capture_met",
+    "epsilon_met",
+    "per_seed_met",
+    "premium_ratio_met",
+    "shuffled_control_met",
+]
+
+
+def _passing_verdict(**overrides):
+    """A verdict that clears every bar, sealed. The base case for the vetoes below.
+
+    Built from ``M5_BARS`` rather than from a graded document on purpose: whether a
+    fabricated policy happens to clear five bars is not the subject, and a fixture
+    that has to pass before it can be made to fail is a fixture that will one day
+    fail for the other reason.
+    """
+    verdict = {bar: True for bar in M5_BARS}
+    verdict.update({"red_flags": [], "timed_out": []})
+    verdict.update(overrides)
+    return seal_verdict(verdict)
+
+
+def test_the_verdict_gates_on_every_bar_it_records(dominated):
+    """Not on the two that existed when the line was first written.
+
+    M5 recorded five bars and gated on two. The other three sat beside the answer
+    looking like they meant something: `alpha_capture_met` and `premium_ratio_met`
+    were computed *below* the `passed` line, and `gate_met` has been in the
+    non-alpha document the same way since M3.
+    """
+    verdict = dominated[1]["verdict"]
+    bars = sorted(k for k in verdict if k.endswith(BAR_SUFFIX))
+    assert bars, "the document records no bars at all"
+    assert verdict["gated_on"] == bars
+    assert bars == M5_BARS, (
+        "the document's bars have changed. Add the new one to M5_BARS so it gets "
+        "its own veto case below; a bar with no negative test is a bar nobody has "
+        "watched fail"
+    )
+
+
+@pytest.mark.parametrize("bar", M5_BARS)
+def test_any_single_bar_can_veto_the_verdict_and_is_named_when_it_does(bar):
+    """One negative case per bar, because "gates on all of them" is five claims.
+
+    A rule written over the fields can still be wrong for one field — a bar read
+    from the wrong place, or `None` where it should be `False` — and a single
+    test on a single bar would not show it. Each is flipped in turn and must both
+    veto and say so: a verdict that fails without naming which bar failed sends a
+    reader back to recompute five numbers by hand.
+    """
+    assert _passing_verdict()["passed"] is True
+
+    verdict = _passing_verdict(**{bar: False})
+
+    assert verdict["passed"] is False
+    assert verdict["failed_bars"] == [bar]
+
+
+def test_a_bar_that_does_not_apply_is_recorded_rather_than_dropped():
+    """`None` is "no control was run", not "the control passed" and not a failure.
+
+    Absent and not-applicable look identical once a field is simply missing, which
+    is how a bar goes quiet. It is carried in `bars_not_applicable` instead.
+    """
+    verdict = _passing_verdict(shuffled_control_met=None)
+    assert verdict["passed"] is True
+    assert verdict["bars_not_applicable"] == ["shuffled_control_met"]
+    assert verdict["failed_bars"] == []
+
+
+def test_the_refusals_that_are_not_bars_still_refuse():
+    """Red flags and a bound budget are not tolerances, and still veto.
+
+    They are deliberately outside the `_met` contract: a red flag is a defect with
+    a proof, and a budget that bound early means the seeds were not trained the
+    same amount, so neither is a threshold anyone chose. They keep their own
+    clauses in the seal.
+    """
+    assert _passing_verdict(red_flags=["seed3"])["passed"] is False
+    assert _passing_verdict(timed_out=[7])["passed"] is False
+    # ...and neither is reported as a failed bar, because neither is one.
+    assert _passing_verdict(red_flags=["seed3"])["failed_bars"] == []
+
+
+def test_a_verdict_with_no_bars_is_refused():
+    """Losing the tolerances must not read as meeting them."""
+    with pytest.raises(AssertionError, match="no bars is not a verdict"):
+        seal_verdict({"red_flags": [], "timed_out": []})
