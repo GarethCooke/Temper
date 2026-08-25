@@ -1386,3 +1386,311 @@ def prediction_figure(
         written.append(out)
     plt.close(figure)
     return written
+
+
+# ---------------------------------------------------------------------------
+# M5 - the alpha signal: what was available, and how it was spent
+# ---------------------------------------------------------------------------
+
+#: The three iso-net-capture lines worth drawing as lines, each with the height
+#: its label sits at and the words that say what it IS. Three rather than a
+#: ladder of them: a contour that nobody can name is a contour nobody reads, and
+#: the shading behind them already carries the gradient.
+NET_LINES = (
+    (0.0, 1.14, "net 0 - no better than M4a's schedule", "#6b6b6b", (0, (5, 3)), 1.1),
+    (0.90, 0.62, "net 0.90 - the pre-stated bar", "#1a5c38", "-", 2.0),
+    (1.00, 1.56, "net 1.00 - the DP's own line", "#1f4e79", (0, (2, 2)), 1.3),
+)
+
+
+def alpha_figure(
+    path,
+    *,
+    plane: dict,
+    curve: dict,
+    provenance: Provenance,
+    caption: str,
+    formats=("png",),
+) -> list[Path]:
+    """M5's hero: a DECOMPOSITION, because the headline alone cannot be read.
+
+    M5's methodological content is that net capture is a *difference of two
+    quantities* — the gross alpha a policy monetised, minus the execution premium
+    it paid to monetise it — and that one number cannot tell a policy which traded
+    the signal well from one which traded it badly and executed well. A figure
+    showing a single capture fraction would repeat that mistake in pictures, so
+    neither panel here reports one.
+
+    **Left — the plane the three numbers live in.** Alpha capture along x, premium
+    ratio up y, both as multiples of what the converged DP achieves, so the DP is
+    the point (1, 1) by construction. Net capture is *linear* on this plane
+
+        net = (A a - P p) / D,     D = A - P
+
+    with A the gross alpha available and P the premium the optimum itself pays, so
+    the iso-net-capture lines are straight and their slope, A/P = 2.2, is the
+    exchange rate: one part of gross alpha is worth 2.2 parts of premium. The ten
+    seeds are drawn individually (*below n ~ 10, draw every trace*), and the ten
+    shuffled controls sit directly beneath them — same premium, no alpha — which
+    is the milestone's claim in one glance rather than one sentence.
+
+    The DP does not sit on the 1.00 line, and the offset is drawn rather than
+    smoothed: the graded M4a schedule, which provably monetises no alpha, reads an
+    alpha capture of -0.0035 instead of 0. That is the empirical mean of the
+    200,000 shared signal paths, which is not exactly zero at 1/sqrt(M) ~ 2e-3. It
+    cancels out of net capture, which is a paired difference against that very
+    schedule, and does not cancel out of alpha capture, which is a level.
+
+    **Right — what was available, against the invented parameter.** ``rho`` is
+    Temper's own; FrontierView vendored no signal. So the advantage is drawn as a
+    curve across the six values the oracle table carries, split into the two halves
+    it is a difference of, with the trained point marked. The share the optimum
+    gives back falls from 49 % to 20 % as the signal grows, on the thin line
+    against the right-hand axis: a bigger signal is not merely worth more, it is
+    worth *proportionally more*, and a single point with a single number beside it
+    would read as calibration and it is not.
+
+    `plane` and `curve` are read off committed artefacts by
+    ``tools/m5_alpha_figure.py``. Nothing here computes a cost.
+    """
+    figure, (left, right) = plt.subplots(
+        1, 2, figsize=(11.9, 6.6), gridspec_kw={"width_ratios": (1.15, 1.0)}
+    )
+
+    # ---- left panel: the decomposition plane ------------------------------
+    alpha_available = float(plane["alpha_available_bps"])
+    premium = float(plane["premium_bps"])
+    advantage = float(plane["advantage_bps"])
+    intercept = float(plane["net_intercept"])
+
+    def net_of(a, p):
+        return intercept + (alpha_available * a - premium * p) / advantage
+
+    x_lo, x_hi = -0.12, 1.28
+    y_lo, y_hi = -0.14, 1.90
+    grid_a, grid_p = np.meshgrid(
+        np.linspace(x_lo, x_hi, 300), np.linspace(y_lo, y_hi, 300)
+    )
+    net = net_of(grid_a, grid_p)
+
+    left.contourf(grid_a, grid_p, net, levels=24, cmap="BuGn", alpha=0.40, zorder=0)
+    left.set_xlim(x_lo, x_hi)
+    left.set_ylim(y_lo, y_hi)
+
+    def alpha_on(level, p):
+        """Where the iso-net line at `level` crosses premium ratio `p`."""
+        return ((level - intercept) * advantage + premium * p) / alpha_available
+
+    for level, label_p, words, colour, dash, width in NET_LINES:
+        ends = [(alpha_on(level, y_lo), y_lo), (alpha_on(level, y_hi), y_hi)]
+        left.plot(
+            [e[0] for e in ends],
+            [e[1] for e in ends],
+            color=colour,
+            linestyle=dash,
+            linewidth=width,
+            zorder=1,
+        )
+        # Rotated to lie along its own line, which needs the axes' aspect and so
+        # cannot be computed before the limits are set above.
+        first = left.transData.transform(ends[0])
+        second = left.transData.transform(ends[1])
+        angle = np.degrees(np.arctan2(second[1] - first[1], second[0] - first[0]))
+        left.text(
+            alpha_on(level, label_p),
+            label_p,
+            words,
+            fontsize=7.3,
+            color=colour,
+            rotation=angle,
+            rotation_mode="anchor",
+            ha="center",
+            va="bottom",
+            zorder=3,
+        )
+
+    seeds_a = np.asarray(plane["seed_alpha_capture"], dtype=float)
+    seeds_p = np.asarray(plane["seed_premium_ratio"], dtype=float)
+    shuffled_a = np.asarray(plane["shuffled_alpha_capture"], dtype=float)
+    shuffled_p = np.asarray(plane["shuffled_premium_ratio"], dtype=float)
+
+    left.plot(
+        [1.0],
+        [1.0],
+        marker="*",
+        markersize=17.0,
+        markerfacecolor=STYLE["optimal"]["color"],
+        markeredgecolor="white",
+        markeredgewidth=0.8,
+        linestyle="none",
+        label="$J_{DP}$ - the converged optimum, by construction (1, 1)",
+        zorder=6,
+    )
+    left.plot(
+        seeds_a,
+        seeds_p,
+        marker="o",
+        markersize=6.4,
+        linestyle="none",
+        markerfacecolor=STYLE["agent"]["color"],
+        markeredgecolor="white",
+        markeredgewidth=0.7,
+        label=f"PPO, {seeds_a.size} seeds (each drawn)",
+        zorder=5,
+    )
+    left.plot(
+        shuffled_a,
+        shuffled_p,
+        marker="v",
+        markersize=5.8,
+        linestyle="none",
+        markerfacecolor="#c1663c",
+        markeredgecolor="white",
+        markeredgewidth=0.6,
+        label="the same seeds, signal SHUFFLED - the control",
+        zorder=5,
+    )
+
+    # The two reference schedules that fit on this window. TWAP (22.1x) and AC
+    # (1.95x) do not, and the caption says so rather than the panel rescaling
+    # around two policies that are not what the milestone is about.
+    for key in ("optimal", "tangent"):
+        point = plane["baselines"].get(key)
+        if point is None:
+            continue
+        left.plot(
+            [point["alpha_capture"]],
+            [point["premium_ratio"]],
+            marker="s",
+            markersize=5.4,
+            linestyle="none",
+            markerfacecolor="none",
+            markeredgecolor="#5a5a5a",
+            markeredgewidth=1.1,
+            zorder=5,
+        )
+    tangent = plane["baselines"].get("tangent")
+    if tangent is not None:
+        left.annotate(
+            "AC at the tangent, graded",
+            xy=(tangent["alpha_capture"], tangent["premium_ratio"]),
+            xytext=(9, -3),
+            textcoords="offset points",
+            fontsize=7.4,
+            color="#5a5a5a",
+        )
+
+    # One annotation on the M4a marker, not two: what the square IS, and the one
+    # number about it that a reader would otherwise take for a defect. A schedule
+    # that provably monetises no alpha reads -0.0035, and it is why the DP sits
+    # above its own 1.00 line rather than on it.
+    offset = float(plane["baselines"]["optimal"]["alpha_capture"])
+    # One line with a bbox rather than three across the middle of the panel. The
+    # arithmetic behind the offset belongs in the caption; what the picture has to
+    # carry is that this square is NOT at zero and that the miss is explained.
+    left.annotate(
+        f"M4a's certified optimum, graded - monetises no alpha, reads "
+        f"{offset:+.4f} (caption)",
+        xy=(offset, 0.0),
+        xytext=(0.075, 0.035),
+        fontsize=7.3,
+        color="#8a5a2b",
+        ha="left",
+        va="center",
+        bbox={"facecolor": "white", "alpha": 0.80, "edgecolor": "none",
+              "boxstyle": "round,pad=0.22"},
+        arrowprops={"arrowstyle": "-|>", "color": "#c1663c", "linewidth": 0.9,
+                    "shrinkA": 2, "shrinkB": 4},
+    )
+
+    left.axhline(1.0, color="#9a9a9a", linewidth=0.7, linestyle=(0, (1, 3)), zorder=1)
+    left.axvline(1.0, color="#9a9a9a", linewidth=0.7, linestyle=(0, (1, 3)), zorder=1)
+    left.set_xlabel("alpha capture - gross signal monetised, over the optimum's")
+    left.set_ylabel("premium ratio - execution paid for it, over the optimum's")
+    left.set_title("The plane the three numbers live in", fontsize=11, pad=8)
+    left.grid(color="#ececec", linewidth=0.6)
+    left.set_axisbelow(True)
+    # Upper left, above the shuffled column's ceiling at 1.34: the y axis runs to
+    # 1.90 to open that band rather than to fit any data, which is the cheapest
+    # way to keep a legend off a scatter without moving the scatter.
+    left.legend(fontsize=7.6, loc="upper left", framealpha=0.93, borderpad=0.5)
+
+    # ---- right panel: what the signal is worth ----------------------------
+    rho = np.asarray(curve["rho"], dtype=float)
+    available = np.asarray(curve["alpha_available_bps"], dtype=float)
+    paid = np.asarray(curve["execution_premium_bps"], dtype=float)
+    net_advantage = np.asarray(curve["advantage_bps"], dtype=float)
+    trained = float(curve["trained_rho"])
+
+    right.plot(rho, available, marker="o", markersize=5.0, linewidth=1.8,
+               color="#1f4e79", label="gross alpha available $A$")
+    right.plot(rho, paid, marker="s", markersize=4.4, linewidth=1.5,
+               linestyle=(0, (5, 2)), color="#c1663c",
+               label="premium the optimum pays $P$")
+    right.plot(rho, net_advantage, marker="D", markersize=4.4, linewidth=2.0,
+               color="#227a4b", label="net advantage $A - P$ - the denominator")
+    right.set_xscale("log")
+    right.set_yscale("log")
+    right.axvline(trained, color="#8c8c8c", linewidth=1.0, linestyle=(0, (1, 3)))
+    index = int(np.argmin(np.abs(rho - trained)))
+    right.plot([trained], [net_advantage[index]], marker="D", markersize=11.0,
+               markerfacecolor="none", markeredgecolor="#227a4b", markeredgewidth=1.6)
+    right.annotate(
+        f"trained here\n$\\rho$ = {trained:g}, {curve['trained_explained']:.0e} of\n"
+        "next-bin return variance",
+        xy=(trained, net_advantage[index]),
+        xytext=(9, -30),
+        textcoords="offset points",
+        fontsize=7.8,
+        color="#227a4b",
+    )
+
+    share = right.twinx()
+    fraction = paid / available
+    share.plot(rho, 100.0 * fraction, color="#7b5ea7", linewidth=1.2,
+               linestyle=(0, (2, 2)), marker=".", markersize=4.0)
+    share.set_ylabel("premium as a share of gross alpha, %", color="#7b5ea7",
+                     fontsize=9.0)
+    share.tick_params(axis="y", labelcolor="#7b5ea7", labelsize=8.0)
+    share.set_ylim(0.0, 60.0)
+    share.annotate(
+        f"the optimum gives back {100 * fraction[index]:.0f} % here,\n"
+        f"and {100 * fraction[-1]:.0f} % at $\\rho$ = {rho[-1]:g}",
+        xy=(rho[-1], 100.0 * fraction[-1]),
+        xytext=(-4, 44),
+        textcoords="offset points",
+        fontsize=7.4,
+        color="#7b5ea7",
+        ha="right",
+    )
+
+    right.set_xlabel("$\\rho$ - Temper's own INVENTED signal strength")
+    right.set_ylabel("bps of the objective")
+    right.set_title("What the signal is worth, and what it costs", fontsize=11, pad=8)
+    right.grid(color="#ececec", linewidth=0.6)
+    right.set_axisbelow(True)
+    right.legend(fontsize=8.0, loc="upper left", framealpha=0.94)
+
+    figure.suptitle(
+        "M5 - an invented alpha signal: what was available, and how it was spent",
+        fontsize=12.5,
+        y=0.985,
+    )
+    figure.text(0.008, 0.010, caption, fontsize=7.6, color="#333333", va="bottom")
+    figure.text(0.992, 0.955, provenance.short, fontsize=7.5, color="#666666",
+                family="monospace", ha="right", va="top")
+    figure.subplots_adjust(left=0.062, right=0.930, top=0.895, bottom=0.245, wspace=0.30)
+
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+    for suffix in formats:
+        out = target.with_name(f"{target.name}.{suffix.lstrip('.')}")
+        figure.savefig(
+            out,
+            dpi=160,
+            metadata={"Software": None, "Creator": None, "Date": None},
+        )
+        written.append(out)
+    plt.close(figure)
+    return written

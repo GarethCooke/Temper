@@ -159,21 +159,35 @@ def test_the_alpha_term_is_decomposed_per_bin_and_closes(passed):
         assert any(value != 0.0 for value in per_bin[1:])
 
 
-def test_the_figure_does_not_exist_yet_and_the_pass_says_so(experiment):
-    """The one entry on the list that is not written, asserted as absent.
+def test_the_pre_run_pass_renders_the_figure_and_its_caption(experiment):
+    """The successor to a test that was written to fail on purpose.
 
-    The wrap-up session writes M5's figure. When it does, this test goes red and
-    the only way to make it green is to wire the figure into
-    ``alpha_reporting_pass`` — which is the point: a figure that has never been
-    drawn on fabricated data is precisely the code path the house note is about,
-    and M4b was bitten by its caption after a full sweep.
+    Through task 6 this asserted that M5's figure did **not** exist, with the
+    instruction that the only way to make it green was to wire the figure into
+    `alpha_reporting_pass`. That is the trick worth keeping: a placeholder that
+    goes red the moment the work it is holding a place for lands, so the wiring
+    cannot be forgotten by anybody who runs the suite.
+
+    The figure itself is drawn from COMMITTED artefacts by `make m5-figure` after
+    the sweep, because at sweep time the document it reads is not yet committed.
+    The caption is a different matter — it carries numbers, so it is a claim, and
+    M4b lost a figure tool to its caption after a full sweep had rendered. So the
+    pass renders both on the fabricated document, into `results/scratch/`.
     """
-    assert not (REPO_ROOT / "results" / "m5_alpha.png").exists(), (
-        "M5's figure now exists. Add it to tools/train.py's alpha_reporting_pass "
-        "— the figure AND its caption — and then delete this test."
+    scratch = REPO_ROOT / "results" / "scratch"
+    drawn = scratch / "m5_pass_figure.png"
+    if drawn.exists():
+        drawn.unlink()
+
+    _driver()._fabricated_alpha_figure(
+        json.loads((scratch / "m5_pass.json").read_text(encoding="utf-8")), scratch
     )
+
+    assert drawn.exists() and drawn.stat().st_size > 10_000
     source = (REPO_ROOT / "tools" / "train.py").read_text(encoding="utf-8")
-    assert "no figure: M5's is the wrap-up session's" in source
+    assert "make m5-figure" in source, (
+        "the sweep's figure branch no longer says where the figure comes from"
+    )
 
 
 def test_a_budget_bound_sweep_cannot_pass(experiment, passed):

@@ -222,3 +222,154 @@ def test_the_committed_verdict_still_passes_under_the_gate_that_reads_all_five_b
     assert verdict["failed_bars"] == []
     assert verdict["bars_not_applicable"] == []
     assert verdict["gated_on"] == bars
+
+
+# ---------------------------------------------------------------------------
+# The figure. A view of the two artefacts above, and nothing computed in it.
+# ---------------------------------------------------------------------------
+
+FIGURE = REPO_ROOT / "results" / "m5_alpha.png"
+REFERENCE_TABLE = REPO_ROOT / "results" / "m5_reference.json"
+
+
+def _figure_tool():
+    """`tools/m5_alpha_figure.py` as a module. It is a script; this is its importer."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "temper_m5_figure_tool", REPO_ROOT / "tools" / "m5_alpha_figure.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture(scope="module")
+def table():
+    if not REFERENCE_TABLE.exists():
+        pytest.skip("results/m5_reference.json has not been produced in this tree")
+    return json.loads(REFERENCE_TABLE.read_text(encoding="utf-8"))
+
+
+def test_net_capture_is_linear_on_the_plane_the_figure_draws(result):
+    """The contours are only honest if the surface under them is the real one.
+
+    The left panel draws straight iso-net-capture lines, which is a CLAIM: that
+    net capture is exactly linear in (alpha capture, premium ratio) with slopes
+    A/D and -P/D. If it were only approximately linear, a reader placing a seed
+    against the 0.90 line would be reading a number that is not the one in the
+    artefact.
+
+    So it is checked against all twenty-four graded policies in the file - ten
+    seeds, ten shuffled controls, four baselines - rather than argued from the
+    algebra. Everything the figure needs is in `build_plane`, so this exercises
+    that function rather than a copy of it.
+    """
+    plane = _figure_tool().build_plane(result)
+    A = plane["alpha_available_bps"]
+    P = plane["premium_bps"]
+    Dnom = plane["advantage_bps"]
+    intercept = plane["net_intercept"]
+
+    graded = (
+        [r["grade"] for r in result["seeds"]]
+        + [r["shuffled"] for r in result["seeds"]]
+        + list(result["baselines"].values())
+    )
+    assert len(graded) == 24
+    worst = 0.0
+    for g in graded:
+        predicted = intercept + (
+            A * g["alpha_capture"] - P * g["premium_ratio"]
+        ) / Dnom
+        worst = max(worst, abs(predicted - g["net_capture"]))
+    assert worst < 1e-12, (
+        f"net capture is not linear on the plane the figure draws: worst "
+        f"disagreement {worst:.3e} over {len(graded)} graded policies"
+    )
+
+
+def test_the_denominator_is_the_gap_and_not_the_gross_alpha(result):
+    """D = A - P, asserted, because the caption says so in every drawing.
+
+    The one way this figure could mislead is by quoting a capture fraction over a
+    denominator other than the one the brief pre-stated. A capture over the GROSS
+    alpha would read 1.83x larger and would be the flattering direction.
+    """
+    plane = _figure_tool().build_plane(result)
+    assert plane["advantage_bps"] == pytest.approx(
+        plane["alpha_available_bps"] - plane["premium_bps"], abs=1e-15
+    )
+    assert plane["advantage_bps"] < plane["alpha_available_bps"]
+
+
+def test_the_offset_the_figure_annotates_is_the_one_in_the_artefact(result):
+    """The number in the annotation comes off the file, not out of a docstring."""
+    plane = _figure_tool().build_plane(result)
+    anchor = plane["baselines"]["optimal"]
+    # A schedule that cannot monetise alpha, reading a non-zero alpha capture.
+    assert anchor["premium_ratio"] == pytest.approx(0.0, abs=1e-12)
+    assert anchor["net_capture"] == pytest.approx(0.0, abs=1e-12)
+    assert anchor["alpha_capture"] != 0.0
+    assert abs(anchor["alpha_capture"]) < 0.01, (
+        "the M4a schedule's spurious alpha has grown beyond the 1/sqrt(M) scale "
+        "the caption attributes it to"
+    )
+    # And it is exactly why the DP is off its own 1.00 line.
+    assert plane["net_intercept"] == pytest.approx(-anchor["alpha_capture"] * (
+        plane["alpha_available_bps"] / plane["advantage_bps"]
+    ), rel=1e-9)
+
+
+def test_the_caption_names_the_four_things_it_may_never_omit(result, table):
+    """A caption with numbers in it is a claim, so its claims are asserted."""
+    tool = _figure_tool()
+    plane = tool.build_plane(result)
+    curve = tool.build_curve(table, result)
+    text = tool.caption(result, plane, curve)
+    # Wrapped for the canvas, so a phrase can straddle a line break. The claims
+    # are read off the unwrapped sentence and the width off the wrapped one.
+    flowed = " ".join(text.split())
+
+    assert "DENOMINATOR" in flowed
+    assert "INVENTED" in flowed
+    assert "CONVERGED, NOT CERTIFIED" in flowed
+    assert "THE OFFSET" in flowed
+    # Never the net capture alone.
+    assert "alpha capture" in flowed and "execution premium" in flowed
+    assert "net capture" in flowed
+    assert "shuffled control" in flowed
+    for line in text.splitlines():
+        assert len(line) <= tool.CAPTION_WIDTH, (
+            f"a caption line is {len(line)} characters against a canvas measured "
+            f"at {tool.CAPTION_WIDTH}; matplotlib will not tell you it overflowed"
+        )
+
+
+def test_the_figure_redraws_byte_identically_from_the_committed_artefacts(tmp_path):
+    """A view of results, not a second route to them.
+
+    Nothing in the figure path computes a cost, so a clean clone reproduces the
+    committed PNG exactly without a training run. If this goes red, either the
+    figure has started computing something or the artefacts under it have moved.
+    """
+    if not FIGURE.exists():
+        pytest.skip("results/m5_alpha.png has not been drawn in this tree")
+    tool = _figure_tool()
+    status = tool.main(["--out", str(tmp_path / "m5_alpha")])
+    assert status == 0
+    redrawn = tmp_path / "m5_alpha.png"
+    assert redrawn.read_bytes() == FIGURE.read_bytes(), (
+        "results/m5_alpha.png does not redraw byte-identically from "
+        "results/m5_alpha.json and results/m5_reference.json"
+    )
+
+
+def test_a_missing_input_skips_the_figure_rather_than_half_drawing_it(tmp_path):
+    """The failure mode that must stay visible: no file is better than a wrong one."""
+    tool = _figure_tool()
+    status = tool.main(
+        ["--sweep", str(tmp_path / "absent.json"), "--out", str(tmp_path / "m5")]
+    )
+    assert status == 1
+    assert not (tmp_path / "m5.png").exists()

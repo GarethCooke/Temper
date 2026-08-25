@@ -373,13 +373,14 @@ def write_figure(experiment: Experiment, document: dict) -> None:
     figure and a metrics file from different runs.
     """
     if experiment.signal.informative:
-        # M5's figure is the wrap-up session's, deliberately. Said out loud here
-        # rather than silently skipped, because a `write_figure` that quietly
-        # returns is exactly how a reporting path goes unexercised — and
-        # `tests/test_m5_sweep_document.py` asserts that this branch is still the
-        # one that runs, so writing the figure without wiring it into the pre-run
-        # fabricated pass turns that test red.
-        print("  (no figure: M5's is the wrap-up session's, not this run's)")
+        # M5's figure is a view of COMMITTED artefacts and is drawn by
+        # `make m5-figure` after the sweep, not during it: at this point in a run
+        # the document it reads has just been written and is not yet committed,
+        # and a figure that redraws byte-identically from a clean clone is worth
+        # more than one drawn a few seconds earlier. It is not skipped, though —
+        # `alpha_reporting_pass` renders it and its caption on fabricated data
+        # before the first seed, which is the exposure the house note names.
+        print("  (figure: `make m5-figure`, from the committed artefacts)")
         return
     if experiment.liquidity.stochastic:
         _write_liquidity_figure(experiment, document)
@@ -1246,7 +1247,62 @@ def alpha_reporting_pass(experiment: Experiment, *, paths: int = 256) -> Reporti
     scratch = REPO_ROOT / "results" / "scratch"
     scratch.mkdir(parents=True, exist_ok=True)
     write_outputs(replace(experiment, results_metrics=scratch / "m5_pass.json"), document)
+    _fabricated_alpha_figure(document, scratch)
     return ReportingPass(document=document, sweep=sweep)
+
+
+def _fabricated_alpha_figure(document: dict, scratch: Path) -> None:
+    """Stage (8): the figure and its caption, drawn from a document nobody trained.
+
+    The figure itself is a view of *committed* artefacts and is drawn by
+    ``make m5-figure`` after the sweep, not during it — at sweep time the
+    document it reads does not exist yet. That is a good reason for the real run
+    not to draw it and no reason at all for the pre-run pass not to: a caption
+    carries numbers, a caption with numbers is a claim, and M4b lost a figure tool
+    to a caption *after* a full sweep had rendered.
+
+    So the caption is assembled and the figure rendered here from the fabricated
+    document, into ``results/scratch/``. The right-hand panel comes off the
+    committed oracle table, which is real and needs no training, and its absence
+    is an error rather than a skip: a stage that quietly returns is how a
+    reporting path goes unexercised.
+    """
+    from tools.m5_alpha_figure import (
+        REFERENCE,
+        build_curve,
+        build_plane,
+        caption as alpha_caption,
+    )
+    from temper.eval.figures import alpha_figure
+
+    if not REFERENCE.exists():
+        raise FileNotFoundError(
+            f"{REFERENCE} is missing, so the figure's right-hand panel has no "
+            "oracle table to read. It is committed and oracle-only; regenerate it "
+            "with `make m5-reference` before launching a sweep"
+        )
+    table = json.loads(REFERENCE.read_text(encoding="utf-8"))
+    plane = build_plane(document)
+    curve = build_curve(table, document)
+    text = alpha_caption(document, plane, curve)
+    written = alpha_figure(
+        scratch / "m5_pass_figure",
+        plane=plane,
+        curve=curve,
+        provenance=Provenance(
+            **{
+                key: value
+                for key, value in document["provenance"].items()
+                if key in Provenance.__dataclass_fields__
+            }
+        ),
+        caption=text,
+    )
+    lines = text.splitlines()
+    print(
+        f"  reporting pass · figure     {written[0].name}, caption {len(lines)} lines "
+        f"x {max(len(line) for line in lines)} chars"
+    )
 
 
 def _fabricated_training(experiment: Experiment):
