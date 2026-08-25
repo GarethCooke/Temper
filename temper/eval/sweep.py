@@ -32,6 +32,7 @@ import numpy as np
 
 from temper.agents.execution import PPOPolicy, execution_env_factory
 from temper.agents.ppo import TrainResult, train
+from temper.agents import baseline
 from temper.env import LiquidityStream, SignalStream, impact_for
 from temper.eval.antithetic import PairLedger, PairUpdateStats, antithetic_reward
 from temper.eval.conditional import (

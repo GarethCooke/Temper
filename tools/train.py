@@ -1081,6 +1081,7 @@ def alpha_reporting_pass(experiment: Experiment, *, paths: int = 256) -> dict:
         alpha_reference,
         build_alpha_document,
         grade_alpha,
+        grade_alpha_baselines,
     )
 
     case = experiment.case
@@ -1117,6 +1118,19 @@ def alpha_reporting_pass(experiment: Experiment, *, paths: int = 256) -> dict:
     tripped = replace(grade, red_flag=True, soft_flag=True, name="fabricated_flagged")
     assert tripped.red_flag and tripped.soft_flag
 
+    # The baselines run at the *start* of `run_sweep` rather than after it, so
+    # they are not on the reporting path — and they are on the sweep's critical
+    # path, which a missing import in this very function proved by failing the
+    # first launch. Cheap to include, and the note's rule reads "no code path
+    # reachable only inside a long run" as easily as "only at the end of one".
+    fabricated_baselines = grade_alpha_baselines(experiment, reference, paths)
+    print(
+        "  reporting pass · baselines  "
+        + ", ".join(
+            f"{name} {g.objective:.5f}" for name, g in fabricated_baselines.items()
+        )
+    )
+
     fabricated = _fabricated_training(experiment)
     sweep = SweepResult(
         experiment=experiment,
@@ -1136,7 +1150,7 @@ def alpha_reporting_pass(experiment: Experiment, *, paths: int = 256) -> dict:
         ),
         alpha_detail=tuple(dict(detail) for _ in range(experiment.seeds.n_seeds)),
         alpha_reference_row=reference,
-        alpha_baselines={"twap": grade},
+        alpha_baselines=fabricated_baselines,
     )
 
     # (1) the document, (5) the verdict, (6) the per-seed line, (7) the writes.
