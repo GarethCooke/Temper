@@ -198,6 +198,80 @@ whether the function is actually slow or merely *downstream* of something that i
 milestone cites this note, check what it did for the paths the citation did **not** name;
 and if a fabricated-data test constructs its input by repeating one record, ask which of the
 computations under test can tell the copies apart.
+
+**Not the same as the note below it.** *A guard that takes its context as an argument is
+only as strong as its call sites* is the neighbour, and the two failures are opposites at
+the mechanism even where the symptom rhymes. This note is about paths that only run
+**late**, so the remedy is to reach them early, on fabricated data, and coverage is real
+evidence. That one is about paths that run **every time**, correctly, on the wrong
+context: nothing is unreached, every line executes on every invocation, and running them
+earlier shows nothing — because the argument a path is handed in a test is the argument
+the test's author chose.
+
+---
+
+## A guard that takes its context as an argument is only as strong as its call sites
+
+**Rule.** A function that refuses one thing and permits another *on the strength of an
+argument it is handed* is not a guard on its own. It is half of one; the other half is
+every call site, and that is where the defect lives. So test the **callers**, not the
+guard. A test that constructs a good argument and checks the refusal exercises the guard
+and nothing else — it passes on the day a caller starts handing it the wrong context, and
+it passes on the day a caller stops calling it at all.
+
+**Measured (Temper M5, 2026-08-26).** `Experiment.denominator_bps` refuses to hand back
+M4a's tangent advantage for an alpha-aware config, with M5's own reasoning in a comment
+beside the raise: in that world the tolerance is a fraction of the net signal advantage
+`J_M4a − J_DP`, and the deterministic row would return a number 2.2× smaller. The refusal
+is right, and it fires — when the function is called with no row at all.
+
+Both of the driver's banner paths got the wrong number anyway, and they got it by the two
+different routes a call site has available. `--dry-run` **called the guard and handed it a
+row**, so the `reference is None` condition was false, the refusal never evaluated, and the
+deterministic `available_advantage` came straight back. `_header` — the banner the
+4.5-hour acceptance run printed — **never called the guard**: it read `available_advantage`
+off `experiment.reference()` directly, which is the same field the guard exists to
+withhold. One caller went round the check; the other went round the function.
+
+The cost is measurable rather than hypothetical. The banner printed **ε = 0.00367 bps**
+where the milestone's bar is **0.00808**. The run's own median excess over `J_DP` was
+**0.00532** — which *fails* the printed bar and *passes* the real one. For the length of
+the run the banner and the artefact disagreed about the verdict, on the milestone's
+headline gate. The artefact was right throughout: every graded number was computed from
+the alpha row, and `results/m5_alpha.json` records `epsilon_met: true` for the correct
+reason. Only the thing a human read was wrong.
+
+And the second half is how it got there. `tests/test_sweep_document.py` has held a test
+of this exact guard since M4b — the liquidity world's branch of it, refusing rather than
+answering, asserted on the call that reaches the refusal. M5's branch was added to `denominator_bps` **by
+analogy** with it, in the same commit, with a comment transposing M4b's argument into M5's
+numbers. The analogy carried the implementation and not the test. Nothing asserted the new
+branch, so nothing was in a position to notice that both callers were routing around it.
+
+**How it is applied here.** Both banners now branch on the seam and print what they can
+check cheaply while refusing the number they cannot: `tools/train.py`'s `_signal_header` is
+`_liquidity_header` one seam along. Five tests in `tests/test_m5_sweep_document.py` read
+the banners the way a reader gets them — what `--dry-run` says, what it *refuses to print*,
+that the run header says it too, and that a config no sweep will start is refused rather
+than reported OK. The M4b sibling finally has its M5 twin beside it.
+
+The load-bearing assertion is the negative one: `available_advantage` and the string
+`0.00367` are required to be **absent** from the output. A caller test that only checked
+the good line would have passed against the old code, because the old code printed a
+perfectly well-formed line containing a number about a different milestone.
+
+**Why it generalises.** Any function whose refusal depends on context has this shape — a
+permission check taking a role, a validator taking a schema, a formatter taking a locale, a
+sanitiser taking an output encoding. Such a guard is cheap to test and its test proves
+almost nothing about the system: it establishes that the *right* argument produces the
+right answer, and every failure mode is a wrong argument arriving from somewhere else. Two
+smells worth the ten seconds. If a guard's context parameter has a default meaning "work it
+out yourself", then every call site passing something explicit has opted out of the guard,
+and those call sites are the ones to read. And when a case is added to a guarded function
+**by analogy** with an existing case, the analogy must carry the test, not only the
+implementation — the existing case's test is evidence that the pattern is testable, not
+evidence that the new case is tested.
+
 ---
 
 ## A clock that cannot see the interval reports zero, not an error
