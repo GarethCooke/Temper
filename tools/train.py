@@ -379,9 +379,10 @@ def _seed_line(ordinal: int, grade, result) -> str:
     liquidity-observing one has a *distribution* of schedules and a confidence
     interval. Reading the second through the first's fields is an
     ``AttributeError`` that only a training run can reach, which is exactly the
-    class of defect ``docs/house-notes.md``'s *The artefact writer is tested on
-    fabricated data* exists for — so the branch is here, in a pure function, and
-    ``tests/test_sweep_document.py`` calls it on a fabricated grade.
+    class of defect ``docs/house-notes.md``'s *No code path may be reachable only
+    at the end of a long run* exists for — so the branch is here, in a pure
+    function, and ``tests/test_sweep_document.py`` calls it on a fabricated
+    grade.
     """
     common = (
         f"{result.seconds:.0f}s"
@@ -986,8 +987,9 @@ def print_verdict(experiment: Experiment, document: dict) -> None:
     """Everything the run says after the last seed, in whichever world it ran in.
 
     A pure function of ``(experiment, document)`` and nothing else, extracted for
-    the reason ``docs/house-notes.md``'s *The artefact writer is tested on
-    fabricated data* gives — and extracted *after* it had already cost a run.
+    the reason ``docs/house-notes.md``'s *No code path may be reachable only at
+    the end of a long run* gives — and extracted *after* it had already cost a
+    run.
     This block was inline in ``main`` and therefore reachable only by training
     ten seeds first; it read ``summary['relative_excess']``, which is a
     deterministic-world key that a liquidity summary does not have, and M4b's
