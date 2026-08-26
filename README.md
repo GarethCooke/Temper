@@ -306,8 +306,8 @@ docs/       milestone briefs (the work orders) + vendored contract snapshots
 Orientation docs at root: `ARCHITECTURE.md` (the constitution — read first),
 `ROADMAP.md` (milestones and status). Practices that outgrew the milestone that found
 them live in [`docs/house-notes.md`](docs/house-notes.md) — currently *thread count is a
-reproducibility axis*, *below n ≈ 10, draw every trace*, *the artefact writer is tested on
-fabricated data, not on the run*, and *a clock that cannot see the interval reports zero,
+reproducibility axis*, *below n ≈ 10, draw every trace*, *no code path may be reachable
+only at the end of a long run*, and *a clock that cannot see the interval reports zero,
 not an error* — each measured here and each applying to any project in the portfolio that
 reports a trained, sampled or timed number.
 
