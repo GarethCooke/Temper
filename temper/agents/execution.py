@@ -198,8 +198,16 @@ def execution_env_factory(
     named by the config the driver read rather than defaulted to by the training
     path (constitution §4). `liquidity` is M4b's second seam, arriving the same
     way again — a law bound to the pool it draws from, ``None`` being ``L = 1``.
-    Two seams now default to Phase 1 and **every env this factory builds gets
-    both**, which is M4a's §9 lesson stated as a signature rather than as a hope.
+    `signal` is M5's third seam, arriving the same way a third time — a stream
+    bound to the pool it draws from, ``None`` being no signal and no randomness
+    drawn. **Three** seams now default to Phase 1 and **every env this factory
+    builds gets all three**, which is M4a's §9 lesson stated as a signature
+    rather than as a hope. Stated in the signature because that is the only place
+    it can be enforced: a seam this factory could omit is a seam a training path
+    could acquire by omission, and for the third one that would not change a
+    number — it would change what every earlier result *means*
+    (``ARCHITECTURE.md`` §9, *There are three injected seams, and the third is the
+    one where inheriting by omission falsifies the record…*).
     """
 
     def make() -> Env:

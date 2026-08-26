@@ -621,3 +621,154 @@ def test_the_rehearsal_writes_nothing_a_reader_would_quote(rehearsal):
     it worth an assertion rather than a reading of the code.
     """
     assert rehearsal["artefact_after"] == rehearsal["artefact_before"]
+
+
+# ---------------------------------------------------------------------------
+# The banner, on both paths that print one
+# ---------------------------------------------------------------------------
+#
+# The same defect as M4b's quieter one, one seam along, and it survived the
+# milestone. `--dry-run` and the run's own header both fell through to the
+# generic branch for M5: it names the cost encoding and no seam, so a dry run
+# reported `config OK` for an alpha-aware config without ever saying that the
+# observation carries a signal or that `rho` is Temper's invention -- and it
+# printed `available_advantage`, which in this world is M4a's TANGENT advantage
+# of 0.0367 bps, as the bar. The bar is 10 % of the NET signal advantage,
+# 0.0808. So the banner stated this milestone's headline bar 2.2x tighter than
+# the bar the agent is held to.
+#
+# `Experiment.denominator_bps` already refuses that number when it is asked
+# without a row. Both banner paths were handing it one.
+
+
+def _capture(call):
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer):
+        status = call()
+    return status, buffer.getvalue()
+
+
+def _dry_run(path):
+    driver = _driver()
+    argv = sys.argv
+    sys.argv = ["train.py", "--config", str(path), "--dry-run"]
+    try:
+        return _capture(driver.main)
+    finally:
+        sys.argv = argv
+
+
+@pytest.fixture(scope="module")
+def dry_run():
+    return _dry_run(CONFIG)
+
+
+@pytest.fixture(scope="module")
+def alpha_row(experiment):
+    """M5's reference row with the dynamic program in it, as the sweep builds it."""
+    from temper.eval.sweep import alpha_reference
+
+    return alpha_reference(experiment)
+
+
+def test_the_dry_run_names_the_signal_and_says_it_is_invented(dry_run):
+    """`config OK` for M5 without naming the seam is the omission, not a typo.
+
+    A dry run is where a reader decides a config says what they think it says,
+    and the one fact this config cannot be read without is that its observation
+    carries a signal Temper invented. `rho` is not calibrated and is not
+    FrontierView's, so a banner that reports the world and stops has described
+    M4a.
+    """
+    status, out = dry_run
+    assert status == 0
+    assert "config OK" in out
+    assert "one_step signal" in out and "rho = 0.01" in out
+    assert out.count("INVENTED") >= 2, "the seam clause and the header both say it"
+    assert "FrontierView vendored an impact law and no signal" in out
+
+
+def test_the_dry_run_refuses_the_wrong_bar_rather_than_printing_it(dry_run):
+    """And the number it does not print is the point of the branch.
+
+    0.0037 bps is 10 % of M4a's tangent advantage. It is a real number about a
+    different milestone, and printed here it reads as this milestone's bar.
+    """
+    _, out = dry_run
+    assert "NET signal advantage J_M4a - J_DP" in out
+    assert "available_advantage" not in out, (
+        "the alpha-aware world's denominator is the net signal advantage; "
+        "`available_advantage` here is M4a's tangent advantage"
+    )
+    assert "0.00367" not in out and "0.03674" not in out
+    # What it can check cheaply, it still checks and prints.
+    assert "J_M4a 2.383215 bps" in out
+    assert "CERTIFIED" in out and "CONVERGED, not certified" in out
+
+
+def test_the_run_banner_names_the_signal_too(experiment, monkeypatch):
+    """`--dry-run` and the run print two different banners, and both were wrong.
+
+    Fixing only the dry run would leave the acceptance run's own header stating
+    the tightened bar over four and a half hours of training, which is the more
+    quoted of the two.
+    """
+    driver = _driver()
+    ran = []
+    # M4a's pre-run reward-scale item steps a diagnostic env in `m1/differential`.
+    # It is on this branch and it is not this test's subject, so it is recorded
+    # rather than run and this module keeps the narrow pool grant `tests/conftest.py`
+    # gives it (constitution invariant 5).
+    monkeypatch.setattr(driver, "_reward_scale_check", lambda *a, **k: ran.append(a))
+
+    _, out = _capture(lambda: driver._header(experiment))
+    assert "power_law world + one_step signal" in out
+    assert "signal: INVENTED" in out
+    assert "NET signal advantage J_M4a - J_DP" in out
+    assert "available advantage" not in out and "0.03674" not in out
+    assert ran, "the alpha branch must still run M4a's pre-run reward-scale check"
+
+
+def test_the_alpha_denominator_refuses_the_wrong_world_rather_than_answering(
+    experiment, alpha_row
+):
+    """M4b's sibling test, in M5's numbers, and it had none until now.
+
+    `tests/test_sweep_document.py` has this test for the liquidity world. The
+    guard for the alpha-aware world was written at the same time as the code and
+    was never asserted, which is why both banner paths could walk around it by
+    passing the deterministic row.
+    """
+    with pytest.raises(ValueError, match="net signal advantage"):
+        experiment.denominator_bps()
+
+    assert experiment.denominator_bps(alpha_row) == alpha_row.signal_advantage
+    assert alpha_row.signal_advantage > experiment.reference().available_advantage
+
+
+def test_a_config_stacking_both_seams_is_refused_by_the_dry_run_too(tmp_path):
+    """`run_sweep` refuses this config; the dry run used to say it was fine.
+
+    Worse than fine: the liquidity branch comes first, so the banner named the
+    seam it happened to test for and said nothing about the other one. A dry run
+    that reports OK for a config no sweep will start is the same class of defect
+    as the bar above -- a reader is told the config is checked, and one of its
+    two seams was not looked at.
+    """
+    import yaml
+
+    document = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
+    document["world"]["liquidity"] = {"model": "lognormal", "sigma_log": 0.5}
+    path = tmp_path / "stacked.yaml"
+    path.write_text(yaml.safe_dump(document), encoding="utf-8")
+
+    status, out = _dry_run(path)
+    assert status == 1
+    assert "config REFUSED" in out and "BACKLOG" in out
+    assert "config OK" not in out
+
+    # And it refuses for the reason the sweep refuses, not a second one.
+    from temper.eval.sweep import run_sweep
+
+    with pytest.raises(ValueError, match="stacks M4b's stochastic liquidity"):
+        run_sweep(load_experiment(path), repo_root=REPO_ROOT)

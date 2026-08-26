@@ -189,6 +189,50 @@ def _liquidity_header(experiment: Experiment) -> None:
     )
 
 
+def _signal_header(experiment: Experiment) -> None:
+    """The alpha-aware world's header, from the *static* rungs and the floor only.
+
+    :func:`_liquidity_header` one seam along, and deliberately no dynamic program
+    here either — though for only one of that function's two reasons. M5's DP is
+    seconds rather than minutes, so cost is not the argument. The argument is the
+    one that survives: ``run_sweep`` solves it once for the whole sweep a moment
+    later, and solving it twice would be two chances for the run and its own
+    banner to disagree about the number every grade is an excess over.
+
+    What it can say cheaply it says: the invented parameter, the rung the
+    denominator is measured down from, the certified floor under the half of the
+    objective the signal cannot touch, and which of *certified* and *converged*
+    applies to which.
+    """
+    from temper.eval.reference import signal_static_row
+    from temper.oracle.alpha import execution_floor_bps
+
+    case = experiment.case
+    signal = experiment.signal
+    row = signal_static_row(
+        case.market, case.order_size, experiment.lambda_risk, signal
+    )
+    floor = execution_floor_bps(case.market, case.order_size, experiment.lambda_risk)
+    print(
+        f"  signal: INVENTED — {signal.name}, rho = {signal.correlation():g}, "
+        f"{signal.lag} bin ahead, explaining "
+        f"{signal.explained_variance_fraction:.1e} of next-bin return variance. "
+        "FrontierView vendored an impact law and no signal; this one is Temper's "
+        "own, and no number derived from it may be reported without saying so."
+    )
+    print(
+        f"  J_M4a {row.optimal.objective:.6f} bps (best fixed schedule, and here "
+        f"M4a's CERTIFIED optimum — a zero-mean signal gives a fixed schedule "
+        f"nothing to re-solve for, so unlike M4b there is no level shift between "
+        f"the two rungs and the whole advantage is information)"
+    )
+    print(
+        f"  execution floor {floor:.6f} bps — CERTIFIED, under E[impact + risk] "
+        f"for any policy by convexity. J_DP is solved by the sweep, once: "
+        f"CONVERGED, not certified."
+    )
+
+
 def _header(experiment: Experiment) -> None:
     if experiment.liquidity.stochastic:
         case = experiment.case
@@ -200,6 +244,33 @@ def _header(experiment: Experiment) -> None:
             f"{experiment.cost_encoding} world + stochastic liquidity"
         )
         _liquidity_header(experiment)
+        _reward_scale_check(experiment, experiment.reference())
+        return
+    if experiment.signal.informative:
+        # The same branch one seam along, and for the reason the liquidity one
+        # exists: below, `available_advantage` is M4a's TANGENT advantage,
+        # 0.0367 bps. In the alpha-aware world the bar is a fraction of the NET
+        # signal advantage J_M4a - J_DP, 0.0808 — so the generic banner printed
+        # this run's headline bar 2.2x tighter than the bar the agent is held
+        # to, and named no signal while doing it.
+        # `Experiment.denominator_bps` refuses exactly that number when asked
+        # without a row; this path was handing it one.
+        case = experiment.case
+        estimator = REGIME_LABELS[experiment.estimator.regime]
+        print(
+            f"{experiment.milestone} — {case.symbol}, X = {case.order_size:,.0f}, "
+            f"λ = {experiment.lambda_risk:.6e} (rule-selected), "
+            f"{experiment.seeds.n_seeds} seeds, {estimator}, "
+            f"{experiment.cost_encoding} world + {experiment.signal.name} signal"
+        )
+        _signal_header(experiment)
+        print(
+            f"  bar {experiment.tolerances.epsilon_fraction:.0%} of the NET signal "
+            f"advantage J_M4a - J_DP, which needs the dynamic program and is "
+            f"computed once by the sweep — deliberately not printed here from the "
+            f"deterministic world's tangent advantage, which is a different and "
+            f"smaller number"
+        )
         _reward_scale_check(experiment, experiment.reference())
         return
     reference = experiment.reference()
@@ -1519,6 +1590,24 @@ def main() -> int:
     if args.dry_run:
         reference = experiment.verify_lambda_rule()
         gate_reference = experiment.verify_gate_reference()
+        where = (
+            "matches the rule"
+            if experiment.frontier_grid is None
+            else f"is a point of the {experiment.frontier_grid} frontier grid"
+        )
+        if experiment.liquidity.stochastic and experiment.signal.informative:
+            # `run_sweep` refuses this config outright, before a seed is spent.
+            # A dry run answering OK for it — and naming only the seam whose
+            # branch happens to come first — would be this banner's own version
+            # of the defect the two branches below exist to prevent.
+            print(
+                "config REFUSED · this stacks M4b's stochastic liquidity under "
+                "M5's signal, which run_sweep will not start: bundled, a red "
+                "result cannot be attributed, and the two adaptivities compete "
+                "for the same schedule shape. That is a real milestone and it "
+                "is BACKLOG"
+            )
+            return 1
         if experiment.liquidity.stochastic:
             # The bar cannot be printed without the dynamic program, and printing
             # the deterministic world's number instead would understate it by
@@ -1540,11 +1629,34 @@ def main() -> int:
                 f"different and smaller number"
             )
             return 0
-        where = (
-            "matches the rule"
-            if experiment.frontier_grid is None
-            else f"is a point of the {experiment.frontier_grid} frontier grid"
-        )
+        if experiment.signal.informative:
+            # M4b's branch one seam along, in M5's numbers. Without it this fell
+            # through to the generic line below, which names the cost encoding
+            # and no seam, and prints `available_advantage` — M4a's tangent
+            # advantage, 0.0037 bps as a bar where the bar is really 0.0081. So a
+            # dry run reported config OK for M5 without ever saying that the
+            # observation carries an invented signal, and stated the milestone's
+            # headline bar 2.2x tighter than it is.
+            print(
+                f"config OK · λ = {experiment.lambda_risk:.6e} {where} · "
+                f"{experiment.cost_encoding} world + {experiment.signal.name} "
+                f"signal (rho = {experiment.signal.correlation():g}, INVENTED)"
+            )
+            _signal_header(experiment)
+            print(
+                f"ε = {experiment.tolerances.epsilon_fraction:.0%} of the NET signal "
+                f"advantage J_M4a - J_DP, which needs the dynamic program and is "
+                f"computed once by the sweep — deliberately not printed here from "
+                f"the deterministic world's tangent advantage, which is a "
+                f"different and smaller number"
+            )
+            if gate_reference is not None:
+                print(
+                    f"gate OK · median gap ≤ {experiment.gate.median_gap_fraction:g} "
+                    f"against {experiment.gate.reference.name} "
+                    f"(median {gate_reference:.5f})"
+                )
+            return 0
         denominator = experiment.denominator_bps(reference)
         print(
             f"config OK · λ = {experiment.lambda_risk:.6e} {where} · "
